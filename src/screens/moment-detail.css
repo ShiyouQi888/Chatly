@@ -1,0 +1,472 @@
+/* 动态详情：盖在 Tab 之上的整屏层 */
+.md-root {
+  position: absolute;
+  inset: 0;
+  z-index: 130;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  animation: mdIn 0.24s var(--ease) both;
+}
+
+@keyframes mdIn {
+  from {
+    opacity: 0.5;
+    transform: translateX(16px);
+  }
+}
+
+.md-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: calc(var(--safe-top) + 8px) 14px 8px;
+  background: var(--surface);
+  box-shadow: 0 1px 0 var(--line);
+}
+
+.md-head h2 {
+  flex: 1;
+  text-align: center;
+  font-size: var(--fs-h2);
+  font-weight: 650;
+  color: var(--text-1);
+}
+
+.md-back,
+.md-spacer {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+}
+
+.md-back {
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-full);
+  color: var(--text-1);
+}
+
+.md-back:active {
+  background: var(--surface-2);
+}
+
+.md-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 14px 20px;
+}
+
+/* ===== 主体卡片 ===== */
+.md-card {
+  background: var(--surface);
+  border-radius: var(--r-md);
+  padding: 14px;
+  box-shadow: 0 1px 2px rgba(22, 22, 31, 0.04);
+}
+
+.md-author {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.md-author-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.md-author-body b {
+  font-size: var(--fs-body);
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.md-author-body em {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-style: normal;
+  font-size: var(--fs-micro);
+  color: var(--text-3);
+}
+
+.md-author-body em i {
+  font-style: normal;
+  color: var(--text-4);
+}
+
+.md-vis {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--fs-micro);
+  color: var(--text-3);
+  padding: 3px 9px;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+}
+
+.md-topic {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 3px 10px;
+  border-radius: var(--r-full);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  color: var(--brand-2);
+  background: var(--brand-soft);
+}
+
+.md-text {
+  margin-top: 10px;
+  font-size: var(--fs-body);
+  line-height: 1.72;
+  color: var(--text-1);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ===== 图片网格 ===== */
+.mdgrid {
+  margin-top: 11px;
+  display: grid;
+  gap: 5px;
+}
+
+.mdgrid-1 {
+  grid-template-columns: 1fr;
+  max-width: 232px;
+}
+.mdgrid-2,
+.mdgrid-4 {
+  grid-template-columns: repeat(2, 1fr);
+  max-width: 300px;
+}
+.mdgrid-3,
+.mdgrid-5,
+.mdgrid-6,
+.mdgrid-7,
+.mdgrid-8,
+.mdgrid-9 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.mdcell {
+  aspect-ratio: 1;
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  background: var(--surface-2);
+}
+
+.mdgrid-1 .mdcell {
+  aspect-ratio: 4 / 3;
+}
+
+.mdcell img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* ===== 音乐 ===== */
+.md-music {
+  margin-top: 11px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+
+.md-music-ic {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: #a765d0;
+  background: rgba(167, 101, 208, 0.14);
+}
+
+.md-music-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.md-music-body b {
+  font-size: var(--fs-sub);
+  font-weight: 600;
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.md-music-body em {
+  font-style: normal;
+  font-size: var(--fs-micro);
+  color: var(--text-3);
+}
+
+.md-music-play {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border-radius: var(--r-full);
+  font-size: var(--fs-micro);
+  color: var(--text-4);
+  background: var(--surface);
+  cursor: not-allowed;
+}
+
+.md-time {
+  margin-top: 12px;
+  font-size: var(--fs-micro);
+  color: var(--text-4);
+}
+
+.md-time i {
+  font-style: normal;
+  margin-left: 4px;
+}
+
+/* ===== 点赞的人 ===== */
+.md-likes {
+  margin-top: 12px;
+  padding-top: 11px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #e8657f;
+}
+
+.md-likes em {
+  font-style: normal;
+  font-size: var(--fs-micro);
+  color: var(--text-3);
+}
+
+.md-likes em.is-empty {
+  color: var(--text-4);
+}
+
+/* ===== 动作 ===== */
+.md-acts {
+  margin-top: 12px;
+  display: flex;
+  gap: 10px;
+}
+
+.md-act {
+  flex: 1;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-sub);
+  font-weight: 550;
+  color: var(--text-2);
+  background: var(--surface-2);
+}
+
+.md-act.is-on {
+  color: #e8657f;
+  background: rgba(232, 101, 127, 0.12);
+}
+
+/* ===== 评论 ===== */
+.md-sec-title {
+  margin: 16px 0 10px;
+  font-size: var(--fs-cap);
+  font-weight: 600;
+  color: var(--text-3);
+}
+
+.md-comments {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.mdc-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.mdc {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.mdc-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.mdc-top {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.mdc-top b {
+  font-size: var(--fs-sub);
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.mdc-top em {
+  font-style: normal;
+  font-size: var(--fs-micro);
+  color: var(--text-4);
+}
+
+.mdc-body p {
+  margin-top: 3px;
+  font-size: var(--fs-sub);
+  line-height: 1.6;
+  color: var(--text-2);
+  word-break: break-word;
+}
+
+.mdc-reply {
+  font-style: normal;
+  color: var(--brand-2);
+}
+
+.mdc-acts {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mdc-acts button {
+  font-size: var(--fs-micro);
+  color: var(--text-4);
+}
+
+.mdc-acts button.is-danger {
+  color: #d98a8a;
+}
+
+/* 回复缩进：靠 padding 而不是 margin，避免把父评论的宽度挤没 */
+.mdc-kids {
+  margin-top: 10px;
+  padding-left: 39px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ===== 输入区 ===== */
+.md-input {
+  flex: 0 0 auto;
+  padding: 9px 14px max(10px, env(safe-area-inset-bottom));
+  background: var(--surface);
+  box-shadow: 0 -1px 0 var(--line);
+}
+
+.md-reply {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 7px;
+  padding: 4px 10px;
+  border-radius: var(--r-xs);
+  font-size: var(--fs-micro);
+  color: var(--brand-2);
+  background: var(--brand-soft);
+}
+
+.md-reply button {
+  font-size: var(--fs-micro);
+  color: var(--text-3);
+}
+
+.md-input {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.md-input input {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  padding: 0 14px;
+  border-radius: var(--r-full);
+  border: 0;
+  outline: none;
+  background: var(--surface-2);
+  font-family: var(--font);
+  font-size: var(--fs-sub);
+  color: var(--text-1);
+}
+
+.md-input > button {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-full);
+  color: #fff;
+  background: var(--brand-grad);
+}
+
+.md-input > button:disabled {
+  color: var(--text-4);
+  background: var(--surface-2);
+}
+
+/* ===== 定位地图 =====
+   ⚠️ `.md-map` 不写 height —— 高度由 MapView 的 height 行内样式决定，
+   这里写死会和行内样式打架；地图 SDK 也要求容器高度是确定的。 */
+.md-map {
+  position: relative;
+  margin-top: 12px;
+  border-radius: var(--r-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+
+/* 卡片自己裁圆角，内层地图再带一层圆角会在两个上角露出缺角 */
+.md-map .mv-wrap,
+.md-map .mv-ph {
+  border-radius: 0;
+}
+
+.md-map-tip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  font-size: var(--fs-micro);
+  color: var(--text-1);
+  background: linear-gradient(to top, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0));
+}

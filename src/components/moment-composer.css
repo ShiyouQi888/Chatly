@@ -1,0 +1,400 @@
+/* 动态发布 / 编辑：整屏层（内容有五项，底部弹层放不下） */
+.mc-root {
+  position: absolute;
+  inset: 0;
+  z-index: 150;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  animation: mcIn 0.24s var(--ease) both;
+}
+
+@keyframes mcIn {
+  from {
+    opacity: 0.5;
+    transform: translateY(14px);
+  }
+}
+
+.mc-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: calc(var(--safe-top) + 8px) 12px 10px;
+  background: var(--surface);
+  box-shadow: 0 1px 0 var(--line);
+}
+
+.mc-bar h2 {
+  flex: 1;
+  text-align: center;
+  font-size: var(--fs-h2);
+  font-weight: 650;
+  color: var(--text-1);
+}
+
+.mc-cancel {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-full);
+  color: var(--text-2);
+}
+
+.mc-cancel:active {
+  background: var(--surface-2);
+}
+
+.mc-send {
+  flex: 0 0 auto;
+  height: 34px;
+  padding: 0 16px;
+  border-radius: var(--r-full);
+  font-size: var(--fs-sub);
+  font-weight: 650;
+  color: #fff;
+  background: var(--brand-grad);
+  box-shadow: 0 6px 16px -8px rgba(107, 92, 246, 0.9);
+}
+
+.mc-send:disabled {
+  color: var(--text-4);
+  background: var(--surface-2);
+  box-shadow: none;
+}
+
+.mc-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 16px 24px;
+}
+
+.mc-textarea {
+  width: 100%;
+  min-height: 116px;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line-2);
+  background: var(--surface);
+  font-family: var(--font);
+  font-size: var(--fs-body);
+  line-height: 1.65;
+  color: var(--text-1);
+  resize: vertical;
+  outline: none;
+}
+
+.mc-textarea:focus {
+  border-color: var(--brand-2);
+}
+
+/* ===== 图片网格 ===== */
+.mc-grid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.mc-cell {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  background: var(--surface-2);
+}
+
+.mc-cell img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* ===== 视频 =====
+   视频不在九宫格里预览：格子是 1:1 的，看不出横屏还是竖屏。
+   这里给一整块，比例由播放器按真实宽高算。 */
+.mc-video {
+  margin-top: 12px;
+}
+
+.mc-video-box {
+  position: relative;
+  max-width: 260px;
+}
+
+.mc-video-meta {
+  margin-top: 6px;
+  font-size: var(--fs-micro);
+  color: var(--text-4);
+  font-variant-numeric: tabular-nums;
+}
+
+.mc-vrow {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mc-vpick {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 13px;
+  border-radius: var(--r-full);
+  font-size: var(--fs-sub);
+  font-weight: 550;
+  color: var(--brand-2);
+  background: var(--brand-soft);
+}
+
+.mc-vpick:active {
+  filter: brightness(0.96);
+}
+
+/* 已经有图片了就选不了视频 —— 禁用要有样子，不是「点了没反应」 */
+.mc-vpick:disabled {
+  color: var(--text-4);
+  background: var(--surface-2);
+  cursor: not-allowed;
+}
+
+.mc-vrow em {
+  font-style: normal;
+  font-size: var(--fs-micro);
+  color: var(--text-4);
+  line-height: 1.5;
+}
+
+.mc-cell-del {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-full);
+  color: #fff;
+  background: rgba(10, 10, 16, 0.55);
+}
+
+.mc-cell.is-add {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border: 1px dashed var(--line-2);
+  color: var(--text-3);
+  background: var(--surface);
+}
+
+.mc-cell.is-add em {
+  font-style: normal;
+  font-size: var(--fs-micro);
+}
+
+.mc-cell.is-add:active {
+  color: var(--brand-2);
+  background: var(--brand-soft);
+}
+
+/* ===== 字段 ===== */
+.mc-field {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 13px;
+  height: 46px;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(22, 22, 31, 0.04);
+}
+
+.mc-field-ic {
+  flex: 0 0 auto;
+  color: var(--brand-2);
+  display: grid;
+  place-items: center;
+}
+
+.mc-field input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font-family: var(--font);
+  font-size: var(--fs-sub);
+  color: var(--text-1);
+}
+
+/* ===== 位置（走共用的「选位置」面板） =====
+   `.mc-field` 原来是给 <input> 用的，这里换成按钮 —— 复用它的外形，
+   但 margin-top 提到外层 .mc-loc，否则删除按钮会和它错位。 */
+.mc-loc {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mc-loc .mc-field {
+  margin-top: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+/* 按钮形态：文字左对齐（button 默认居中），并占满剩余宽度 */
+.mc-field.is-tap {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-3);
+}
+
+.mc-loc-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.mc-loc-body b {
+  font-size: var(--fs-sub);
+  font-weight: 550;
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mc-loc-body em {
+  font-size: var(--fs-micro);
+  font-style: normal;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mc-loc-clear {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--text-3);
+  box-shadow: 0 1px 2px rgba(22, 22, 31, 0.04);
+}
+
+/* ===== 可见范围 ===== */
+.mc-sec {
+  margin-top: 18px;
+}
+
+.mc-sec h4 {
+  font-size: var(--fs-cap);
+  font-weight: 600;
+  color: var(--text-3);
+  margin-bottom: 9px;
+}
+
+.mc-scopes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mc-scope {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 11px 14px;
+  border-radius: var(--r-md);
+  text-align: left;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(22, 22, 31, 0.04);
+}
+
+.mc-scope b {
+  font-size: var(--fs-sub);
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.mc-scope em {
+  font-style: normal;
+  font-size: var(--fs-micro);
+  color: var(--text-4);
+}
+
+.mc-scope.is-on {
+  background: var(--brand-soft);
+  box-shadow: inset 0 0 0 1.5px var(--brand-2);
+}
+
+.mc-scope.is-on b {
+  color: var(--brand-2);
+}
+
+.mc-scope i {
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-full);
+  color: #fff;
+  background: var(--brand-grad);
+}
+
+/* ===== 未接入 ===== */
+.mc-pending {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.mc-pending-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 13px;
+  border-radius: var(--r-md);
+  font-size: var(--fs-sub);
+  color: var(--text-4);
+  background: var(--surface);
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.mc-err {
+  margin-top: 12px;
+  font-size: var(--fs-sub);
+  color: #e05252;
+}
+
+.mc-hint {
+  margin-top: 10px;
+  font-size: var(--fs-micro);
+  color: var(--text-4);
+  line-height: 1.6;
+}

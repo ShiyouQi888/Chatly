@@ -1,0 +1,21 @@
+/* ===== 动态里的视频块 =====
+   视频不进九宫格：格子是 1:1 的，横屏竖屏塞进去都一样方。
+   这里只负责「占一块」+ 圆角，比例由播放器自己按 --ar 算。 */
+
+.mm-video {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  width: 100%;
+}
+
+/* 列表卡片用 flex gap 排版（不加 margin），详情页的网格有 margin-top —— 对齐它 */
+.md-card .mm-video {
+  margin-top: 11px;
+}
+
+/* 列表里的视频别顶满整张卡片宽度：左右留一点，视觉上更像「一条内容」而不是横幅 */
+.mcard .mm-video {
+  max-width: 100%;
+}

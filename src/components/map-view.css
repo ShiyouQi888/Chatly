@@ -1,0 +1,135 @@
+/* 地图容器。高度一律由 JS 传进来的行内 style 决定（见 MapView.jsx 注释第 3 条），
+   这里不写 height —— 写了会和行内样式打架，而且 flex 里 `flex:1` 撑不出高度。 */
+
+.mv-wrap {
+  position: relative;
+  width: 100%;
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: var(--surface-2);
+}
+
+.mv-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+/* 底部导航 / 滚动容器用的圆点，别让地图把滚动吃掉 */
+.mv-shield {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+}
+
+.mv-mask {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--fs-sub);
+  color: var(--text-3);
+  background: var(--surface-2);
+}
+
+/* ---------- 无 key / 无坐标的占位 ---------- */
+
+.mv-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--text-3);
+  font-size: var(--fs-sub);
+  text-align: center;
+  padding: 0 16px;
+}
+
+.mv-empty p {
+  line-height: 1.5;
+}
+
+.mv-retry {
+  margin-top: 2px;
+  height: 30px;
+  padding: 0 14px;
+  border-radius: var(--r-full);
+  background: var(--brand-grad);
+  color: var(--text-on-brand);
+  font-size: var(--fs-cap);
+  font-weight: 600;
+}
+
+/* 占位图刻意画成**坐标网格**而不是假的街道 —— 一眼就能看出它不是地图。
+   不自绘地图轮廓：那是编数据，而且涉及版图合规。 */
+.mv-ph {
+  position: relative;
+  width: 100%;
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+
+.mv-ph-grid {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.mv-ph-grid line {
+  stroke: var(--line);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.mv-ph-dot {
+  fill: var(--brand-2);
+}
+
+.mv-ph-body {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 10px 12px;
+  background: linear-gradient(to top, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0));
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mv-ph-body b {
+  font-size: var(--fs-body);
+  color: var(--text-1);
+}
+
+.mv-ph-coord {
+  font-size: var(--fs-micro);
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.mv-ph-body em {
+  font-size: var(--fs-micro);
+  font-style: normal;
+  color: var(--accent-amber);
+}
+
+/* 缩略占位（消息气泡那种小容器）：只留一行小字，位置放在底部渐变上。
+   ⚠️ 别把 mv-ph-body 整个塞进小格子 —— 三行说明会把 130px 高的地图挤成一条。 */
+.mv-ph.is-compact .mv-ph-mini {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 3px 8px;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--text-3);
+  background: linear-gradient(to top, rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0));
+  text-align: center;
+}

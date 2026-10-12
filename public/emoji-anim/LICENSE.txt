@@ -1,0 +1,13 @@
+Emoji artwork: Microsoft Fluent Emoji (Animated)
+License: MIT
+Source:  https://github.com/microsoft/fluentui-emoji-animated/blob/main/LICENSE
+
+说明：
+  原始素材为 APNG（256x256，约 40+ 帧，单个约 2.8MB），体积不适合移动端直接使用。
+  本项目用 ffmpeg 转码为 GIF 动画：160x160px / 10fps / 256 色 / 无抖动，
+  每帧 disposal=2（显示后恢复背景），体积超 190KB 时自动降档重编。
+
+  为何不是 WebP：ffmpeg 的 libwebp 写出的帧是「全画布 + blend + dispose=none」，
+  透明背景的表情会把上一帧透出来，浏览器里看到的是两个表情叠在一起。GIF 无此问题。
+
+  除尺寸、帧率、调色板与编码格式外未做其它修改。

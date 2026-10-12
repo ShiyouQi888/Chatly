@@ -1,0 +1,412 @@
+/* ===== 通知中心 ===== */
+.notice {
+  position: absolute;
+  inset: 0;
+  z-index: 82;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  animation: subIn 0.24s var(--ease) both;
+}
+
+.notice-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 12px 10px;
+  flex: 0 0 auto;
+}
+
+.notice-head h2 {
+  flex: 1;
+  font-size: var(--fs-h2);
+  font-weight: 650;
+  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.notice-count {
+  font-size: var(--fs-micro);
+  font-style: normal;
+  font-weight: 600;
+  color: #fff;
+  background: var(--brand-2);
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--r-full);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.notice-clear {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-full);
+  color: var(--brand-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.notice-tabs {
+  display: flex;
+  gap: 7px;
+  padding: 0 18px 12px;
+  flex: 0 0 auto;
+}
+
+.notice-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.notice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 14px;
+}
+
+.notice-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  width: 100%;
+  padding: 13px;
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  text-align: left;
+  transition: background 0.16s var(--ease);
+}
+
+.notice-row:active {
+  background: var(--surface-2);
+}
+
+.notice-row.is-unread {
+  background: linear-gradient(120deg, rgba(155, 140, 251, 0.07), rgba(91, 110, 245, 0.04));
+}
+
+.nr-av {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.nr-sys {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nr-dot {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 9px;
+  height: 9px;
+  border-radius: var(--r-full);
+  background: var(--brand-2);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+.nr-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: 2px;
+}
+
+.nr-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.nr-top b {
+  font-size: var(--fs-sub);
+  font-weight: 600;
+}
+
+.nr-top em {
+  font-size: var(--fs-micro);
+  font-style: normal;
+  color: var(--text-4);
+  flex: 0 0 auto;
+}
+
+.nr-text {
+  font-size: var(--fs-sub);
+  color: var(--text-3);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.notice-foot {
+  padding: 10px 18px calc(14px + env(safe-area-inset-bottom));
+  flex: 0 0 auto;
+}
+
+.nf-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 13px;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: var(--fs-sub);
+  font-weight: 550;
+  box-shadow: var(--shadow-sm);
+}
+
+/* ===== 搜索面板 ===== */
+.search-panel {
+  position: absolute;
+  inset: 0;
+  z-index: 84;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  animation: subIn 0.24s var(--ease) both;
+}
+
+.sp-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: calc(var(--safe-top) + 2px) 14px 12px;
+  flex: 0 0 auto;
+}
+
+.sp-field {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface-2);
+  border-radius: var(--r-full);
+  padding: 10px 14px;
+  color: var(--text-3);
+}
+
+.sp-field input {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-sub);
+  /* 同 .file-search input：被点的元素是 input 本身，补到 32px 才好点 */
+  min-height: 32px;
+}
+
+.sp-field input::placeholder {
+  color: var(--text-4);
+}
+
+.sp-clear {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--r-full);
+  background: var(--line-2);
+  color: var(--text-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+/* 视觉是 20px 的小圆点，命中区补到 32px。
+   左右各扩 6px，只吃掉 8px 间隙里的 6px，不会压到输入框的点击区。 */
+.sp-clear::after {
+  content: '';
+  position: absolute;
+  left: -6px;
+  right: -6px;
+  top: -6px;
+  bottom: -6px;
+}
+
+.sp-filters {
+  display: flex;
+  gap: 7px;
+  padding: 0 16px 12px;
+  overflow-x: auto;
+  flex: 0 0 auto;
+}
+
+.sp-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 20px;
+}
+
+.sp-group {
+  padding: 0 16px;
+  margin-bottom: 16px;
+}
+
+.sp-block {
+  padding: 0 18px;
+  margin-bottom: 20px;
+}
+
+.sp-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.sp-clear-hist {
+  font-size: var(--fs-micro);
+  color: var(--text-3);
+  padding: 5px 8px;
+}
+
+.sp-empty-hist {
+  font-size: var(--fs-sub);
+  color: var(--text-4);
+  padding: 4px 2px 8px;
+}
+
+/* 搜索结果行 */
+.sp-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  position: relative;
+  text-align: left;
+  transition: background 0.16s var(--ease);
+}
+
+.sp-row:not(.is-last)::after {
+  content: '';
+  position: absolute;
+  left: 66px;
+  right: 14px;
+  bottom: 0;
+  height: 1px;
+  background: var(--line);
+}
+
+.sp-row:active {
+  background: var(--surface-2);
+}
+
+.sp-kind-ic {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 13px;
+  background: var(--brand-soft);
+  color: var(--brand-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sp-row-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.sp-row-body b {
+  font-size: var(--fs-sub);
+  font-weight: 550;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sp-row-body em {
+  font-size: var(--fs-micro);
+  font-style: normal;
+  color: var(--text-3);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sp-kind {
+  font-style: normal;
+  font-weight: 600;
+  color: var(--brand-2);
+  background: var(--brand-soft);
+  padding: 1px 6px;
+  border-radius: 5px;
+  flex: 0 0 auto;
+}
+
+/* 热门搜索 */
+.sp-hot {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.sp-hot-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 13px 14px;
+  text-align: left;
+  font-size: var(--fs-sub);
+  position: relative;
+  color: var(--text-2);
+}
+
+.sp-hot-row:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 44px;
+  right: 14px;
+  bottom: 0;
+  height: 1px;
+  background: var(--line);
+}
+
+.sp-hot-row:active {
+  background: var(--surface-2);
+}
+
+.sp-hot-row > svg {
+  margin-left: auto;
+  color: var(--text-4);
+}
+
+.sp-hot-row:nth-child(-n + 3) > svg {
+  color: #e8799b;
+}

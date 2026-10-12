@@ -1,0 +1,417 @@
+/* ===== 扫一扫 =====
+ * 整屏深色：取景框要压住背景，浅色底会把摄像头画面衬得发白；
+ * 结果卡片沿用同一套深色，避免「扫完突然闪成白页」。 */
+
+.scan {
+  position: absolute;
+  inset: 0;
+  z-index: 84;
+  background: #0b0b13;
+  display: flex;
+  flex-direction: column;
+  animation: scanIn 0.24s var(--ease) both;
+}
+
+@keyframes scanIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.scan-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: calc(var(--safe-top) + 2px) 12px 10px;
+  flex: 0 0 auto;
+}
+
+.scan-head h2 {
+  flex: 1;
+  text-align: center;
+  font-size: var(--fs-h2);
+  font-weight: 650;
+  color: #fff;
+}
+
+.scan-head-spacer {
+  width: 34px;
+  flex: 0 0 auto;
+}
+
+/* 提高一级特异性，避免和 me-tab.css 里的 .sub-back 打架（两个都是单类，谁后加载谁赢） */
+.scan .sub-back {
+  color: #fff;
+}
+
+.scan-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 20px 22px;
+}
+
+/* ---------- 取景框 ---------- */
+.scan-frame {
+  position: relative;
+  width: min(280px, 74vw);
+  aspect-ratio: 1;
+  margin: 4px auto 0;
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  background: #10101a;
+}
+
+.scan-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.scan-mask {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 50%, transparent 44%, rgba(8, 8, 14, 0.55) 80%);
+  pointer-events: none;
+}
+
+.scan-corner {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  border: 3px solid var(--accent-cyan);
+  opacity: 0.9;
+}
+.scan-corner--tl {
+  top: 10px;
+  left: 10px;
+  border-right: 0;
+  border-bottom: 0;
+  border-top-left-radius: 10px;
+}
+.scan-corner--tr {
+  top: 10px;
+  right: 10px;
+  border-left: 0;
+  border-bottom: 0;
+  border-top-right-radius: 10px;
+}
+.scan-corner--bl {
+  bottom: 10px;
+  left: 10px;
+  border-right: 0;
+  border-top: 0;
+  border-bottom-left-radius: 10px;
+}
+.scan-corner--br {
+  bottom: 10px;
+  right: 10px;
+  border-left: 0;
+  border-top: 0;
+  border-bottom-right-radius: 10px;
+}
+
+.scan-line {
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent-cyan), transparent);
+  box-shadow: 0 0 14px var(--accent-cyan);
+  animation: scanSweep 2.4s var(--ease-in-out) infinite;
+}
+
+@keyframes scanSweep {
+  0% {
+    top: 10%;
+  }
+  50% {
+    top: 88%;
+  }
+  100% {
+    top: 10%;
+  }
+}
+
+/* 摄像头没起来 / 起不来时盖住取景框，明确写原因 */
+.scan-over {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px 22px;
+  text-align: center;
+  background: rgba(9, 9, 16, 0.88);
+  color: #b9b9cc;
+}
+
+.scan-over svg {
+  color: var(--accent-amber);
+}
+
+.scan-over p {
+  font-size: var(--fs-cap);
+  line-height: 1.65;
+  color: #b9b9cc;
+}
+
+.scan-retry {
+  height: 34px;
+  padding: 0 20px;
+  border-radius: var(--r-full);
+  font-size: var(--fs-cap);
+  font-weight: 550;
+  color: var(--text-on-brand);
+  background: var(--brand-grad);
+}
+
+.scan-tip {
+  text-align: center;
+  font-size: var(--fs-cap);
+  color: #8b8ba2;
+  margin: 14px 0 14px;
+}
+
+/* ---------- 三条路径 ---------- */
+.scan-acts {
+  display: flex;
+  gap: 10px;
+}
+
+.scan-act {
+  flex: 1;
+  height: 58px;
+  border-radius: var(--r-lg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-size: var(--fs-cap);
+  font-weight: 500;
+  color: #e6e6f0;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  transition: transform 0.16s var(--ease);
+}
+
+.scan-act:active {
+  transform: scale(0.97);
+}
+
+.scan-act:disabled {
+  opacity: 0.6;
+}
+
+.scan-manual {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.scan-field {
+  height: 48px;
+  border-radius: var(--r-full);
+  padding: 0 18px;
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.scan-field input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: 0;
+  outline: 0;
+  color: #fff;
+  font-size: var(--fs-body);
+  font-family: inherit;
+}
+
+.scan-field input::placeholder {
+  color: #6b6b82;
+}
+
+.scan-file,
+.scan-grab {
+  display: none;
+}
+
+/* ---------- 按钮 ---------- */
+.scan-btn {
+  height: 46px;
+  padding: 0 18px;
+  border-radius: var(--r-full);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-size: var(--fs-sub);
+  font-weight: 550;
+  color: #e6e6f0;
+  background: rgba(255, 255, 255, 0.09);
+  transition: transform 0.16s var(--ease);
+}
+
+.scan-btn--primary {
+  color: var(--text-on-brand);
+  background: var(--brand-grad);
+  box-shadow: var(--shadow-brand);
+}
+
+.scan-btn--done {
+  color: var(--accent-mint);
+  background: rgba(52, 211, 166, 0.14);
+}
+
+.scan-btn:active {
+  transform: scale(0.97);
+}
+
+.scan-btn:disabled {
+  opacity: 0.65;
+}
+
+/* ---------- 结果卡 ---------- */
+.scan-result {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--r-xl);
+  padding: 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: scanIn 0.22s var(--ease) both;
+}
+
+.scan-person {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.scan-person-txt {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.scan-person-txt b {
+  font-size: var(--fs-h2);
+  font-weight: 650;
+  color: #fff;
+}
+
+.scan-person-txt em {
+  font-style: normal;
+  font-size: var(--fs-cap);
+  color: #9a9ab0;
+}
+
+.scan-chip {
+  font-size: var(--fs-micro);
+  color: var(--accent-mint);
+  background: rgba(52, 211, 166, 0.14);
+  border-radius: var(--r-full);
+  padding: 3px 9px;
+}
+
+.scan-bio {
+  font-size: var(--fs-sub);
+  color: #c8c8da;
+  line-height: 1.55;
+}
+
+.scan-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.scan-tags span {
+  font-size: var(--fs-micro);
+  color: #c0c0d4;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: var(--r-full);
+  padding: 5px 11px;
+}
+
+.scan-person-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.scan-person-acts .scan-btn {
+  flex: 1;
+  min-width: 132px;
+}
+
+.scan-note {
+  font-size: var(--fs-micro);
+  color: #8a8aa0;
+  line-height: 1.65;
+}
+
+.scan-plain {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.scan-plain svg {
+  color: var(--accent-amber);
+}
+
+.scan-plain b {
+  font-size: var(--fs-h2);
+  font-weight: 650;
+  color: #fff;
+}
+
+.scan-plain p {
+  font-size: var(--fs-sub);
+  color: #a8a8be;
+  line-height: 1.65;
+}
+
+.scan-code {
+  display: block;
+  width: 100%;
+  max-height: 156px;
+  overflow: auto;
+  background: rgba(0, 0, 0, 0.36);
+  border-radius: var(--r-md);
+  padding: 12px 14px;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: var(--fs-cap);
+  line-height: 1.6;
+  color: #d2d2e4;
+  word-break: break-all;
+}
+
+.scan-result-acts {
+  display: flex;
+  gap: 10px;
+}
+
+.scan-result-acts .scan-btn {
+  flex: 1;
+}

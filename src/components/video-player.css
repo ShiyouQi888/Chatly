@@ -1,0 +1,292 @@
+/* ===== 自己的视频播放器 =====
+ *
+ * 两条贯穿全篇的硬约束：
+ *   1. **容器必须正好是画面的形状**。容器比例由 JS 算好写进 `--ar`，CSS 只负责两种方向的
+ *      **不同约束**（横屏铺满宽度 / 竖屏优先高度）。
+ *      这是「看起来像不像浏览器自带播放器」的分水岭 —— 容器比画面大一圈，
+ *      `object-fit: contain` 就会在四周留下纯黑，画面缩在中间，整块东西立刻变成默认播放器。
+ *   2. **不在画面上叠任何文字**（曾经在左上角浮一行文件名，那是最像原生控件的一笔）。
+ */
+
+.vp-root {
+  /* 高度上限：竖屏视频按真实比例能把整张动态卡片顶成两屏高 */
+  --vp-maxh: 460px;
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  background: #000;
+  aspect-ratio: var(--ar, 1.78);
+  max-height: var(--vp-maxh);
+  /* ★ 光封高度不够 —— 容器仍是满宽，画面 `object-fit:contain` 会在两侧留两条黑边。
+     反过来按「上限高度 × 比例」收**宽度**，容器就正好是画面的形状，没有多余的黑边。
+     被收窄后靠左（朋友圈的视频也是靠左），不居中。 */
+  max-width: calc(var(--vp-maxh) * var(--ar, 1.78));
+  margin-right: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vp-root.is-rounded {
+  border-radius: var(--r-md);
+}
+
+/* 竖屏：封顶更严（比横屏矮一点，别在信息流里占两屏） */
+.vp-root.is-portrait {
+  --vp-maxh: 380px;
+}
+
+/* ===== 大屏（查看器内）=====
+   ⚠️ 这里曾经写的是 `height:100% + max-height:none` —— 容器被撑满整个舞台，
+   画面 contain 居中后上下各留一大片纯黑，控制条又被 `bottom:0` 推到屏幕最下沿，
+   离画面几十像素远。控件明明全是自己写的，整体却**和浏览器自带的播放器长得一模一样**。
+   正确做法和列表卡片同一套：宽度铺满 + `aspect-ratio` 让高度跟着比例走，
+   再用 `max-height: 100%` 兜住极端比例 —— 容器正好是画面的形状。
+
+   ⚠️⚠️ 而且这段 CSS 曾经**根本没生效**：类名由 JS 的 `full` 状态驱动，
+   而 `full` 指的是「浏览器 Fullscreen API 生效中」，`mode="full"`（查看器）从来拿不到它。
+   于是查看器里的播放器套的是**列表卡片**的规则：竖屏 `max-width: 380×0.6 = 228px`
+   + 基础规则的 `margin-right: auto` → 一张 228×380 的卡贴在左边缘、没居中。
+   （横屏看不出来纯属巧合：基础 `width:100%` 恰好就铺满了查看器宽度。） */
+.vp-root.is-full {
+  /* 用**未夹取**的真实比例：夹取是为了列表卡片别被极端比例撑爆，
+     查看器已经有 `max-height: 100%` 兜底，再夹一次只是白送两条黑边
+     （360×640 真实 0.563，被夹成 0.6 → 容器比画面宽 6.6% → 左右各 11px 黑条）。 */
+  aspect-ratio: var(--ar-true, var(--ar));
+  width: 100%;
+  height: auto;
+  max-height: 100%;
+  max-width: 100%;
+  /* 同时清掉基础规则的 `margin-right: auto`，两条边都居中 */
+  margin: 0 auto;
+  border-radius: var(--r-md);
+  /* 给画面一点体量感：深色底上浮起来一块，而不是「糊在整块黑底上」 */
+  box-shadow: 0 24px 64px -24px rgba(0, 0, 0, 0.9);
+}
+
+/* 浏览器全屏（从列表卡片点「全屏」进入）：
+   ⚠️ **不要试图在这里摆位置／定尺寸，那是白写。** UA 的 `:fullscreen` 规则是 `!important` 的
+   （`position:fixed` / `inset:0` / `width:100%` / `height:100%` / `margin:0` / `transform:none`），
+   实测：作者写的 `top/left:50% + translate(-50%,-50%)` 完全没生效 —— 元素仍落在 `(0,0)`、
+   尺寸 `100vw×100vh`。所以全屏态必然是「铺满整屏 + 画面 `contain` 居中 + 控制条在屏幕底部」，
+   这本来就是全屏播放器该有的样子（YouTube / B 站全屏也是底部一条），不必对抗。
+
+   能改的是 UA 不管的那些：全屏不该还留着「卡片感」（圆角 / 投影 / 卡片外框）。
+   注意特异性要压过 `.vp-root.is-rounded`（0,2,0），所以带上 `.is-full`。 */
+.vp-root.is-full:fullscreen {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.vp-video {
+  width: 100%;
+  height: 100%;
+  /* contain 而不是 cover：比例不一致时留黑边，而不是裁掉画面 ——
+     裁掉半张脸比多两条黑边难看得多 */
+  object-fit: contain;
+  display: block;
+  background: #000;
+}
+
+/* ===== 未开始：中央播放按钮 + 时长角标 ===== */
+.vp-big {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+.vp-big-ic {
+  width: 54px;
+  height: 54px;
+  border-radius: var(--r-full);
+  background: rgba(12, 12, 18, 0.46);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  padding-left: 3px; /* 三角视觉重心偏左，补一点让它看起来居中 */
+  box-shadow: 0 6px 20px -8px rgba(0, 0, 0, 0.7);
+  transition: transform 0.16s var(--ease);
+}
+
+.vp-big:active .vp-big-ic {
+  transform: scale(0.92);
+}
+
+.vp-dur {
+  position: absolute;
+  right: 9px;
+  bottom: 9px;
+  padding: 2px 7px;
+  border-radius: var(--r-full);
+  background: rgba(14, 14, 22, 0.52);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font-size: var(--fs-micro);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+/* ===== 播放 / 暂停的中央闪动反馈 ===== */
+.vp-flash {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 62px;
+  height: 62px;
+  margin: -31px 0 0 -31px;
+  border-radius: var(--r-full);
+  display: grid;
+  place-items: center;
+  background: rgba(12, 12, 18, 0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  pointer-events: none;
+  animation: vpFlash 0.5s var(--ease) both;
+}
+
+@keyframes vpFlash {
+  0% {
+    opacity: 0;
+    transform: scale(0.72);
+  }
+  22% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.2);
+  }
+}
+
+/* ===== 播放中：底部控制条 =====
+   做成**贴在画面下沿的玻璃胶囊**，而不是一条横贯屏幕底部的渐变长条 ——
+   后者是浏览器自带播放器的标志形态。胶囊 + 毛玻璃也和 App 里其它浮层
+   （顶栏 blur(16px)、弹层 blur(8px)、封面播放键）是同一套语言。 */
+.vp-bar {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px 5px 5px;
+  border-radius: var(--r-full);
+  background: rgba(18, 18, 28, 0.52);
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  box-shadow: 0 10px 30px -14px rgba(0, 0, 0, 0.95);
+  color: #fff;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.2s var(--ease), transform 0.2s var(--ease);
+  pointer-events: none;
+}
+
+/* 播完 / 暂停 / 用户刚点过 —— 控制条该在 */
+.vp-bar.is-on {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+.vp-ic {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-full);
+  color: #fff;
+  transition: background 0.16s var(--ease), transform 0.16s var(--ease);
+}
+
+.vp-ic:active {
+  background: rgba(255, 255, 255, 0.18);
+  transform: scale(0.92);
+}
+
+/* 主操作（播放 / 暂停）用品牌色实心圆 —— 一眼看出这是「我们家的」控件 */
+.vp-ic--main {
+  width: 26px;
+  height: 26px;
+  background: var(--brand-grad);
+  color: #fff;
+  box-shadow: 0 4px 12px -4px rgba(91, 110, 245, 0.9);
+  padding-left: 1px; /* 播放三角视觉重心偏左 */
+}
+
+.vp-ic--main:active {
+  background: var(--brand-grad);
+}
+
+.vp-time {
+  font-size: var(--fs-micro);
+  font-variant-numeric: tabular-nums;
+  flex: 0 0 auto;
+  opacity: 0.92;
+}
+
+.vp-time--end {
+  opacity: 0.6;
+}
+
+.vp-track {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  /* 视觉 3px、可拖 22px —— 细条不好点，用透明高度撑命中区（和 switch / chip 一个办法） */
+  cursor: pointer;
+  touch-action: none;
+}
+
+.vp-track::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.vp-fill {
+  position: absolute;
+  left: 0;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--brand-grad);
+  pointer-events: none;
+}
+
+.vp-knob {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  margin-left: -5.5px;
+  border-radius: var(--r-full);
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5), 0 0 0 3px rgba(123, 92, 246, 0.35);
+  pointer-events: none;
+}
+
+/* ===== 失效 ===== */
+.vp-broken {
+  flex-direction: column;
+  gap: 6px;
+  background: var(--surface-2);
+  color: var(--text-3);
+  font-size: var(--fs-micro);
+}

@@ -1,0 +1,193 @@
+.login {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 28px 22px 20px;
+  overflow-y: auto;
+  background:
+    radial-gradient(520px 300px at 20% 0%, rgba(155, 140, 251, 0.16), transparent 62%),
+    radial-gradient(420px 260px at 88% 40%, rgba(91, 110, 245, 0.12), transparent 60%),
+    var(--bg);
+}
+
+/* ===== 品牌区 ===== */
+.lg-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0 26px;
+}
+
+.lg-logo {
+  width: 60px;
+  height: 60px;
+  border-radius: 20px;
+  background: var(--brand-grad);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 26px rgba(109, 93, 246, 0.34);
+}
+
+.lg-hero h1 {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+}
+
+.lg-hero p {
+  font-size: var(--fs-sub);
+  color: var(--text-3);
+}
+
+/* ===== 卡片 ===== */
+.lg-card {
+  background: var(--surface);
+  border-radius: var(--r-xl);
+  padding: 18px;
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.lg-seg {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  background: var(--surface-2);
+  border-radius: var(--r-md);
+  margin-bottom: 4px;
+}
+
+.lg-seg button {
+  padding: 10px;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-sub);
+  font-weight: 550;
+  color: var(--text-3);
+  transition: all 0.18s var(--ease);
+}
+
+.lg-seg button.is-on {
+  background: var(--surface);
+  color: var(--brand-2);
+  box-shadow: var(--shadow-sm);
+}
+
+.lg-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--text-3);
+  transition: box-shadow 0.18s var(--ease);
+}
+
+.lg-field:focus-within {
+  box-shadow: 0 0 0 2px var(--brand-soft-2);
+}
+
+.lg-field input {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-body);
+  color: var(--text-1);
+  background: none;
+}
+
+.lg-field input::placeholder {
+  color: var(--text-4);
+}
+
+.lg-error {
+  font-size: var(--fs-sub);
+  color: #e0455c;
+  padding: 2px 4px;
+}
+
+.lg-submit {
+  padding: 15px;
+  border-radius: var(--r-md);
+  background: var(--brand-grad);
+  color: #fff;
+  font-size: var(--fs-body);
+  font-weight: 650;
+  box-shadow: var(--shadow-brand);
+  transition: opacity 0.18s var(--ease);
+}
+
+.lg-submit:disabled {
+  opacity: 0.55;
+}
+
+/* ===== 演示账号 ===== */
+.lg-demo {
+  margin-top: 6px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.lg-demo-title {
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  color: var(--text-3);
+  letter-spacing: 0.04em;
+}
+
+.lg-demo-list {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.lg-demo-list button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 13px;
+  border-radius: var(--r-full);
+  background: var(--brand-soft);
+  color: var(--brand-2);
+  font-size: var(--fs-sub);
+  font-weight: 550;
+  transition: transform 0.16s var(--ease);
+}
+
+.lg-demo-list button:active {
+  transform: scale(0.95);
+}
+
+.lg-demo-list button:disabled {
+  opacity: 0.5;
+}
+
+.lg-demo-hint {
+  font-size: var(--fs-micro);
+  color: var(--text-4);
+  line-height: 1.6;
+}
+
+.lg-foot {
+  margin-top: auto;
+  padding-top: 22px;
+  text-align: center;
+  font-size: var(--fs-micro);
+  color: var(--text-4);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.lg-foot span {
+  color: var(--text-3);
+}

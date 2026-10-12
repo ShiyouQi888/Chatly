@@ -1,0 +1,23 @@
+{
+  "name": "chatly-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Chatly 独立后端：REST + WebSocket 实时聊天",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js",
+    "seed": "node src/seed.js",
+    "reset": "node src/seed.js --reset"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.4.0",
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  }
+}

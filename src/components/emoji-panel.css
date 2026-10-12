@@ -1,0 +1,198 @@
+/* ===== 表情面板 =====
+   高度是定值（--ep-h）：面板是 .room 的 flex 子项，
+   高度确定消息区才能正确收缩，否则输入框会被顶出屏幕。
+   内部滚动交给 .ep-body，头部和分类栏固定。 */
+.ep {
+  --ep-h: 266px;
+  flex: 0 0 auto;
+  height: var(--ep-h);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  animation: epIn 0.2s var(--ease) both;
+}
+
+@keyframes epIn {
+  from {
+    transform: translateY(14px);
+    opacity: 0;
+  }
+}
+
+/* ===== 头部：模式切换 + 搜索 ===== */
+.ep-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 6px;
+}
+
+.ep-seg {
+  flex: 0 0 auto;
+  display: flex;
+  padding: 2px;
+  background: var(--surface-2);
+  border-radius: var(--r-full);
+}
+
+.ep-seg-btn {
+  /* 视觉高度 26px，用透明 ::after 把命中区补到 32px —— 见 ui.css「最小点击区补齐」。
+     关键是只向下扩、不向上扩，否则会压到上面的搜索框。 */
+  position: relative;
+  height: 26px;
+  padding: 0 12px;
+  border-radius: var(--r-full);
+  font-size: var(--fs-cap);
+  font-weight: 500;
+  color: var(--text-3);
+  transition: color 0.16s var(--ease), background 0.16s var(--ease);
+}
+
+.ep-seg-btn::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: -6px;
+}
+
+.ep-seg-btn.is-on {
+  background: var(--surface);
+  color: var(--text-1);
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+}
+
+.ep-search {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  background: var(--surface-2);
+  border-radius: var(--r-full);
+  color: var(--text-3);
+}
+
+.ep-search input {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-cap);
+  color: var(--text-1);
+}
+
+.ep-search input::placeholder {
+  color: var(--text-4);
+}
+
+/* 搜索框要显示浏览器自带的清除按钮时不用它，自己做统一的圆形按钮 */
+.ep-search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.ep-clear {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--r-full);
+  background: var(--line-2);
+  color: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ===== 分类栏 ===== */
+.ep-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 2px;
+  padding: 0 8px 6px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--line);
+}
+
+.ep-tab {
+  position: relative;
+  flex: 0 0 auto;
+  height: 28px;
+  padding: 0 11px;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-cap);
+  color: var(--text-3);
+  transition: color 0.16s var(--ease), background 0.16s var(--ease);
+}
+
+.ep-tab::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: -4px;
+}
+
+.ep-tab.is-on {
+  background: var(--brand-soft);
+  color: var(--brand-2);
+  font-weight: 600;
+}
+
+/* ===== 网格 ===== */
+.ep-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+}
+
+.ep-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+}
+
+.ep-grid.is-big {
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+
+.ep-cell {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-xs);
+  transition: background 0.14s var(--ease), transform 0.14s var(--ease);
+}
+
+.ep-cell img {
+  width: 68%;
+  height: 68%;
+  object-fit: contain;
+  /* 表情是位图化的 SVG，缩放时保持平滑；同时禁掉拖拽，免得把图拖进输入框 */
+  pointer-events: none;
+}
+
+.ep-cell.is-big img {
+  width: 82%;
+  height: 82%;
+}
+
+.ep-cell:active {
+  background: var(--surface-2);
+  transform: scale(0.9);
+}
+
+.ep-empty {
+  padding: 28px 0;
+  text-align: center;
+  font-size: var(--fs-cap);
+  color: var(--text-4);
+}

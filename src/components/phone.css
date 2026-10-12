@@ -1,0 +1,156 @@
+/* ===== 页面幕布：中性浅底，衬托竖屏内容区 ===== */
+.stage {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background:
+    radial-gradient(760px 460px at 18% 6%, rgba(155, 140, 251, 0.1), transparent 62%),
+    radial-gradient(680px 420px at 84% 92%, rgba(91, 110, 245, 0.08), transparent 60%),
+    #edeff5;
+}
+
+/* ===== 竖屏内容区：固定 390 宽，无设备外壳 ===== */
+.phone {
+  position: relative;
+  width: 390px;
+  max-width: 100vw;
+  height: 100vh;
+  height: min(100dvh, 900px);
+  background: var(--bg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  box-shadow:
+    0 0 0 1px rgba(22, 22, 31, 0.06),
+    0 18px 48px -18px rgba(30, 28, 70, 0.2);
+}
+
+.phone-screen {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  isolation: isolate;
+}
+
+/* ===== 内容区 ===== */
+.screen-body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ===== 底部导航 ===== */
+.tabbar {
+  position: relative;
+  z-index: 55;
+  height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(20px) saturate(180%);
+  border-top: 1px solid var(--line);
+  flex: 0 0 auto;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: var(--text-3);
+  transition: color 0.2s var(--ease);
+}
+
+.tab.is-active {
+  color: var(--brand-2);
+}
+
+.tab-ic {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+}
+
+.tab-ic .badge {
+  position: absolute;
+  top: -5px;
+  right: -11px;
+}
+
+.tab-label {
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.tab.is-active .tab-label {
+  font-weight: 600;
+}
+
+/* ===== 启动态：恢复登录会话时的短暂占位 ===== */
+.boot {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  color: var(--text-3);
+  font-size: var(--fs-sub);
+  background:
+    radial-gradient(520px 300px at 20% 0%, rgba(155, 140, 251, 0.14), transparent 62%),
+    var(--bg);
+}
+
+.boot-logo {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--r-lg);
+  background: var(--brand-grad);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 24px rgba(109, 93, 246, 0.3);
+  animation: bootPulse 1.5s var(--ease) infinite;
+}
+
+@keyframes bootPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(0.92);
+    opacity: 0.72;
+  }
+}
+
+/* ===== 真机 / 窄屏：铺满视口 ===== */
+@media (max-width: 440px) {
+  .stage {
+    background: var(--bg);
+  }
+  .phone {
+    width: 100%;
+    max-width: none;
+    height: 100vh;
+    height: 100dvh;
+    box-shadow: none;
+  }
+}

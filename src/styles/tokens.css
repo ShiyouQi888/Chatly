@@ -1,0 +1,66 @@
+:root {
+  /* ===== 主色：紫蓝渐变 ===== */
+  --brand-1: #8b7cf6;
+  --brand-2: #6d5df6;
+  --brand-3: #5b6ef5;
+  --brand-grad: linear-gradient(135deg, #9b8cfb 0%, #7b5cf6 45%, #5b6ef5 100%);
+  --brand-soft: rgba(124, 92, 246, 0.1);
+  --brand-soft-2: rgba(124, 92, 246, 0.18);
+
+  /* ===== 强调色 ===== */
+  --accent-cyan: #39c9f5;
+  --accent-mint: #34d3a6;
+  --accent-pink: #f97ca8;
+  --accent-amber: #ffb43f;
+
+  /* ===== 背景 / 表面 ===== */
+  --bg: #f7f7fb;
+  --bg-warm: #fbfaff;
+  --surface: #ffffff;
+  --surface-2: #f2f2f8;
+  --surface-glass: rgba(255, 255, 255, 0.72);
+
+  /* ===== 文字 ===== */
+  --text-1: #16161f;
+  --text-2: #4a4a5a;
+  --text-3: #8c8ca0;
+  --text-4: #b4b4c4;
+  --text-on-brand: #ffffff;
+
+  /* ===== 分隔 / 阴影 ===== */
+  --line: rgba(22, 22, 31, 0.07);
+  --line-2: rgba(22, 22, 31, 0.12);
+  --shadow-sm: 0 1px 2px rgba(22, 22, 31, 0.04), 0 2px 8px rgba(22, 22, 31, 0.04);
+  --shadow-md: 0 4px 16px rgba(22, 22, 31, 0.08);
+  --shadow-lg: 0 12px 32px rgba(22, 22, 31, 0.12);
+  --shadow-brand: 0 6px 20px rgba(109, 93, 246, 0.32);
+
+  /* ===== 圆角 ===== */
+  --r-xs: 8px;
+  --r-sm: 12px;
+  --r-md: 16px;
+  --r-lg: 22px;
+  --r-xl: 28px;
+  --r-full: 999px;
+
+  /* ===== 字号 ===== */
+  --fs-display: 30px;
+  --fs-h1: 22px;
+  --fs-h2: 17px;
+  --fs-body: 15px;
+  --fs-sub: 13.5px;
+  --fs-cap: 12px;
+  --fs-micro: 11px;
+
+  /* ===== 动效 ===== */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ===== 布局 ===== */
+  --tabbar-h: 58px;
+  /* 顶部留白：真机由系统状态栏占位，桌面预览需要显式留出 */
+  --safe-top: 14px;
+
+  --font: "Noto Sans SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei",
+    -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}

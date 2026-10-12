@@ -1,0 +1,171 @@
+/* ===== 图片 / 视频全屏查看器 ===== */
+
+.media-viewer {
+  position: absolute;
+  inset: 0;
+  z-index: 120;
+  /* 半透明 + 模糊，和项目里其它浮层（顶栏 blur(16px)、弹层 blur(8px)）一个语言。
+     纯不透明会显得很"硬"，全透明又会把聊天内容透出来抢焦点。 */
+  /* 0.82 太透：后面的动态卡片带颜色，毛玻璃一糊就在画面上方/下方留下几团色斑。
+     压到 0.92 —— 还留一点玻璃感，但不会和视频画面抢注意力。 */
+  background: rgba(8, 8, 14, 0.92);
+  backdrop-filter: blur(20px) saturate(120%);
+  -webkit-backdrop-filter: blur(20px) saturate(120%);
+  display: flex;
+  flex-direction: column;
+  animation: fadeIn 0.18s var(--ease) both;
+}
+
+/* 顶栏：关闭在左、保存在右。
+   底部安全区要留给 mv-meta，所以 padding-bottom 只给一点。 */
+.mv-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: calc(var(--safe-top) + 8px) 12px 8px;
+}
+
+.mv-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: var(--r-full);
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font-size: var(--fs-sub);
+  font-weight: 500;
+  /* 深底上的按钮靠半透明白底 + 描边区分可点区域，不用阴影（在深色背景上看不见） */
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  transition: background 0.16s var(--ease), transform 0.16s var(--ease);
+}
+
+.mv-btn:active {
+  background: rgba(255, 255, 255, 0.26);
+  transform: scale(0.96);
+}
+
+/* 保存是主操作，给个品牌色底 —— 关闭是次要的，保持中性 */
+.mv-btn[aria-label='保存到本地'] {
+  background: linear-gradient(135deg, #7b5cf6, #5b6ef5);
+  border-color: transparent;
+}
+
+.mv-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 14px;
+}
+
+.mv-media {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: var(--r-md);
+  object-fit: contain;
+  /* 视频默认全黑，给个深色底免得看起来像没加载 */
+  background: #000;
+}
+
+/* 播放器在查看器里：只负责居中，**尺寸交给播放器自己**。
+   ⚠️ 这里曾经把 `.vp-root` 覆写成 `width/height: 100%` + 两个上限全解 ——
+   结果容器撑满整个舞台，画面 contain 居中后上下各留一大片纯黑，
+   控制条被推到屏幕最下沿，整块东西和浏览器自带播放器一模一样。
+   现在由 `.vp-root.is-full` 按 `--ar` 贴合画面形状，这里只做居中，不再改尺寸。 */
+.mv-vp {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mv-broken {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.66);
+  font-size: var(--fs-sub);
+}
+
+.mv-meta {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 6px 18px calc(env(safe-area-inset-bottom, 0px) + 14px);
+  text-align: center;
+  font-size: var(--fs-cap);
+  color: rgba(255, 255, 255, 0.56);
+  /* 文件名可能很长，只显示一行，别把底部撑高 */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ===== 消息列表里的视频气泡 ===== */
+.video-bubble {
+  position: relative;
+  display: block;
+  width: 100%;
+  max-width: 208px;
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: #1a1a22;
+  line-height: 0;
+}
+
+.vb-media {
+  display: block;
+  width: 100%;
+  /* 只取首帧做封面：不加载整段视频 */
+  height: auto;
+  max-height: 240px;
+  object-fit: cover;
+}
+
+.vb-play {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-full);
+  background: rgba(12, 12, 18, 0.5);
+  color: #fff;
+  /* 半透明底上再描一圈白边，浅色视频上才看得清 */
+  border: 1.5px solid rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(2px);
+}
+
+.vb-dur {
+  position: absolute;
+  right: 7px;
+  bottom: 7px;
+  padding: 1px 6px;
+  border-radius: var(--r-xs);
+  background: rgba(12, 12, 18, 0.62);
+  color: #fff;
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.video-broken {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--text-3);
+  font-size: var(--fs-sub);
+}

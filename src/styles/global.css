@@ -1,0 +1,169 @@
+@import "./tokens.css";
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  height: 100%;
+  background: var(--bg);
+  font-family: var(--font);
+  color: var(--text-1);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  font-weight: 450;
+  overscroll-behavior: none;
+}
+
+button {
+  font-family: inherit;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: inherit;
+}
+
+input,
+textarea {
+  font-family: inherit;
+  border: none;
+  outline: none;
+  background: none;
+  color: inherit;
+  resize: none;
+}
+
+ul,
+ol {
+  list-style: none;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+/* ===== 通用动画 ===== */
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes popIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes sheetUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes typingDot {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+@keyframes ringPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(124, 92, 246, 0.45);
+  }
+  100% {
+    box-shadow: 0 0 0 8px rgba(124, 92, 246, 0);
+  }
+}
+
+.anim-fade-up {
+  animation: fadeUp 0.28s var(--ease) both;
+}
+
+.anim-fade-in {
+  animation: fadeIn 0.24s var(--ease) both;
+}
+
+.anim-pop {
+  animation: popIn 0.22s var(--ease) both;
+}
+
+/* ===== 整屏层补底 =====
+ * 覆盖层的定位上下文有两种，视觉结果不一样：
+ *   挂在 .phone-screen 那一层（聊天室 / 通知 / 搜索）—— `inset:0` 盖住整块屏幕，
+ *     而且 Phone 会把 `.tabbar` 卸掉（showTabBar 为 false）；
+ *   挂在 .screen-body 里（「我」的子页 / 动态详情 / 发布面板 / 图片查看器）——
+ *     `inset:0` 只到导航栏上沿，底部会漏出一条 `.tabbar`：
+ *     看着像"这页没做完"，点它还会把当前页直接卸掉（编辑到一半的内容全丢）。
+ * 所以后者统一加这个类，把底边按导航栏的实际高度往下补。
+ * 用 --tabbar-h + 安全区算，导航栏以后变高也不会漏。
+ * `.phone-screen` 是 overflow:hidden，多补出来的部分会被裁掉，不会溢出到桌面。
+ *
+ * ⚠️ 选择器必须带 `.phone-screen`。写成单个 `.cover-tabbar` 是**不生效**的：
+ *    各屏自己的 CSS 在 global.css 之后加载，双方同为单类选择器（优先级相同）时
+ *    后出现的赢 —— `.mc-root { inset: 0 }` 里的 `bottom: 0` 会把这条盖掉。
+ *    带上祖先选择器优先级变成 (0,2,0)，稳定压过单类规则。 */
+.phone-screen .cover-tabbar {
+  bottom: calc(-1 * (var(--tabbar-h) + env(safe-area-inset-bottom)));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

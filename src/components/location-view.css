@@ -1,0 +1,98 @@
+/* ===== 位置消息全屏查看 =====
+ * ⚠️ 气泡那一套（.loc-card / .loc-map / .loc-nomap / .loc-info / .loc-text / .loc-go）
+ * 在 `src/screens/chat-room.css` 里 —— 它是「聊天消息」的形态，和别的消息气泡放在一起。
+ * 这里只管整屏层，**不要在这里再定义一遍气泡的类**：同一个对象两处定义必然漂。 */
+
+/* ---------- 全屏 ---------- */
+
+.loc-viewer {
+  position: absolute;
+  inset: 0;
+  z-index: 160;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  animation: lvIn 0.2s var(--ease) both;
+}
+
+@keyframes lvIn {
+  from {
+    opacity: 0.6;
+    transform: translateY(12px);
+  }
+}
+
+.lv-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: calc(var(--safe-top) + 8px) 12px 10px;
+  background: var(--surface);
+  box-shadow: 0 1px 0 var(--line);
+}
+
+.lv-bar h2 {
+  flex: 1;
+  text-align: center;
+  font-size: var(--fs-h2);
+  font-weight: 650;
+  color: var(--text-1);
+}
+
+.lv-btn {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-full);
+  color: var(--text-2);
+}
+
+.lv-spacer {
+  width: 34px;
+  flex: 0 0 auto;
+}
+
+/* flex:1 + min-height:0 —— 让地图吃掉顶栏与说明之外的全部高度。
+   地图容器必须**确定高度**（SDK 按容器尺寸初始化，高度 0 会渲染成空白）。 */
+.lv-stage {
+  flex: 1;
+  min-height: 0;
+  padding: 12px 14px 0;
+}
+
+.lv-stage .mv-wrap,
+.lv-stage .mv-ph,
+.lv-stage .mv-empty {
+  height: 100%;
+}
+
+.lv-foot {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 16px calc(14px + env(safe-area-inset-bottom));
+}
+
+.lv-foot b {
+  font-size: var(--fs-h2);
+  font-weight: 650;
+  color: var(--text-1);
+}
+
+.lv-foot em {
+  font-size: var(--fs-sub);
+  font-style: normal;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+
+.lv-coord {
+  margin-top: 2px;
+  font-size: var(--fs-micro);
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}

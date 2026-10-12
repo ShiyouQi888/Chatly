@@ -1,0 +1,531 @@
+/* 群设置页：盖在聊天室之上的整屏层（与资料页同一套层级与动效） */
+.gs-root {
+  position: absolute;
+  inset: 0;
+  /* 层级：房间 80 < 弹层 120 < 群设置 130 < 资料页 140 < 头像选择器 150 */
+  z-index: 130;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  animation: gsIn 0.24s var(--ease) both;
+}
+
+@keyframes gsIn {
+  from {
+    opacity: 0.5;
+    transform: translateX(16px);
+  }
+}
+
+.gs-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: calc(var(--safe-top) + 8px) 14px 8px;
+}
+
+.gs-head h2 {
+  flex: 1;
+  text-align: center;
+  font-size: var(--fs-h2);
+  font-weight: 650;
+  color: var(--text-1);
+}
+
+.gs-back,
+.gs-spacer {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+}
+
+.gs-back {
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-full);
+  color: var(--text-1);
+}
+
+.gs-back:active {
+  background: var(--surface-2);
+}
+
+.gs-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 16px 20px;
+}
+
+.gs-card {
+  background: var(--surface);
+  border-radius: var(--r-md);
+  padding: 14px;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 2px rgba(22, 22, 31, 0.04);
+}
+
+.gs-card-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--fs-cap);
+  font-weight: 600;
+  color: var(--text-3);
+  margin-bottom: 11px;
+}
+
+.gs-count {
+  font-style: normal;
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: var(--r-full);
+  color: var(--brand-2);
+  background: var(--brand-soft);
+}
+
+.gs-foot {
+  margin: 14px 0 0;
+  text-align: center;
+  font-size: var(--fs-micro);
+  color: var(--text-4);
+}
+
+/* ===== 群名片 ===== */
+.gs-card.is-hero {
+  padding: 20px 14px 16px;
+  text-align: center;
+}
+
+.gs-av {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  border-radius: var(--r-full);
+}
+
+.gs-av:active {
+  opacity: 0.86;
+}
+
+.gs-av.is-static {
+  pointer-events: none;
+}
+
+.gs-av-edit {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-full);
+  color: #fff;
+  background: var(--brand-grad);
+  box-shadow: 0 2px 8px rgba(109, 93, 246, 0.4);
+}
+
+.gs-title-row {
+  margin-top: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.gs-name {
+  max-width: 74%;
+  font-size: var(--fs-h1);
+  font-weight: 700;
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gs-edit {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-full);
+  color: var(--text-3);
+  background: var(--surface-2);
+}
+
+.gs-sub {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: var(--fs-cap);
+  color: var(--text-3);
+}
+
+.gs-sub i {
+  font-style: normal;
+  padding: 1px 8px;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+}
+
+/* ===== 群公告 ===== */
+.gs-ann {
+  font-size: var(--fs-sub);
+  color: var(--text-1);
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.gs-ann.is-empty {
+  color: var(--text-4);
+}
+
+.gs-ann-time {
+  margin-top: 7px;
+  font-size: var(--fs-micro);
+  color: var(--text-4);
+}
+
+.gs-ann-acts {
+  margin-top: 10px;
+  display: flex;
+  gap: 16px;
+}
+
+.gs-link {
+  font-size: var(--fs-sub);
+  font-weight: 600;
+  color: var(--brand-2);
+}
+
+.gs-link.is-muted {
+  font-weight: 500;
+  color: var(--text-3);
+}
+
+/* ===== 成员网格 ===== */
+.gs-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px 6px;
+}
+
+.gs-member {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.gs-member:active .gs-member-name {
+  color: var(--brand-2);
+}
+
+.gs-member-name {
+  max-width: 100%;
+  font-size: var(--fs-micro);
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gs-roles {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.gs-role {
+  font-style: normal;
+  font-size: 10px;
+  line-height: 1.5;
+  padding: 0 5px;
+  border-radius: var(--r-full);
+  color: var(--brand-2);
+  background: var(--brand-soft);
+}
+
+.gs-role.is-me {
+  color: var(--text-3);
+  background: var(--surface-2);
+}
+
+.gs-member.is-add .gs-add-ic {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 15px;
+  color: var(--text-3);
+  background: var(--surface-2);
+  border: 1px dashed var(--line-2);
+}
+
+.gs-member.is-add:active .gs-add-ic {
+  color: var(--brand-2);
+  background: var(--brand-soft);
+}
+
+/* ===== 行（群管理 / 未接入 / 退出） ===== */
+.gs-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.gs-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+  text-align: left;
+}
+
+.gs-rows .gs-row:first-child,
+.gs-card > .gs-row:first-child {
+  border-top: 0;
+}
+
+.gs-row-ic {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: var(--brand-2);
+  background: var(--brand-soft);
+}
+
+.gs-row-ic.is-amber {
+  color: #d98a12;
+  background: rgba(255, 180, 63, 0.16);
+}
+
+.gs-row-ic.is-cyan {
+  color: #1f9fc9;
+  background: rgba(57, 201, 245, 0.16);
+}
+
+.gs-row-ic.is-danger {
+  color: #e05252;
+  background: rgba(224, 82, 82, 0.12);
+}
+
+.gs-row-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.gs-row-body b {
+  font-size: var(--fs-sub);
+  font-weight: 550;
+  color: var(--text-1);
+}
+
+.gs-row-body em {
+  font-style: normal;
+  font-size: var(--fs-micro);
+  color: var(--text-4);
+  line-height: 1.45;
+}
+
+.gs-row-right {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  font-size: var(--fs-cap);
+  color: var(--text-4);
+}
+
+/* 静态行：里面放的是 Switch（它自己就是 button），外层不能也是 button */
+.gs-row.is-static {
+  cursor: default;
+}
+
+.gs-row.is-pending {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+/* ===== 群投票列表 =====
+   投票行是**真按钮**（点了跳到聊天里那条消息），所以不能套 is-pending。 */
+.gs-row.is-poll .gs-row-body b {
+  /* 题目可能长，最多两行就好 —— 一行太长会把右侧状态挤掉 */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.gs-row.is-poll .gs-row-right {
+  gap: 2px;
+  font-size: var(--fs-micro);
+  color: var(--brand-2);
+  font-weight: 600;
+}
+
+.gs-row-ic.is-poll {
+  background: var(--brand-soft-2);
+  color: var(--brand-2);
+}
+
+.gs-note.is-warn {
+  color: var(--accent-pink);
+}
+
+.gs-row.is-danger .gs-row-body b {
+  color: #e05252;
+}
+
+.gs-row.is-disabled {
+  opacity: 0.62;
+}
+
+/* ===== 弹层里的表单 ===== */
+.gs-input {
+  width: 100%;
+  padding: 11px 13px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
+  font-family: var(--font);
+  font-size: var(--fs-body);
+  color: var(--text-1);
+  outline: none;
+}
+
+.gs-input:focus {
+  border-color: var(--brand-2);
+  background: var(--surface);
+}
+
+.gs-input.is-area {
+  min-height: 128px;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.gs-hint {
+  margin-top: 8px;
+  font-size: var(--fs-micro);
+  color: var(--text-4);
+}
+
+.gs-note {
+  font-size: var(--fs-sub);
+  color: var(--text-2);
+  line-height: 1.65;
+}
+
+.gs-loading {
+  padding: 18px 0;
+  text-align: center;
+  font-size: var(--fs-sub);
+  color: var(--text-4);
+}
+
+.gs-sheet-acts {
+  display: flex;
+  gap: 10px;
+}
+
+.gs-btn {
+  flex: 1;
+  height: 42px;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
+
+.gs-btn.is-ghost {
+  color: var(--text-2);
+  background: var(--surface-2);
+}
+
+.gs-btn.is-primary {
+  color: #fff;
+  background: var(--brand-grad);
+  box-shadow: 0 8px 20px -10px rgba(107, 92, 246, 0.9);
+}
+
+.gs-btn.is-danger {
+  color: #fff;
+  background: #e05252;
+}
+
+.gs-btn:disabled {
+  opacity: 0.5;
+}
+
+/* ===== 邀请：候选好友 ===== */
+.gs-pick {
+  display: flex;
+  flex-direction: column;
+}
+
+.gs-pick-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 6px;
+  border-radius: var(--r-sm);
+  text-align: left;
+}
+
+.gs-pick-row.is-on {
+  background: var(--brand-soft);
+}
+
+.gs-pick-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.gs-pick-body b {
+  font-size: var(--fs-sub);
+  font-weight: 550;
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gs-pick-body em {
+  font-style: normal;
+  font-size: var(--fs-micro);
+  color: var(--text-4);
+}
+
+.gs-pick-check {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-full);
+  color: #fff;
+  background: var(--brand-grad);
+}
+
+.gs-pick-row:not(.is-on) .gs-pick-check {
+  background: transparent;
+  border: 1.5px solid var(--line-2);
+}

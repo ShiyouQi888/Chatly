@@ -1,0 +1,743 @@
+/* ===== 群投票：发起面板 + 消息气泡 + 详情层 =====
+   颜色一律走 tokens.css 的令牌，不写死色值（和项目其它屏一致）。 */
+
+/* ============================================================
+   发起面板（整屏）
+   ============================================================ */
+
+/* z-index 150：和动态发布面板同级。
+   不和「选位置」抢 160 —— 发起投票时不会同时开定位面板。 */
+.poll-root,
+.poll-detail {
+  position: absolute;
+  inset: 0;
+  z-index: 150;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  animation: pollIn 0.22s var(--ease) both;
+}
+
+@keyframes pollIn {
+  from {
+    opacity: 0.6;
+    transform: translateY(12px);
+  }
+}
+
+.poll-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: calc(var(--safe-top) + 8px) 12px 10px;
+  background: var(--surface);
+  box-shadow: 0 1px 0 var(--line);
+}
+
+.poll-bar h2 {
+  flex: 1;
+  text-align: center;
+  font-size: var(--fs-h2);
+  font-weight: 650;
+  color: var(--text-1);
+}
+
+.poll-cancel {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-full);
+  color: var(--text-2);
+}
+
+.poll-spacer {
+  width: 34px;
+  flex: 0 0 auto;
+}
+
+/* 「发起」是主操作：未填完就 disabled —— 不给「先点再报错」这条路。
+   禁用态用灰底而不是降透明度，否则看起来像能点。 */
+.poll-submit {
+  flex: 0 0 auto;
+  height: 32px;
+  padding: 0 16px;
+  border-radius: var(--r-full);
+  background: var(--brand-grad);
+  color: var(--text-on-brand);
+  font-size: var(--fs-cap);
+  font-weight: 650;
+  box-shadow: var(--shadow-brand);
+}
+
+.poll-submit:disabled {
+  background: var(--surface-2);
+  color: var(--text-4);
+  box-shadow: none;
+}
+
+.poll-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 14px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.poll-card {
+  background: var(--surface);
+  border-radius: var(--r-md);
+  padding: 12px;
+  box-shadow: var(--shadow-sm);
+}
+
+.poll-card-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--fs-cap);
+  font-weight: 600;
+  color: var(--text-3);
+  margin-bottom: 9px;
+}
+
+/* ---------- 标题 ---------- */
+
+.poll-q {
+  width: 100%;
+  border: 0;
+  outline: none;
+  resize: none;
+  font-family: var(--font);
+  font-size: var(--fs-body);
+  font-weight: 550;
+  line-height: 1.5;
+  color: var(--text-1);
+  background: transparent;
+}
+
+.poll-q::placeholder {
+  color: var(--text-4);
+  font-weight: 450;
+}
+
+.poll-count {
+  display: flex;
+  justify-content: flex-end;
+  font-size: var(--fs-micro);
+  color: var(--text-4);
+}
+
+.poll-count .is-over {
+  color: var(--accent-pink);
+  font-weight: 650;
+}
+
+/* ---------- 选项行 ---------- */
+
+.poll-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.poll-opt-idx {
+  width: 18px;
+  flex: 0 0 auto;
+  text-align: center;
+  font-size: var(--fs-micro);
+  color: var(--text-4);
+}
+
+.poll-opt input {
+  flex: 1;
+  min-width: 0;
+  height: 38px;
+  padding: 0 11px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  background: var(--bg-warm);
+  font-family: var(--font);
+  font-size: var(--fs-sub);
+  color: var(--text-1);
+}
+
+.poll-opt input:focus {
+  border-color: var(--brand-1);
+  background: var(--surface);
+}
+
+.poll-opt input::placeholder {
+  color: var(--text-4);
+}
+
+/* 删除按钮的可点区 32px（视觉 26px）—— 和项目里其它小按钮同一手法 */
+.poll-opt-del {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-full);
+  color: var(--text-3);
+}
+
+.poll-opt-del:disabled {
+  color: var(--text-4);
+  opacity: 0.5;
+}
+
+.poll-add {
+  width: 100%;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border-radius: var(--r-sm);
+  border: 1px dashed var(--line-2);
+  color: var(--brand-2);
+  font-size: var(--fs-sub);
+  font-weight: 550;
+}
+
+.poll-add:disabled {
+  color: var(--text-4);
+  border-style: solid;
+}
+
+/* ---------- 开关 ---------- */
+
+.poll-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  text-align: left;
+}
+
+.poll-toggle + .poll-toggle {
+  border-top: 1px solid var(--line);
+}
+
+.poll-toggle-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.poll-toggle-main b {
+  font-size: var(--fs-sub);
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.poll-toggle-main em {
+  font-size: var(--fs-micro);
+  font-style: normal;
+  color: var(--text-3);
+  line-height: 1.4;
+}
+
+.poll-sw {
+  width: 44px;
+  height: 26px;
+  flex: 0 0 auto;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  padding: 3px;
+  transition: background 0.18s var(--ease);
+}
+
+.poll-sw.is-on {
+  background: var(--brand-grad);
+}
+
+.poll-sw i {
+  display: block;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.18s var(--ease);
+}
+
+.poll-sw.is-on i {
+  transform: translateX(18px);
+}
+
+/* ---------- 截止时间 ---------- */
+
+.poll-dls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.poll-dl {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: var(--fs-cap);
+  font-weight: 550;
+}
+
+.poll-dl.is-sel {
+  background: var(--brand-soft-2);
+  color: var(--brand-2);
+  font-weight: 650;
+}
+
+.poll-err {
+  padding: 9px 12px;
+  border-radius: var(--r-sm);
+  background: var(--brand-soft);
+  color: var(--brand-2);
+  font-size: var(--fs-cap);
+  line-height: 1.5;
+}
+
+/* ============================================================
+   消息气泡
+   ============================================================ */
+
+/* 气泡在消息列表里定宽：投票的本质是一张表，
+   让它跟着内容宽度收缩会让同一屏几条投票宽窄不一。 */
+.poll-bubble {
+  position: relative;
+  width: 258px;
+  max-width: 100%;
+  padding: 11px;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+/* 气泡本身**不是** button：里面还有一堆选项按钮。
+   button 套 button 是非法嵌套（读屏会错乱，React 也会告警）——
+   位置气泡那边的注释里记过同一个坑。 */
+
+.poll-bubble.is-closed {
+  background: var(--bg-warm);
+}
+
+.pb-q {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.pb-q b {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-sub);
+  font-weight: 650;
+  line-height: 1.45;
+  color: var(--text-1);
+  word-break: break-word;
+}
+
+.pb-badge {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  padding: 1px 6px;
+  border-radius: var(--r-xs);
+  background: var(--brand-soft-2);
+  color: var(--brand-2);
+  font-size: var(--fs-micro);
+  font-weight: 650;
+}
+
+.pb-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  font-size: var(--fs-micro);
+  color: var(--text-3);
+}
+
+.pb-meta span {
+  padding: 1px 6px;
+  border-radius: var(--r-xs);
+  background: var(--surface-2);
+}
+
+.pb-opts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 选项行：底色是「票数比例条」铺出来的，所以 fill 必须在最底层 */
+.pb-opt {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  overflow: hidden;
+  text-align: left;
+  transition: background 0.15s var(--ease);
+}
+
+.pb-opt:disabled {
+  opacity: 0.72;
+}
+
+.pb-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: var(--brand-soft);
+  transition: width 0.25s var(--ease);
+}
+
+/* 我投的选项：填充更深 + 加一圈品牌色描边 —— 靠颜色区分而不是只靠一个勾，
+   否则在「票数很高但没投」的项上会看错。 */
+.pb-opt.is-on {
+  background: var(--brand-soft-2);
+  box-shadow: inset 0 0 0 1.5px var(--brand-1);
+}
+
+.pb-opt.is-on .pb-fill {
+  background: var(--brand-soft-2);
+}
+
+.pb-opt-body {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 10px;
+}
+
+.pb-tick {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--surface);
+  box-shadow: inset 0 0 0 1.5px var(--line-2);
+}
+
+.pb-tick i {
+  display: block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.pb-opt.is-on .pb-tick {
+  background: var(--brand-grad);
+  color: var(--text-on-brand);
+  box-shadow: none;
+}
+
+.pb-text {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-sub);
+  color: var(--text-1);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.pb-num {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: var(--fs-cap);
+  font-weight: 650;
+  color: var(--text-2);
+}
+
+.pb-num em {
+  font-style: normal;
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  color: var(--text-3);
+}
+
+.pb-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-micro);
+  color: var(--text-3);
+}
+
+.pb-count {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.pb-voters {
+  display: flex;
+  align-items: center;
+}
+
+.pb-voters .av-wrap {
+  margin-right: -6px;
+}
+
+.pb-voters em {
+  margin-left: 9px;
+  font-style: normal;
+  color: var(--text-3);
+}
+
+.pb-detail {
+  margin-left: auto;
+  padding: 3px 9px;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+}
+
+.pb-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.pb-tip {
+  flex: 1;
+  font-size: var(--fs-micro);
+  color: var(--text-3);
+}
+
+.pb-confirm {
+  height: 30px;
+  padding: 0 14px;
+  border-radius: var(--r-full);
+  background: var(--brand-grad);
+  color: var(--text-on-brand);
+  font-size: var(--fs-cap);
+  font-weight: 650;
+}
+
+.pb-confirm:disabled {
+  background: var(--surface-2);
+  color: var(--text-4);
+}
+
+.pb-note {
+  font-size: var(--fs-micro);
+  color: var(--text-3);
+  line-height: 1.45;
+}
+
+.pb-end {
+  align-self: flex-start;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+}
+
+/* ---------- 骨架（详情还没拉到时） ---------- */
+
+.poll-bubble.is-skeleton {
+  gap: 8px;
+}
+
+.pb-skel,
+.pb-skel-line {
+  display: block;
+  height: 12px;
+  border-radius: var(--r-xs);
+  background: var(--surface-2);
+  animation: pbPulse 1.2s ease-in-out infinite;
+}
+
+.pb-skel {
+  width: 62%;
+  height: 13px;
+}
+
+.pb-skel-line {
+  width: 100%;
+  height: 34px;
+  border-radius: var(--r-sm);
+}
+
+.pb-skel-line:last-of-type {
+  width: 78%;
+}
+
+.pb-hint {
+  font-size: var(--fs-micro);
+  color: var(--text-3);
+}
+
+@keyframes pbPulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* ============================================================
+   详情层
+   ============================================================ */
+
+.pd-q {
+  font-size: var(--fs-h2);
+  font-weight: 650;
+  line-height: 1.45;
+  color: var(--text-1);
+  word-break: break-word;
+}
+
+.pd-sub {
+  margin-top: 5px;
+  font-size: var(--fs-cap);
+  color: var(--text-3);
+  line-height: 1.5;
+}
+
+.pd-opt {
+  display: block;
+  width: 100%;
+  padding: 9px 0;
+  text-align: left;
+}
+
+.pd-opt + .pd-opt {
+  border-top: 1px solid var(--line);
+}
+
+.pd-opt:disabled {
+  opacity: 0.85;
+}
+
+.pd-opt-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+
+.pd-opt-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--fs-sub);
+  color: var(--text-1);
+  word-break: break-word;
+}
+
+.pd-opt.is-on .pd-opt-text {
+  font-weight: 650;
+  color: var(--brand-2);
+}
+
+.pd-tick {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--brand-grad);
+  color: var(--text-on-brand);
+}
+
+.pd-opt-num {
+  flex: 0 0 auto;
+  font-size: var(--fs-cap);
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.pd-bar {
+  display: block;
+  height: 6px;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.pd-bar i {
+  display: block;
+  height: 100%;
+  border-radius: var(--r-full);
+  background: var(--brand-grad);
+  transition: width 0.25s var(--ease);
+}
+
+.pd-voters {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.pd-voters li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.pd-voters b {
+  font-size: var(--fs-sub);
+  font-weight: 550;
+  color: var(--text-1);
+}
+
+.pd-voters b em {
+  font-style: normal;
+  font-weight: 450;
+  color: var(--text-3);
+}
+
+.pd-voters .pd-more {
+  font-size: var(--fs-cap);
+  color: var(--text-3);
+}
+
+.pd-empty {
+  font-size: var(--fs-cap);
+  color: var(--text-3);
+  line-height: 1.55;
+}
+
+.pd-end {
+  height: 42px;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--accent-pink);
+  font-size: var(--fs-sub);
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+}

@@ -1,0 +1,10 @@
+Emoji artwork: Microsoft Fluent Emoji
+Source : https://github.com/microsoft/fluentui-emoji
+License: MIT — Copyright (c) Microsoft Corporation
+         https://github.com/microsoft/fluentui-emoji/blob/main/LICENSE
+Style  : Color（彩色 SVG，约 6.7KB/个）
+Note   : 本目录下的素材是上游文件的原样拷贝（仅重命名为 Unicode 码点），未作任何修改。
+         可换肤色的表情（如「合十」「竖起大拇指」）取的是 Default 肤色款 ——
+         上游这类表情没有 Color 直属目录，只有 Dark/Default/Light/… 六种肤色。
+         由 scripts/fetch-emoji.mjs 生成，请勿手工编辑。
+Emoji 名称来自 Unicode CLDR（中文注释），仅用于无障碍标签与搜索。

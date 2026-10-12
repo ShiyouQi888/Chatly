@@ -1,0 +1,279 @@
+/* 头像选择器：上传 + 裁剪 + 预设。层级压在编辑资料面板（z 90）之上 */
+.avp-root {
+  position: absolute;
+  inset: 0;
+  /* 也会从群设置页里打开（群设置 130 / 资料页 140），要压在最上面 */
+  z-index: 150;
+  display: flex;
+  align-items: flex-end;
+}
+
+.avp-mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(18, 18, 28, 0.46);
+  backdrop-filter: blur(3px);
+  animation: fadeIn 0.2s var(--ease) both;
+}
+
+.avp-panel {
+  position: relative;
+  width: 100%;
+  max-height: 92%;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-radius: var(--r-xl) var(--r-xl) 0 0;
+  box-shadow: 0 -8px 32px rgba(18, 18, 28, 0.18);
+  padding-bottom: max(14px, env(safe-area-inset-bottom));
+}
+
+.avp-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 12px 8px;
+  flex: 0 0 auto;
+}
+
+.avp-head h3 {
+  flex: 1;
+  text-align: center;
+  font-size: var(--fs-h2);
+  font-weight: 650;
+  color: var(--text-1);
+}
+
+.avp-close,
+.avp-spacer {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+}
+
+.avp-close {
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-full);
+  color: var(--text-3);
+}
+
+.avp-close:active {
+  background: var(--surface-2);
+}
+
+.avp-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 16px 8px;
+}
+
+.avp-body.is-crop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding-top: 8px;
+}
+
+.avp-preview {
+  width: 96px;
+  height: 96px;
+  margin: 2px auto 14px;
+  border-radius: 30px;
+  overflow: hidden;
+  background: var(--surface-2);
+  display: grid;
+  place-items: center;
+  box-shadow: 0 0 0 1px var(--line), 0 6px 18px -8px rgba(30, 28, 70, 0.28);
+}
+
+.avp-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.avp-preview-fallback {
+  font-size: 28px;
+  font-weight: 650;
+  color: var(--text-3);
+}
+
+.avp-file {
+  display: none;
+}
+
+.avp-upload {
+  width: 100%;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: var(--r-md);
+  font-size: var(--fs-body);
+  font-weight: 600;
+  color: #fff;
+  background: var(--brand-grad);
+  box-shadow: 0 8px 20px -10px rgba(107, 92, 246, 0.9);
+}
+
+.avp-upload:active {
+  transform: scale(0.985);
+}
+
+.avp-hint {
+  margin: 8px 0 0;
+  font-size: var(--fs-cap);
+  color: var(--text-4);
+  text-align: center;
+  line-height: 1.5;
+}
+
+.avp-sec {
+  margin-top: 18px;
+}
+
+.avp-sec h4 {
+  font-size: var(--fs-cap);
+  font-weight: 600;
+  color: var(--text-3);
+  margin-bottom: 10px;
+}
+
+.avp-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.avp-item {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--surface-2);
+  transition: transform 0.14s var(--ease);
+}
+
+.avp-item img {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.avp-item:active {
+  transform: scale(0.94);
+}
+
+.avp-item.is-on {
+  box-shadow: 0 0 0 2.5px var(--brand-2);
+}
+
+.avp-item-check {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--r-full);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: var(--brand-2);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+.avp-err {
+  margin: 12px 0 0;
+  font-size: var(--fs-cap);
+  color: #e8657f;
+  text-align: center;
+}
+
+/* ===== 裁剪 ===== */
+.avp-stage {
+  position: relative;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border-radius: 20px;
+  background: #1b1b26;
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+}
+
+.avp-stage:active {
+  cursor: grabbing;
+}
+
+.avp-stage img {
+  position: absolute;
+  max-width: none;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* 参考环：让用户知道最终会被裁成什么样（与头像实际圆角一致） */
+.avp-stage-ring {
+  position: absolute;
+  inset: 14px;
+  border-radius: 24px;
+  border: 1.5px dashed rgba(255, 255, 255, 0.5);
+  pointer-events: none;
+}
+
+.avp-zoom {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-3);
+  font-size: var(--fs-sub);
+}
+
+.avp-zoom input {
+  flex: 1;
+  accent-color: var(--brand-2);
+}
+
+.avp-acts {
+  width: 100%;
+  display: flex;
+  gap: 8px;
+}
+
+.avp-btn {
+  height: 42px;
+  border-radius: var(--r-md);
+  font-size: var(--fs-sub);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.avp-btn.is-ghost {
+  flex: 0 0 auto;
+  padding: 0 14px;
+  color: var(--text-2);
+  background: var(--surface-2);
+}
+
+.avp-btn.is-primary {
+  flex: 1;
+  color: #fff;
+  background: var(--brand-grad);
+}
+
+.avp-btn.is-primary:disabled {
+  opacity: 0.6;
+}
+
+.avp-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}

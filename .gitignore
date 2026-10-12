@@ -1,0 +1,26 @@
+# 依赖
+node_modules/
+
+# 构建产物
+dist/
+
+# npm 隔离缓存（本机全局缓存常被锁，安装时用 --cache 指到项目内）
+_npmcache*/
+npm-debug.log*
+
+# 后端运行时数据：SQLite 库与上传文件都属于「本地状态」，不入库
+server/data/
+server/uploads/
+
+# 测试与截图脚本的临时产物（CDP profile、探针文件、截图）
+.tmp/
+shots/
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 内部工作笔记（memory / 日志）
+.workbuddy/

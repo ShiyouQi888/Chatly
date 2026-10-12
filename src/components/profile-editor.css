@@ -1,0 +1,319 @@
+/* 编辑资料面板 */
+.pe-avatar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0 16px;
+}
+
+.pe-avatar-btn {
+  position: relative;
+  display: block;
+  border-radius: 26px;
+}
+
+.pe-avatar-btn:active {
+  transform: scale(0.97);
+}
+
+.pe-avatar-cam {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-full);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: var(--brand-grad);
+  box-shadow: 0 0 0 2.5px var(--surface);
+}
+
+.pe-avatar-text {
+  font-size: var(--fs-cap);
+  font-weight: 600;
+  color: var(--brand-2);
+}
+
+/* ===== 字段行 ===== */
+.pe-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 2px;
+  border-bottom: 1px solid var(--line);
+}
+
+.pe-field.is-block {
+  display: block;
+  padding-top: 13px;
+}
+
+.pe-field label {
+  flex: 0 0 auto;
+  min-width: 58px;
+  font-size: var(--fs-sub);
+  color: var(--text-2);
+}
+
+.pe-field.is-block label {
+  display: block;
+  margin-bottom: 9px;
+}
+
+.pe-field input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  font-size: var(--fs-body);
+  color: var(--text-1);
+  font-family: inherit;
+}
+
+.pe-field input::placeholder {
+  color: var(--text-4);
+}
+
+.pe-field input:focus {
+  outline: none;
+}
+
+.pe-field input[type='date'] {
+  min-width: 0;
+  color: var(--text-1);
+}
+
+.pe-field > em {
+  flex: 0 0 auto;
+  font-style: normal;
+  font-size: var(--fs-micro);
+  color: var(--text-4);
+  font-variant-numeric: tabular-nums;
+}
+
+.pe-clear {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-full);
+  display: grid;
+  place-items: center;
+  color: var(--text-3);
+  background: var(--surface-2);
+}
+
+/* ===== 性别 ===== */
+.pe-chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pe-chip {
+  height: 32px;
+  padding: 0 15px;
+  border-radius: var(--r-full);
+  font-size: var(--fs-sub);
+  color: var(--text-2);
+  background: var(--surface-2);
+  transition: all 0.15s var(--ease);
+}
+
+.pe-chip.is-on {
+  color: #fff;
+  background: var(--brand-grad);
+  box-shadow: 0 6px 14px -8px rgba(107, 92, 246, 0.9);
+}
+
+.pe-chip-note {
+  font-size: var(--fs-micro);
+  color: var(--text-4);
+}
+
+/* ===== 兴趣标签 ===== */
+.pe-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pe-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  padding: 0 6px 0 12px;
+  border-radius: var(--r-full);
+  font-size: var(--fs-cap);
+  color: var(--brand-2);
+  background: rgba(124, 92, 246, 0.1);
+}
+
+.pe-tag button {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--r-full);
+  display: grid;
+  place-items: center;
+  color: var(--brand-2);
+  opacity: 0.7;
+}
+
+.pe-tag button:active {
+  opacity: 1;
+}
+
+.pe-tag-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 30px;
+  padding: 0 4px 0 10px;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+}
+
+.pe-tag-add input {
+  width: 56px;
+  border: 0;
+  background: transparent;
+  font-size: var(--fs-cap);
+  color: var(--text-1);
+  font-family: inherit;
+}
+
+.pe-tag-add input:focus {
+  outline: none;
+}
+
+.pe-tag-add button {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-full);
+  display: grid;
+  place-items: center;
+  color: var(--text-2);
+  background: var(--surface);
+}
+
+.pe-tag-add button:disabled {
+  opacity: 0.35;
+}
+
+.pe-note,
+.pe-foot {
+  margin: 9px 0 0;
+  font-size: var(--fs-micro);
+  color: var(--text-4);
+  line-height: 1.6;
+}
+
+.pe-foot {
+  margin: 16px 0 4px;
+  text-align: center;
+}
+
+/* ===== 保存按钮 ===== */
+.pe-save {
+  width: 100%;
+  height: 46px;
+  border-radius: var(--r-md);
+  font-size: var(--fs-body);
+  font-weight: 650;
+  color: #fff;
+  background: var(--brand-grad);
+  box-shadow: 0 8px 20px -10px rgba(107, 92, 246, 0.9);
+}
+
+.pe-save:disabled {
+  opacity: 0.45;
+  box-shadow: none;
+}
+
+.pe-save:active:not(:disabled) {
+  transform: scale(0.99);
+}
+
+/* ---------- 位置 ----------
+   定位按钮和输入框同一行：输入框 `flex:1` 吃掉剩余宽度，按钮 `flex:0 0 auto`。
+   ⚠️ 按钮不能靠 `position:absolute` 贴在字段右边 —— `.pe-field.is-block` 是块级、
+   高度随内容变，「回复提示条 + 输入框」这类动态内容会把绝对定位的按钮压到别处去。 */
+.pe-region-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pe-region-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.pe-locate {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--r-full);
+  background: var(--brand-soft);
+  color: var(--brand-2);
+  font-size: var(--fs-cap);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pe-locate:disabled {
+  opacity: 0.5;
+}
+
+/* 定位结果说明：颜色比普通注释重一点，因为这里常常是「为什么没成功」 */
+.pe-loc-note {
+  color: var(--text-3);
+  margin-top: 8px;
+}
+
+/* 城市开关 */
+.pe-switch {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 11px;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  min-width: 0;
+}
+
+.pe-switch input {
+  flex: 0 0 auto;
+  width: 17px;
+  height: 17px;
+  margin: 1px 0 0;
+  accent-color: var(--brand-2);
+}
+
+.pe-switch > span {
+  font-size: var(--fs-sub);
+  color: var(--text-1);
+  line-height: 1.5;
+}
+
+.pe-switch em {
+  display: block;
+  margin-top: 3px;
+  font-style: normal;
+  font-size: var(--fs-micro);
+  color: var(--text-3);
+  line-height: 1.6;
+}
+
+.pe-switch em b {
+  font-weight: 600;
+  color: var(--text-2);
+}

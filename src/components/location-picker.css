@@ -1,0 +1,261 @@
+/* ===== 「选位置」整屏面板（聊天发位置 / 动态定位共用） ===== */
+
+/* z-index 160：要能盖在动态发布面板（150）之上 —— 定位面板正是从那里打开的。
+   它同时也高过对方资料页（140）/ 群设置（130）/ 媒体查看器（120），
+   但这几处不会和它同时出现，高一点只是省得以后为「谁在上面」再算一遍。 */
+.lp-root {
+  position: absolute;
+  inset: 0;
+  z-index: 160;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  animation: lpIn 0.22s var(--ease) both;
+}
+
+@keyframes lpIn {
+  from {
+    opacity: 0.6;
+    transform: translateY(12px);
+  }
+}
+
+.lp-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: calc(var(--safe-top) + 8px) 12px 10px;
+  background: var(--surface);
+  box-shadow: 0 1px 0 var(--line);
+}
+
+.lp-bar h2 {
+  flex: 1;
+  text-align: center;
+  font-size: var(--fs-h2);
+  font-weight: 650;
+  color: var(--text-1);
+}
+
+.lp-cancel {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-full);
+  color: var(--text-2);
+}
+
+/* 「发送」是主操作：**选中之前 disabled** —— 不给「先点发送再报错」这条路。
+   禁用态用灰底而不是降低透明度，否则看起来像能点。 */
+.lp-send {
+  flex: 0 0 auto;
+  height: 32px;
+  padding: 0 16px;
+  border-radius: var(--r-full);
+  background: var(--brand-grad);
+  color: var(--text-on-brand);
+  font-size: var(--fs-cap);
+  font-weight: 650;
+  box-shadow: var(--shadow-brand);
+}
+
+.lp-send:disabled {
+  background: var(--surface-2);
+  color: var(--text-4);
+  box-shadow: none;
+}
+
+.lp-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 14px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ---------- 地图 ---------- */
+
+.lp-map {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.lp-locating {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  padding: 4px 10px;
+  border-radius: var(--r-full);
+  background: rgba(22, 22, 31, 0.62);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  font-size: var(--fs-micro);
+}
+
+/* ---------- 搜索 / 手输 ---------- */
+
+.lp-search {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 12px;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--text-3);
+}
+
+.lp-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  font-size: var(--fs-body);
+  color: var(--text-1);
+}
+
+.lp-search input::placeholder {
+  color: var(--text-4);
+}
+
+.lp-redo {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-full);
+  color: var(--text-3);
+  background: var(--surface-2);
+}
+
+/* 降级说明 / 出错原因：说清是哪一步挂了，别只说「失败」 */
+.lp-notice {
+  flex: 0 0 auto;
+  padding: 9px 12px;
+  border-radius: var(--r-sm);
+  background: var(--brand-soft);
+  color: var(--text-2);
+  font-size: var(--fs-sub);
+  line-height: 1.55;
+}
+
+/* ---------- 地点列表 ---------- */
+
+.lp-list {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lp-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  text-align: left;
+}
+
+.lp-row.is-sel {
+  background: var(--brand-soft-2);
+  box-shadow: inset 0 0 0 1px var(--brand-1);
+}
+
+.lp-ic {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  color: var(--text-3);
+}
+
+.lp-ic.is-cur {
+  background: var(--brand-soft-2);
+  color: var(--brand-2);
+}
+
+.lp-ic.is-manual {
+  background: rgba(255, 180, 63, 0.16);
+  color: var(--accent-amber);
+}
+
+.lp-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lp-main b {
+  font-size: var(--fs-body);
+  font-weight: 550;
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lp-main em {
+  font-size: var(--fs-micro);
+  font-style: normal;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lp-tail {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lp-dist {
+  font-size: var(--fs-micro);
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.lp-cur-tag {
+  padding: 2px 7px;
+  border-radius: var(--r-full);
+  background: var(--brand-soft-2);
+  color: var(--brand-2);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+}
+
+.lp-tick {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-full);
+  background: var(--brand-2);
+  color: #fff;
+}
+
+.lp-empty {
+  padding: 18px 12px;
+  text-align: center;
+  font-size: var(--fs-sub);
+  color: var(--text-3);
+  line-height: 1.6;
+}
