@@ -18,6 +18,10 @@ import discoverRoutes from './routes/discover.js'
 import geoRoutes from './routes/geo.js'
 import pollRoutes from './routes/polls.js'
 import favoriteRoutes from './routes/favorites.js'
+import watchLaterRoutes from './routes/watch-later.js'
+import fileRoutes from './routes/files.js'
+import settingsRoutes from './routes/settings.js'
+import devicesRoutes from './routes/devices.js'
 import { attachWs } from './ws.js'
 import { db } from './db.js'
 
@@ -49,6 +53,10 @@ app.use('/api/v1/discover', discoverRoutes)
 app.use('/api/v1/geo', geoRoutes)
 app.use('/api/v1/polls', pollRoutes)
 app.use('/api/v1/favorites', favoriteRoutes)
+app.use('/api/v1/watch-later', watchLaterRoutes)
+app.use('/api/v1/files', fileRoutes)
+app.use('/api/v1/settings', settingsRoutes)
+app.use('/api/v1/devices', devicesRoutes)
 
 /* ---------- 404 / 错误 ---------- */
 app.use('/api', (_req, res) => res.status(404).json({ error: '接口不存在' }))

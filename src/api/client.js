@@ -151,6 +151,41 @@ export const api = {
   unfavoriteMessages: (messageIds) => request('/favorites/unbatch', { method: 'POST', body: { messageIds } }),
   removeFavorite: (favoriteId) => request(`/favorites/${favoriteId}`, { method: 'DELETE' }),
 
+  /* ---- 稍后看 ---- */
+  watchLater: ({ beforeId, limit } = {}) => {
+    const qs = new URLSearchParams()
+    if (beforeId) qs.set('beforeId', String(beforeId))
+    if (limit) qs.set('limit', String(limit))
+    const s = qs.toString()
+    return request(`/watch-later${s ? `?${s}` : ''}`)
+  },
+  addToWatchLater: (messageId, conversationId) =>
+    request('/watch-later', { method: 'POST', body: { messageId, conversationId } }),
+  removeFromWatchLater: (id) => request(`/watch-later/${id}`, { method: 'DELETE' }),
+  removeByMessageFromWatchLater: (messageId) =>
+    request(`/watch-later/message/${messageId}`, { method: 'DELETE' }),
+
+  /* ---- 最近文件 ---- */
+  recentFiles: ({ limit = 20, beforeId, type = 'all' } = {}) => {
+    const params = new URLSearchParams({ limit: String(limit), type })
+    if (beforeId) params.set('beforeId', String(beforeId))
+    return request(`/files?${params}`)
+  },
+
+  /* ---- 用户设置 ---- */
+  getSettings: () => request('/settings'),
+  updateSetting: (key, value) =>
+    request(`/settings/${key}`, { method: 'PUT', body: { value } }),
+  updateSettings: (settings) =>
+    request('/settings', { method: 'PUT', body: settings }),
+
+  /* ---- 设备管理 ---- */
+  getDevices: () => request('/devices'),
+  removeDevice: (id) => request(`/devices/${id}`, { method: 'DELETE' }),
+  getSecuritySettings: () => request('/devices/settings'),
+  updateSecuritySettings: (settings) =>
+    request('/devices/settings', { method: 'PUT', body: settings }),
+
   /* ---- 关注（动态的「仅好友可见」按互相关注判定） ---- */
   followUser: (id) => request(`/users/${id}/follow`, { method: 'POST' }),
   unfollowUser: (id) => request(`/users/${id}/follow`, { method: 'DELETE' }),

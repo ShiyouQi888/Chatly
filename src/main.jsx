@@ -7,6 +7,7 @@ import { ChatProvider } from './store/ChatStore.jsx'
 import { MomentProvider } from './store/MomentStore.jsx'
 import { DiscoverProvider } from './store/DiscoverStore.jsx'
 import { FavoriteProvider } from './store/FavoriteStore.jsx'
+import { WatchLaterProvider } from './store/WatchLaterStore.jsx'
 import Phone from './components/Phone.jsx'
 
 /*
@@ -17,6 +18,7 @@ import Phone from './components/Phone.jsx'
  *   MomentProvider —— 真实动态数据（依赖 user 才知道「哪些是我的」）
  *   DiscoverProvider —— 真实发现页数据（推荐 / 附近 / 标签 / 群；依赖 user 才算得出「共同」）
  *   FavoriteProvider —— 消息收藏（聊天页与我页共用；依赖 user 才有「我的收藏」）
+ *   WatchLaterProvider —— 稍后看（聊天页长按菜单添加，我页查看列表）
  */
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -26,7 +28,9 @@ createRoot(document.getElementById('root')).render(
           <MomentProvider>
             <DiscoverProvider>
               <FavoriteProvider>
-                <Phone />
+                <WatchLaterProvider>
+                  <Phone />
+                </WatchLaterProvider>
               </FavoriteProvider>
             </DiscoverProvider>
           </MomentProvider>

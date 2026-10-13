@@ -165,6 +165,13 @@ export const IconFolder = (p) => (
   </S>
 )
 
+export const IconFile = (p) => (
+  <S {...p}>
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <polyline points="14 2 14 8 20 8" />
+  </S>
+)
+
 export const IconShield = (p) => (
   <S {...p}>
     <path d="M12 3.2 5 6v5.4c0 4.2 2.9 7.6 7 9.4 4.1-1.8 7-5.2 7-9.4V6Z" />

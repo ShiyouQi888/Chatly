@@ -4,11 +4,20 @@ import { useApp } from '../store/AppContext.jsx'
 import { useAuth } from '../store/AuthContext.jsx'
 import { useMoments } from '../store/MomentStore.jsx'
 import { useFavorites } from '../store/FavoriteStore.jsx'
+import { useWatchLater } from '../store/WatchLaterStore.jsx'
 import { avatarOf, useChat } from '../store/ChatStore.jsx'
-import { THEMES, DEVICES, WATCH_LATER, FILES, IMG } from '../data/mock.js'
+import { THEMES, WATCH_LATER, FILES, IMG } from '../data/mock.js'
 import { Avatar, Row, Group, Switch, Chip, Empty, SectionTitle } from '../components/ui.jsx'
 import ProfileEditor from '../components/ProfileEditor.jsx'
 import MyQrPage from './MyQrPage.jsx'
+import AboutPage from './AboutPage.jsx'
+import HelpPage from './HelpPage.jsx'
+import GeneralSettings from './GeneralSettings.jsx'
+import WatchLaterPage from './WatchLaterPage.jsx'
+import RecentFilesPage from './RecentFilesPage.jsx'
+import NotificationSettings from './NotificationSettings.jsx'
+import PrivacySettings from './PrivacySettings.jsx'
+import SecuritySettings from './SecuritySettings.jsx'
 import { isVideoItem } from '../components/MomentMedia.jsx'
 import {
   IconPlay,
@@ -246,7 +255,10 @@ export default function MeTab({ nav }) {
     removeFavoriteById,
   } = useFavorites()
   const [page, setPage] = useState(null)
-  const [theme, setTheme] = useState('极光')
+  const [theme, setTheme] = useState(() => {
+    // 从 localStorage 恢复主题
+    return localStorage.getItem('chatly-theme') || '极光'
+  })
   const [editing, setEditing] = useState(false)
   /* 「我」页的统计条要给一个真实的动态数量 —— 不能再用 mock 里那个数，
      否则会出现「统计说有 3 条，点进去一条都没有」。 */
@@ -300,6 +312,18 @@ export default function MeTab({ nav }) {
       alive = false
     }
   }, [user])
+
+  // 主题初始化：从 localStorage 恢复 CSS 变量
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('chatly-theme') || '极光'
+    const themeData = THEMES.find((t) => t.name === savedTheme)
+    if (themeData) {
+      const root = document.documentElement
+      root.style.setProperty('--primary', themeData.colors[0])
+      root.style.setProperty('--primary-end', themeData.colors[1])
+      root.style.setProperty('--accent', themeData.colors[0])
+    }
+  }, [])
 
   /* ===== 子页面：我的二维码 ===== */
   if (page === 'qr') {
@@ -378,143 +402,27 @@ export default function MeTab({ nav }) {
 
   /* ===== 子页面：稍后看 ===== */
   if (page === 'later') {
-    return (
-      <SubPage title="稍后看" onBack={() => setPage(null)}>
-        <div className="sub-list">
-          {WATCH_LATER.map((f) => (
-            <button key={f.id} type="button" className="asset-row" onClick={() => showToast('打开 ' + f.title)}>
-              <Avatar src={f.src} name={f.title} size={46} radius={14} />
-              <span className="asset-body">
-                <b>{f.title}</b>
-                <em>
-                  {f.type} · {f.time}
-                </em>
-              </span>
-              <IconChevron size={16} className="asset-chev" />
-            </button>
-          ))}
-        </div>
-      </SubPage>
-    )
+    return <WatchLaterPage onBack={() => setPage(null)} showToast={showToast} />
   }
 
   /* ===== 子页面：文件中心 ===== */
   if (page === 'files') {
-    return (
-      <SubPage title="文件中心" onBack={() => setPage(null)}>
-        <div className="file-search">
-          <IconSearch size={16} />
-          <input placeholder="搜索文件" />
-        </div>
-        <div className="file-cats">
-          {['全部', '文档', '图片', '视频', '压缩包', '其他'].map((c, i) => (
-            <Chip key={c} size="sm" active={i === 0} onClick={() => showToast(`筛选：${c}`)}>
-              {c}
-            </Chip>
-          ))}
-        </div>
-        <div className="sub-list">
-          {FILES.map((f) => (
-            <div key={f.id} className="file-row">
-              <span className="file-ext">{f.type.slice(0, 4)}</span>
-              <span className="asset-body">
-                <b>{f.title}</b>
-                <em>
-                  {f.size} · 来自 {f.from}
-                </em>
-              </span>
-              <button type="button" className="file-dl" onClick={() => showToast('下载 ' + f.title)}>
-                下载
-              </button>
-            </div>
-          ))}
-        </div>
-      </SubPage>
-    )
+    return <RecentFilesPage onBack={() => setPage(null)} showToast={showToast} />
   }
 
   /* ===== 子页面：账号与安全 ===== */
   if (page === 'security') {
-    return (
-      <SubPage title="账号与安全" onBack={() => setPage(null)}>
-        <Group title="登录方式">
-          <Row icon={<IconUser size={19} />} label="手机号" value="138****6721" onClick={() => showToast('更换手机号')} />
-          <Row icon={<IconShield size={19} />} label="邮箱" value="已绑定" onClick={() => showToast('更换邮箱')} />
-          <Row icon={<IconLock size={19} />} label="密码" value="已设置" onClick={() => showToast('修改密码')} last />
-        </Group>
-        <Group title="安全设置" footer="开启二次验证后，在新设备登录需额外验证。">
-          <Row icon={<IconShield size={19} />} label="生物识别" right={<Switch on onChange={() => showToast('已切换生物识别')} />} />
-          <Row icon={<IconLock size={19} />} label="二次验证" right={<Switch on={false} onChange={() => showToast('已开启二次验证')} />} last />
-        </Group>
-        <Group title="登录设备">
-          {DEVICES.map((d, i) => (
-            <Row
-              key={d.id}
-              icon={<IconInfo size={19} />}
-              label={d.name}
-              sub={d.meta}
-              right={d.now ? <span className="tag-now">当前</span> : null}
-              chevron={!d.now}
-              onClick={d.now ? undefined : () => showToast('远程退出 ' + d.name)}
-              last={i === DEVICES.length - 1}
-            />
-          ))}
-        </Group>
-        <Group>
-          <Row icon={<IconLogout size={19} />} label="退出登录" danger onClick={() => showToast('已退出登录 · 原型演示')} last />
-        </Group>
-      </SubPage>
-    )
+    return <SecuritySettings onBack={() => setPage(null)} showToast={showToast} user={user} />
   }
 
   /* ===== 子页面：隐私 ===== */
   if (page === 'privacy') {
-    return (
-      <SubPage title="隐私设置" onBack={() => setPage(null)}>
-        <Group title="谁可以找到我">
-          <Row label="谁可以加我" value="好友的好友" onClick={() => showToast('设置：谁可以加我')} />
-          <Row label="谁可以给我发消息" value="所有人" onClick={() => showToast('设置：谁可以发消息')} />
-          <Row label="陌生人可查看主页" right={<Switch on={false} onChange={() => showToast('已切换')} />} last />
-        </Group>
-        <Group title="谁可以看到我">
-          <Row label="我的状态" value="仅好友" onClick={() => showToast('设置：状态可见范围')} />
-          <Row label="我的动态" value="公开" onClick={() => showToast('设置：动态可见范围')} />
-          <Row label="显示在线状态" right={<Switch on onChange={() => showToast('已切换')} />} />
-          <Row label="显示已读回执" right={<Switch on onChange={() => showToast('已切换')} />} last />
-        </Group>
-        <Group title="聊天隐私" footer="消息自动消失开启后，新会话的消息会在设定时间后清除。">
-          <Row icon={<IconLock size={19} />} label="消息加密" value="已开启" onClick={() => showToast('端到端加密已开启')} />
-          <Row icon={<IconShield size={19} />} label="消息自动消失" value="关闭" onClick={() => showToast('设置消息自动消失')} />
-          <Row icon={<IconEye size={19} />} label="阅后即焚" right={<Switch on={false} onChange={() => showToast('已切换')} />} />
-          <Row icon={<IconBell size={19} />} label="截屏提醒" right={<Switch on onChange={() => showToast('已切换')} />} last />
-        </Group>
-      </SubPage>
-    )
+    return <PrivacySettings onBack={() => setPage(null)} showToast={showToast} />
   }
 
   /* ===== 子页面：通知 ===== */
   if (page === 'notify') {
-    return (
-      <SubPage title="消息通知" onBack={() => setPage(null)}>
-        <Group title="通知类型">
-          <Row label="新消息" right={<Switch on onChange={() => showToast('已切换')} />} />
-          <Row label="@ 我" right={<Switch on onChange={() => showToast('已切换')} />} />
-          <Row label="点赞" right={<Switch on onChange={() => showToast('已切换')} />} />
-          <Row label="评论" right={<Switch on onChange={() => showToast('已切换')} />} />
-          <Row label="新关注" right={<Switch on onChange={() => showToast('已切换')} />} last />
-        </Group>
-        <Group title="群与系统">
-          <Row label="群通知" right={<Switch on onChange={() => showToast('已切换')} />} />
-          <Row label="系统通知" right={<Switch on onChange={() => showToast('已切换')} />} last />
-        </Group>
-        <Group title="提醒方式">
-          <Row label="声音" right={<Switch on onChange={() => showToast('已切换')} />} />
-          <Row label="震动" right={<Switch on onChange={() => showToast('已切换')} />} />
-          <Row label="免打扰时段" value="23:00 - 08:00" onClick={() => showToast('设置免打扰时段')} last />
-        </Group>
-        <p className="sub-note">支持按联系人单独设置通知级别。</p>
-      </SubPage>
-    )
+    return <NotificationSettings onBack={() => setPage(null)} showToast={showToast} />
   }
 
   /* ===== 子页面：外观主题 ===== */
@@ -532,6 +440,13 @@ export default function MeTab({ nav }) {
               className={`theme-card ${theme === t.name ? 'is-on' : ''}`}
               onClick={() => {
                 setTheme(t.name)
+                // 持久化到 localStorage
+                localStorage.setItem('chatly-theme', t.name)
+                // 应用 CSS 变量
+                const root = document.documentElement
+                root.style.setProperty('--primary', t.colors[0])
+                root.style.setProperty('--primary-end', t.colors[1])
+                root.style.setProperty('--accent', t.colors[0])
                 showToast('已应用主题 · ' + t.name)
               }}
             >
@@ -559,7 +474,7 @@ export default function MeTab({ nav }) {
             icon={<IconInfo size={19} />}
             label="字体大小"
             value="标准"
-            onClick={() => showToast('调整字体大小')}
+            onClick={() => setPage('general')}
           />
           <Row label="动效开关" right={<Switch on onChange={() => showToast('已切换动效')} />} last />
         </Group>
@@ -690,11 +605,11 @@ export default function MeTab({ nav }) {
             onClick={() => setPage('security')}
           />
           <Row icon={<IconLock size={19} />} label="隐私设置" onClick={() => setPage('privacy')} />
-          <Row icon={<IconGear size={19} />} label="通用设置" onClick={() => showToast('通用设置')} />
+          <Row icon={<IconGear size={19} />} label="通用设置" onClick={() => setPage('general')} />
           <Row icon={<IconPalette size={19} />} label="主题外观" value={theme} onClick={() => setPage('theme')} />
           <Row icon={<IconBell size={19} />} label="消息通知" onClick={() => setPage('notify')} />
-          <Row icon={<IconHelp size={19} />} label="帮助与反馈" onClick={() => showToast('帮助与反馈')} />
-          <Row icon={<IconInfo size={19} />} label="关于我们" value="v1.0.0" onClick={() => showToast('Chatly v1.0.0')} last />
+          <Row icon={<IconHelp size={19} />} label="帮助与反馈" onClick={() => setPage('help')} />
+          <Row icon={<IconInfo size={19} />} label="关于我们" value="v1.0.0" onClick={() => setPage('about')} last />
         </Group>
 
         <button type="button" className="me-logout" onClick={logout}>

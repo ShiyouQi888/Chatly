@@ -234,6 +234,54 @@ CREATE UNIQUE INDEX IF NOT EXISTS uniq_favorite_msg
   ON favorites(user_id, message_id) WHERE message_id IS NOT NULL;
 /* 列表按人查、新到旧 */
 CREATE INDEX IF NOT EXISTS idx_favorites_user ON favorites(user_id, id DESC);
+
+/* ===== 稍后看 =====
+ * 用户在聊天中长按消息 →「稍后看」，把消息保存到稍后看列表。
+ * 稍后看列表独立于收藏，用于标记「稍后需要处理」的消息。
+ *
+ * 和收藏的区别：
+ * - 收藏是**快照**（消息撤回后还在）
+ * - 稍后看是**引用**（消息撤回/删除后条目消失）
+ * - 收藏适合「重要内容存档」，稍后看适合「待办事项」
+ */
+CREATE TABLE IF NOT EXISTS watch_later (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  message_id      INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  created_at      INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+);
+
+/* 同一个人对同一条消息只能稍后看一次 */
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_watch_later_msg
+  ON watch_later(user_id, message_id);
+/* 列表按人查、新到旧 */
+CREATE INDEX IF NOT EXISTS idx_watch_later_user ON watch_later(user_id, id DESC);
+
+/* ===== 用户设置 =====
+ * 存储用户的各种设置（通知、隐私、通用等）
+ * key-value 结构，value 存 JSON 字符串
+ */
+CREATE TABLE IF NOT EXISTS user_settings (
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  key        TEXT    NOT NULL,
+  value      TEXT    NOT NULL,
+  PRIMARY KEY (user_id, key)
+);
+
+/* ===== 登录设备 =====
+ * 记录用户登录过的设备，用于设备管理和安全审计
+ */
+CREATE TABLE IF NOT EXISTS user_devices (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  device_name TEXT    NOT NULL,
+  device_type TEXT    NOT NULL DEFAULT 'unknown',
+  last_active INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+  is_current  INTEGER NOT NULL DEFAULT 0,
+  created_at  INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+);
+CREATE INDEX IF NOT EXISTS idx_user_devices_user ON user_devices(user_id);
 `)
 
 /* ================= 迁移（幂等） ================= */

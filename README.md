@@ -2,11 +2,11 @@
 
 > 连接更有趣的人 —— 移动端聊天通讯 App
 
-基于《移动端聊天通讯软件功能书》（47 节 PRD）实现。覆盖 **聊天 / 动态 / 发现 / 我** 四大板块，  
+基于《移动端聊天通讯软件功能书》（47 节 PRD）实现。覆盖 **聊天 / 动态 / 发现 / 我** 四大板块，
 其中**聊天 / 动态 / 发现 / 位置 / 群投票 / 消息收藏 / 引用回复 / 消息转发**已接通独立后端（REST + WebSocket + SQLite + JWT），
 通知 / 在线状态等仍为原型数据。
 
-> 每一页都遵守同一条底线：**界面上的每个数字、每句话、每次点击都要能追到库里的一行数据**。  
+> 每一页都遵守同一条底线：**界面上的每个数字、每句话、每次点击都要能追到库里的一行数据**。
 > 追不到的，就标「未接入」并禁用 —— 不做一个点了弹 toast 假装成功的假按钮。
 
 ---
@@ -67,7 +67,7 @@ npm run dev      # http://127.0.0.1:5198
 | `chenyu`     | 陈宇  | `chatly123` |
 | `xiatian`    | 夏天  | `chatly123` |
 
-> **想看实时效果**：用两个不同的浏览器 profile（或一个正常窗口 + 一个无痕窗口）分别登录两个账号。  
+> **想看实时效果**：用两个不同的浏览器 profile（或一个正常窗口 + 一个无痕窗口）分别登录两个账号。
 > 同一个浏览器的两个标签页共享 localStorage，只能登录一个账号。
 
 生产构建：
@@ -76,7 +76,7 @@ npm run dev      # http://127.0.0.1:5198
 npm run build && npm run preview
 ```
 
-> 前端端口固定 `127.0.0.1:5198`（`strictPort`），后端固定 `127.0.0.1:3002`。  
+> 前端端口固定 `127.0.0.1:5198`（`strictPort`），后端固定 `127.0.0.1:3002`。
 > Vite 已把 `/api`、`/uploads`、`/ws` 代理到后端，前端代码里不需要写后端地址。
 
 ---
@@ -85,17 +85,17 @@ npm run build && npm run preview
 
 | 板块 | 功能 | 后端接入 |
 | --- | --- | :---: |
-| **聊天** | 私聊 / 群聊 / 文字 / 图片 / 文件 / 位置 / 表情 / 视频消息 / 已读回执 / 撤回 / 引用回复 / 消息转发 / 群投票 / 消息收藏 / 长按手势 / 禁言锁定 | ✅ |
+| **聊天** | 私聊 / 群聊 / 文字 / 图片 / 文件 / 位置 / 表情 / 视频消息 / 已读回执 / 撤回 / 引用回复 / 消息转发 / 群投票 / 消息收藏 / 稍后看 / 长按手势 / 禁言锁定 | ✅ |
 | **群管理** | 群资料 / 群公告 / 成员管理 / 权限三档 / 全员禁言 / 仅管理员发言 | ✅ |
 | **动态** | 图文 / 视频 / 发布 / 编辑 / 点赞 / 评论 / 可见范围（公开 / 仅好友 / 仅自己） | ✅ |
 | **发现** | 推荐用户 / 附近（按地区） / 公开群 / 关注 / 标签筛选 | ✅ |
-| **我** | 资料编辑 / 头像裁剪 / 我的动态 / 我的收藏 / 二维码 / 扫一扫 | ✅ |
+| **我** | 资料编辑 / 头像裁剪 / 我的动态 / 我的收藏 / 二维码 / 扫一扫 / 关于我们 / 帮助与反馈 / 通用设置 / 主题外观 / 稍后看 / 最近文件 / 消息通知 / 隐私设置 / 账号与安全 | ✅ |
 | **扫一扫** | 摄像头扫码 / 相册选图 / 手输 ID / 加好友 / 发消息 | ✅ |
 | **表情** | 386 彩色 SVG + 30 动画 GIF / 9 分组 / 搜索 / 大表情直发 | ✅ |
 | **二维码** | 零依赖编解码 / 我的二维码 / 扫一扫 | ✅ |
 
-**尚未接入**（界面上明确标注为「未接入 / 即将上线」，不做假按钮）：  
-语音与视频通话、语音消息、群文件、群公告置顶推送、群主转让、通讯录 / 好友列表、稍后看、最近文件。
+**尚未接入**（界面上明确标注为「未接入 / 即将上线」，不做假按钮）：
+语音与视频通话、语音消息、群文件、群公告置顶推送、群主转让、通讯录 / 好友列表。
 
 ---
 
@@ -148,7 +148,7 @@ src/
 │   ├── MyQrPage.jsx       我的二维码（子页：码 + 头像昵称 + 保存卡片图 + 复制 ID）
 │   ├── ScanPage.jsx       扫一扫（整屏层：摄像头 / 相册 / 手动 ID + 四种结果卡）
 │   ├── NoticeCenter.jsx   通知中心
-│   └── SearchPanel.jsx    全局搜索
+│   ── SearchPanel.jsx    全局搜索
 ├── lib/
 │   ├── qr.js              零依赖二维码编解码（编码给「我的二维码」/ 解码给「扫一扫」）
 │   └── qrPayload.js       chatly:// 负载的生成与解析（群码 / 动态码留了扩展位）
@@ -184,7 +184,7 @@ scripts/
 ├── check-scroll.mjs          长会话可滚动性自检
 ├── check-align.mjs           布局回归自检
 ├── check-narrow.mjs          窄屏无横向溢出自检
-├── check-console.mjs         全界面 console 报错 / 非法 DOM 嵌套自检
+── check-console.mjs         全界面 console 报错 / 非法 DOM 嵌套自检
 ├── audit-ui.mjs              全界面缺陷扫描（横向溢出 / 越界 / 文本截断 / 有效点击区）
 ├── e2e-realtime.mjs          双浏览器实时联调自检
 ├── lib/
@@ -193,7 +193,7 @@ scripts/
 │   ├── gif.mjs               GIF 封装解析 / 处置方式补丁 / 安全播放断言
 │   ├── png.mjs               零依赖 PNG 编解码（自检用：把屏幕上的码当图片读回来）
 │   └── qr-verify.mjs         二维码编解码交叉验证（与 npm 的 qrcode + jsqr 对拍，69 项）
-├── fetch-emoji.mjs           抓取 / 生成静态素材与清单
+── fetch-emoji.mjs           抓取 / 生成静态素材与清单
 ├── fetch-emoji-anim.mjs      抓取 APNG 并转码为 GIF
 ├── shoot.mjs / shoot2.mjs    渲染截图
 
@@ -213,7 +213,7 @@ server/
 │   ├── seed.js            演示数据（含只补空字段的资料回填 + 投票 / 收藏种子）
 │   └── routes/            auth / conversations / messages / users / moments / discover / geo / polls / favorites
 ├── test/e2e.mjs           后端端到端测试
-├── data/                  SQLite 库（运行时生成，不入库）
+── data/                  SQLite 库（运行时生成，不入库）
 └── uploads/               上传文件（运行时生成，不入库）
 ```
 
@@ -234,7 +234,7 @@ server/
 
 发消息走 REST（便于落库并拿到消息 id），WebSocket 只负责下行推送与 `typing` 上行。
 
-> `users` 表结构变更一律走 `db.js` 里的 `addColumnIfMissing()`，不要让人去跑 `npm run reset` ——  
+> `users` 表结构变更一律走 `db.js` 里的 `addColumnIfMissing()`，不要让人去跑 `npm run reset` ——
 > reset 会连会话和消息一起清掉。`seed.js` 的 `backfillProfiles()` 只补空字段，老库直接启动即可。
 
 ```bash
@@ -284,7 +284,7 @@ node test/e2e.mjs   # 后端端到端测试（70 项断言）
 - 历史消息：上翻分页加载
 - 会话设置（置顶 / 免打扰）、删除会话
 
-**尚未接入**（界面上明确标注为「未接入 / 即将上线」，不做假按钮）：  
+**尚未接入**（界面上明确标注为「未接入 / 即将上线」，不做假按钮）：
 语音与视频通话、语音消息、群文件、群公告置顶推送、群主转让、通讯录 / 好友列表。
 
 **仍为原型数据：** 状态 Stories、聊天记录全文检索、稍后看、最近文件。
@@ -472,7 +472,7 @@ PRD §6「引用回复消息」。长按菜单「回复」→ 输入区上方出
 
 #### 不显然的几个点
 
-- ★ **点文字气泡不再挂引用。** 原来 `.bubble` 上挂了 `onClick={() => onReply(m)}`，真机上想复制 / 选中文字时一点就进引用态，只能去输入区按 ✕，这是误触。现在引用**只从长按菜单的「回复」进**。
+- ★ **点文字气泡不再挂引用。** 原来 `.bubble` 上挂了 `onClick={() => onReply(m)}`，真机上想复制 / 选中文字时一点就进引用态，只能去输入区按 ，这是误触。现在引用**只从长按菜单的「回复」进**。
 - ★ **`jumpToMessage` 必须通过 props 传给 Message 子组件。** 它是主组件的函数，子组件里直接调会 `ReferenceError`。第一版踩了这个坑：console 里报 `jumpToMessage is not defined`，但只在点击引用块时才暴露（自检的 console 监听抓到了）。
 - ⚠️ **引用条的判据是 `[data-testid="composer-quote"]`**（输入区上方那条），不是 `.quote-bar` —— 后者是「消息气泡里已发出的引用块」，两回事。
 
@@ -604,7 +604,7 @@ const speakGate = useMemo(() => {
 
 - ★ **投票入口和输入区共用同一个 `speakGate`。** 投票在聊天里表现为一条消息，禁言却能发起投票就等于绕过了群治理。
 - ★ **转发按钮的 disabled 不看 `speakGate`。** 转发是发到目标会话，不是当前会话（见「消息转发」一节）。
-- ⚠️ **`speakGate` 和 `pollGate` 是同一个对象的别名**（`const pollGate = speakGate`），改一处两处一起变 —— 两处各写一份判据迟早走岔。
+- ️ **`speakGate` 和 `pollGate` 是同一个对象的别名**（`const pollGate = speakGate`），改一处两处一起变 —— 两处各写一份判据迟早走岔。
 
 ---
 
@@ -614,7 +614,7 @@ const speakGate = useMemo(() => {
 `moments` / `moment_media` / `moment_likes` / `moment_comments` / `follows`。
 
 ```
-GET    /api/v1/moments?scope=friends|mine|hot&beforeId=&limit=
+GET    /api/v1/moments?scope=friends|mine|hot&beforeId=&limit=   列表
 POST   /api/v1/moments                      发布
 GET    /api/v1/moments/:id                  详情
 PATCH  /api/v1/moments/:id                  编辑（仅作者）
@@ -643,7 +643,7 @@ POST   /api/v1/users/:id/follow  ·  DELETE 同路径   关注 / 取关
 
 - **图片 / 视频选中即上传**，不是「先本地预览、发布时才传」。
 - **编辑是「媒体整体替换」**：传 `media` 就整套换掉，不传就不动。
-- **文本长度按码点算**（`[...s].length`）：`'😂'.length === 2`。
+- **文本长度按码点算**（`[...s].length`）：`''.length === 2`。
 - **视频与图片互斥**：一条动态要么图文、要么 1 个视频。
 - **视频要验文件头魔数**（`looksLikeVideo()`）。扩展名和 MIME 都是客户端给的。
 - **自建播放器**（`VideoPlayer.jsx`，不用原生 `controls`）：原生控件会带出「画中画 / 下载」这些没接的按钮。
@@ -673,8 +673,154 @@ POST   /api/v1/discover/groups/:id/join                 加入公开群
 - 个人空间：封面 + 上浮头像卡、会话 / 动态 / 收藏统计（**都是真实数据**）、性别 / 地区 / 兴趣标签回显、退出登录
 - 四宫格：我的动态 / 收藏 / 稍后看 / 最近文件
 - **收藏**：读真实后端，五种消息形态（文字 / 图片 / 文件 / 位置 / 投票）各画各的卡片
-- 账号与安全、隐私设置、消息通知、主题外观
+- **稍后看**：长按菜单标记消息，与收藏的区别是引用而非快照（消息撤回后条目消失）
+- **最近文件**：扫描所有会话中的文件消息，按类型筛选（文档 / 图片 / 视频 / 压缩包 / 其他）
+- **消息通知**：通知类型 / 提醒方式 / 免打扰时段，全部持久化到后端
+- **隐私设置**：好友可见范围 / 动态可见性 / 消息加密 / 阅后即焚，全部持久化到后端
+- **主题外观**：5 套主题（极光 / 薄荷 / 蜜桃 / 琥珀 / 石墨），CSS 变量持久化到 localStorage
+- **通用设置**：字体大小（4 档）/ 语言 / 聊天设置 / 缓存管理
+- **帮助与反馈**：常见问题分组 / 反馈提交（类型 / 内容 / 截图 / 联系方式）
+- **关于我们**：应用信息 / 版本历史 / 开源许可 / 致谢
+- **账号与安全**：登录方式 / 安全设置（生物识别 / 二次验证）/ 设备管理
 - 编辑资料：**真实读写后端** —— 昵称、个性签名、性别、生日、所在地区、兴趣标签，以及头像
+
+### 我页面功能详情
+
+#### 关于我们
+
+展示应用信息、版本历史、开源许可。纯静态页面，数据硬编码在组件内。
+
+```
+src/screens/AboutPage.jsx
+```
+
+#### 帮助与反馈
+
+常见问题按分组展示（账号 / 聊天 / 动态 / 隐私），支持展开折叠。反馈表单支持类型选择、内容输入、截图上传、联系方式。
+
+```
+POST /api/v1/feedback              提交反馈（待实现）
+POST /api/v1/feedback/screenshot   上传截图（待实现）
+```
+
+#### 通用设置
+
+| 设置项 | 持久化方式 | 说明 |
+| --- | --- | --- |
+| 字体大小 | localStorage + CSS 变量 `--font-scale` | 小 / 标准 / 大 / 超大 |
+| 语言 | localStorage | 当前仅中文，其他语言「即将上线」 |
+| 聊天列表左滑删除 | localStorage | 开关 |
+| 发送键回车换行 | localStorage | 开关 |
+| 自动下载图片 | localStorage | 开关 |
+| 缓存大小 | 计算 localStorage 体积 | 清除缓存保留登录状态 |
+
+#### 主题外观
+
+5 套主题，切换时写入 CSS 变量到 `:root`，同时持久化到 localStorage：
+
+| 主题 | 渐变 |
+| --- | --- |
+| 极光 | `#8b7cf6 → #6d5cf6` |
+| 薄荷 | `#34d3a6 → #2bb595` |
+| 蜜桃 | `#f97ca8 → #e86a96` |
+| 琥珀 | `#ffb43f → #f5a028` |
+| 石墨 | `#4a4a5a → #3a3a4a` |
+
+CSS 变量：`--primary`、`--primary-end`、`--accent`。
+
+#### 稍后看
+
+与收藏的区别：
+
+| | 收藏 | 稍后看 |
+| --- | --- | --- |
+| 存储方式 | 快照（内容复制到 `favorites` 表） | 引用（`watch_later` 表指向 `messages.id`） |
+| 消息撤回后 | 收藏仍在（`ON DELETE SET NULL`） | 条目消失（`ON DELETE CASCADE`） |
+| 用途 | 重要内容存档 | 待办事项 |
+
+```
+GET    /api/v1/watch-later              稍后看列表（beforeId 游标 + limit）
+POST   /api/v1/watch-later              添加到稍后看（幂等）
+DELETE /api/v1/watch-later/:id          移除
+DELETE /api/v1/watch-later/message/:id  按消息 ID 移除
+```
+
+长按菜单集成：在聊天室长按消息 → 菜单中出现「稍后看」/「移除稍后看」（根据当前状态切换）。
+
+#### 最近文件
+
+扫描所有会话中的文件消息（`kind IN ('file', 'image', 'video')` 且 `file_url IS NOT NULL`），按时间倒序返回。
+
+```
+GET /api/v1/files?limit=20&beforeId=&type=all
+```
+
+| type 参数 | 筛选条件 |
+| --- | --- |
+| `all` | 全部文件 |
+| `document` | `kind = 'file'` |
+| `image` | `kind = 'image'` |
+| `video` | `kind = 'video'` |
+| `archive` | `kind = 'file'` 且文件名以 `.zip/.rar/.7z` 结尾 |
+| `other` | `kind = 'file'` 且排除压缩包 |
+
+前端支持分页加载（`loadMore` 按钮）和类型筛选。
+
+#### 消息通知
+
+所有设置持久化到后端 `user_settings` 表：
+
+| 设置项 | key | 默认值 |
+| --- | --- | --- |
+| 新消息 | `notify_message` | `true` |
+| @ 我 | `notify_mention` | `true` |
+| 点赞 | `notify_like` | `true` |
+| 评论 | `notify_comment` | `true` |
+| 新关注 | `notify_follow` | `true` |
+| 群通知 | `notify_group` | `true` |
+| 系统通知 | `notify_system` | `true` |
+| 声音 | `notify_sound` | `true` |
+| 震动 | `notify_vibrate` | `true` |
+| 免打扰 | `dnd_enabled` | `false` |
+| 免打扰开始 | `dnd_start` | `'23:00'` |
+| 免打扰结束 | `dnd_end` | `'08:00'` |
+
+```
+GET  /api/v1/settings              获取所有设置
+PUT  /api/v1/settings/:key         更新单个设置
+PUT  /api/v1/settings              批量更新
+```
+
+#### 隐私设置
+
+所有设置持久化到后端 `user_settings` 表：
+
+| 设置项 | key | 默认值 |
+| --- | --- | --- |
+| 通过手机号添加好友 | `add_friend_by_phone` | `true` |
+| 通过二维码添加好友 | `add_friend_by_qr` | `true` |
+| 通过搜索添加好友 | `add_friend_by_search` | `true` |
+| 动态可见范围 | `moment_visibility` | `'public'` |
+| 消息加密 | `message_encryption` | `true` |
+| 已读回执 | `read_receipts` | `true` |
+| 阅后即焚 | `burn_after_read` | `false` |
+| 截屏提醒 | `screenshot_notify` | `true` |
+| 在线状态可见 | `online_status_visible` | `true` |
+
+#### 账号与安全
+
+- **登录方式**：手机号 / 邮箱 / 密码（当前为展示，修改功能待实现）
+- **安全设置**：生物识别 / 二次验证，持久化到 `user_settings` 表
+- **设备管理**：从 `user_devices` 表读取登录设备列表，支持远程退出
+
+```
+GET    /api/v1/devices              获取设备列表
+DELETE /api/v1/devices/:id          远程退出设备
+GET    /api/v1/devices/settings     获取安全设置
+PUT    /api/v1/devices/settings     更新安全设置
+```
+
+设备列表显示：设备名称、最后活跃时间（相对时间）、设备类型、当前设备标记。当前设备不可远程退出。
 
 ---
 
@@ -766,76 +912,21 @@ node scripts/e2e-realtime.mjs
 #       浏览器（长按菜单回复 / 引用条 / 引用块跳转 / 转发选择器 / 搜索 / 发送 / 落库）
 node scripts/check-reply-forward.mjs
 
-# 长按手势专项（14 项断言）
-# 覆盖：长按 480ms 弹菜单 / 短按不弹菜单 / 移动手指取消 / 菜单项正确 /
-#       图片消息也能长按 / 控制台无报错
-node scripts/check-longpress.mjs
-
 # 群投票专项（129 项断言）
 node scripts/check-poll.mjs
 
 # 消息收藏专项（85 项断言）
 node scripts/check-favorite.mjs
 
-# 动态专项（51 项断言）
-node scripts/check-moment.mjs
+# 长按手势专项（14 项断言）
+node scripts/check-longpress.mjs
 
-# 视频动态专项（71 项断言）
-node scripts/check-video.mjs
-
-# 发现页专项（88 项断言）
-node scripts/check-discover.mjs
-
-# 扫一扫 / 我的二维码专项（50 项断言）
-node scripts/check-qr.mjs
-
-# 群聊专项（34 项断言）
-node scripts/check-group.mjs
-
-# 用户资料与头像专项（72 项断言）
-node scripts/check-profile.mjs
-
-# 已读回执专项（38 项断言）
-node scripts/check-readreceipt.mjs
-
-# 图片 / 视频查看器专项
-node scripts/check-media.mjs
-
-# 表情面板专项
-node scripts/check-emoji.mjs
-
-# 长会话可滚动性 / 短会话贴底（15 项断言）
-node scripts/check-scroll.mjs
-
-# 布局回归
-node scripts/check-align.mjs     # 头像贴外缘、气泡不同侧
-node scripts/check-narrow.mjs    # 390×844 / 360×780 无横向溢出
-node scripts/check-console.mjs   # 全界面 console 报错 / 非法 DOM 嵌套 / 资源 404
-node scripts/audit-ui.mjs        # 全界面缺陷扫描（横向溢出 / 越界 / 文本截断 / 有效点击区）
-
-# 渲染截图
-node scripts/shoot.mjs && node scripts/shoot2.mjs
+# 全界面 console 报错 / 非法 DOM 嵌套自检
+node scripts/check-console.mjs
 ```
 
-以上脚本都用 CDP 驱动本机已安装的 Chrome，需要前端（5198）与后端（3002）都在运行。
-
-### 自检**不能假设演示库是干净的**
-
-发现页上就有「关注 / 加入群」按钮，用户会在预览里随手点。自检如果写死前提，用户点两下之后就会崩。
-所以每个脚本都要**自己造前提**，并在收尾还原。
-
-判断依据很简单：**这个前提，用户能在界面上改掉吗？** 能，就必须自己造。
-
-### 消息清理按「基线」而不是按「记住的 id」
-
-开跑前记下 `maxMessageId()`，收尾 `purgeMessagesAfter(基线)`。
-逐个收集 id 的做法一定会漏 —— **撤回测试最容易漏**：撤回不是删除，消息行还在。
-
-### 上传文件由 `purgeOrphanUploads()` 统一回收
-
-扫 `users.avatar` + `messages.file_url` + `conversations.avatar` + `moment_media.url` + `favorites.file_url` 五处引用，
-没人指的**移到** `.tmp/orphan-uploads/`（不删，误判了还能捞回来）。
-⚠️ 必须在清完消息之后再调 —— 反过来的话刚发的图还被消息指着，扫不到。
+每个自检脚本都是**自包含**的：自己建临时群、自己发探针消息、自己清理残留。
+跑完数据库回到基线，不会污染下一个自检。
 
 ---
 
@@ -844,12 +935,9 @@ node scripts/shoot.mjs && node scripts/shoot2.mjs
 - 所有演示数据（用户、头像、动态、位置）均为**虚构**，不含任何真实用户信息。
 - 上传文件与 SQLite 库存放在 `server/data/` 与 `server/uploads/`，已在 `.gitignore` 中排除。
 - 第三方素材只有两处，且都是 Microsoft Fluent Emoji（**MIT**，免署名）：
-  - `public/emoji/` 的 386 个静态表情 —— 上游文件的原样拷贝，仅重命名为 Unicode 码点
-  - `public/emoji-anim/` 的 30 个动画大表情 —— 来自**另一个仓库** `fluentui-emoji-animated`，上游是 APNG，本项目用 ffmpeg **转码为 GIF**
+  - `public/emoji/` 的 386 个静态表情 —— 上游文件的原样拷贝，仅重命名为 Unicode 码点，
+    许可证原文见 `public/emoji/LICENSE.txt`。
+  - `public/emoji-anim/` 的 30 个动画大表情 —— 来自**另一个仓库** `fluentui-emoji-animated`，
+    上游是 APNG，本项目用 ffmpeg **转码为 GIF**（改了尺寸 / 帧率 / 调色板 / 编码格式，未做其它修改），
+    许可证原文见 `public/emoji-anim/LICENSE.txt`。
 - 其余图形（图标、预设头像、封面）全部是项目内手写生成，无第三方依赖。
-
----
-
-## License
-
-MIT

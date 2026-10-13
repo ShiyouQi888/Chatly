@@ -18,6 +18,7 @@ import LocationPicker from '../components/LocationPicker.jsx'
 import { PollSheet, PollBubble, PollDetailSheet } from '../components/PollBubble.jsx'
 import ForwardSheet from '../components/ForwardSheet.jsx'
 import { useFavorites } from '../store/FavoriteStore.jsx'
+import { useWatchLater } from '../store/WatchLaterStore.jsx'
 import { useLongPress } from '../hooks/useLongPress.js'
 import {
   IconBack,
@@ -33,6 +34,7 @@ import {
   IconForward,
   IconHeart,
   IconStar,
+  IconClock,
   IconTranslate,
   IconInfo,
   IconTrash,
@@ -1170,6 +1172,25 @@ export default function ChatRoom({ chat, onBack, jumpTo, onJumped }) {
     }
   }
 
+  /* ---------- 稍后看 ----------
+     稍后看是**引用**（不是快照），原消息撤回后稍后看条目会消失。
+     和收藏的区别：收藏适合「重要内容存档」，稍后看适合「待办事项」。 */
+  const { addToWatchLater, removeFromWatchLater } = useWatchLater()
+  const toggleWatchLater = async (m) => {
+    setMenuState(null)
+    try {
+      if (m.inWatchLater) {
+        await removeFromWatchLater(m.id)
+        showToast('已从稍后看移除')
+      } else {
+        await addToWatchLater(m.id, chat.id)
+        showToast('已加入稍后看')
+      }
+    } catch (e) {
+      showToast(e.message || '操作失败')
+    }
+  }
+
   /* ---------- 多选模式（PRD §9「消息多选批量：转发 / 收藏 / 删除」） ----------
      这里只做**收藏**那一项是真的；转发与删除仍标「未接入」并 disabled ——
      按项目一贯的口径，不做点了弹 toast 假装成功的假按钮。 */
@@ -1328,6 +1349,11 @@ export default function ChatRoom({ chat, onBack, jumpTo, onJumped }) {
           label: isFaved(menuState.m.id) ? '取消收藏' : '收藏',
           icon: <IconStar size={20} />,
           onClick: () => toggleFavorite(menuState.m),
+        },
+        {
+          label: menuState.m.inWatchLater ? '移除稍后看' : '稍后看',
+          icon: <IconClock size={20} />,
+          onClick: () => toggleWatchLater(menuState.m),
         },
         {
           label: '转发',
