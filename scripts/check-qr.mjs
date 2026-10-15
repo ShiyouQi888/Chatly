@@ -83,7 +83,7 @@ const dbFollows = (a, b) =>
   !!db.prepare('SELECT 1 FROM follows WHERE follower_id = ? AND followee_id = ?').get(a, b)
 
 const me = await login('chenmo')
-purgeDebris({ quiet: true })
+await purgeDebris({ quiet: true })
 const targetRes = await j('GET', `/users/by-username/${TARGET}`, null, me.auth)
 if (!targetRes.d?.user) throw new Error(`演示库里没有 ${TARGET}，先跑 npm run reset`)
 const targetId = targetRes.d.userId

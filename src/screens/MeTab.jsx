@@ -1,12 +1,12 @@
-import React, { useEffect, useState } from 'react'
-import { api, formatAgo } from '../api/client.js'
+import React, { useEffect, useRef, useState } from 'react'
+import { api, formatAgo, mediaUrl } from '../api/client.js'
 import { useApp } from '../store/AppContext.jsx'
 import { useAuth } from '../store/AuthContext.jsx'
 import { useMoments } from '../store/MomentStore.jsx'
 import { useFavorites } from '../store/FavoriteStore.jsx'
 import { useWatchLater } from '../store/WatchLaterStore.jsx'
 import { avatarOf, useChat } from '../store/ChatStore.jsx'
-import { THEMES, WATCH_LATER, FILES, IMG } from '../data/mock.js'
+import { THEMES } from '../data/themes.js'
 import { Avatar, Row, Group, Switch, Chip, Empty, SectionTitle } from '../components/ui.jsx'
 import ProfileEditor from '../components/ProfileEditor.jsx'
 import MyQrPage from './MyQrPage.jsx'
@@ -19,6 +19,7 @@ import NotificationSettings from './NotificationSettings.jsx'
 import PrivacySettings from './PrivacySettings.jsx'
 import SecuritySettings from './SecuritySettings.jsx'
 import { isVideoItem } from '../components/MomentMedia.jsx'
+import { applyThemeColors, applyMotion, MOTION_KEY } from '../utils/theme.js'
 import {
   IconPlay,
   IconStar,
@@ -48,6 +49,9 @@ import './me-tab.css'
 const GENDER_LABEL = { male: '男', female: '女', other: '其他' }
 
 const VIS_SHORT = { friends: '仅好友', private: '仅自己' }
+
+/** 和 `utils/theme.js` 的 FONT_SCALE 一一对应（那边只有倍率，标签在界面上取） */
+const FONT_SIZE_LABEL = { small: '小', standard: '标准', large: '大', xlarge: '超大' }
 
 /* ===== 「我的动态」子页 =====
  * 读的是**真实**动态（和动态 Tab 同一个接口，scope=mine）。
@@ -95,13 +99,13 @@ function MyPosts({ onManage }) {
                     /* 视频缩略图：`<video preload="metadata">` 会画出首帧。
                        之前这里一律当图片渲染，视频动态在「我的动态」里是一个黑框。 */
                     <span key={it.url + i} className="mp-cell is-video">
-                      <video src={it.url} muted playsInline preload="metadata" />
+                      <video src={mediaUrl(it.url)} muted playsInline preload="metadata" />
                       <i>
                         <IconPlay size={12} />
                       </i>
                     </span>
                   ) : (
-                    <img key={it.url + i} src={it.url} alt="" loading="lazy" />
+                    <img key={it.url + i} src={mediaUrl(it.url)} alt="" loading="lazy" />
                   )
                 )}
                 {m.media.length > 3 && <i className="mp-more">+{m.media.length - 3}</i>}
@@ -175,7 +179,7 @@ function FavRow({ f, onOpen, onJump, onRemove }) {
             收藏只是快照），破了就显示一个图标块，不要一个破图。 */}
         {f.kind === 'image' && f.fileUrl ? (
           <span className="fav-thumb">
-            <img src={f.fileUrl} alt={f.fileName || '图片'} loading="lazy" />
+            <img src={mediaUrl(f.fileUrl)} alt={f.fileName || '图片'} loading="lazy" />
           </span>
         ) : (
           <span className={`fav-ic is-${f.kind}`}>
@@ -238,9 +242,9 @@ function SubPage({ title, onBack, children, action }) {
   )
 }
 
-export default function MeTab({ nav }) {
-  const { showToast, status, dispatch } = useApp()
-  const { user, logout } = useAuth()
+export default function MeTab({ nav, notifySettingsSignal }) {
+  const { showToast, dispatch } = useApp()
+  const { user, logout, uploadCover, resetCover } = useAuth()
   const { conversations } = useChat()
   /* setScope 是全局的（和动态 Tab 共用一个 store）——
      点「去动态页编辑」时顺手把筛选切到「我的」，落地就是自己那几条。 */
@@ -255,14 +259,80 @@ export default function MeTab({ nav }) {
     removeFavoriteById,
   } = useFavorites()
   const [page, setPage] = useState(null)
+  const [ownStatus, setOwnStatus] = useState(null)
   const [theme, setTheme] = useState(() => {
     // 从 localStorage 恢复主题
     return localStorage.getItem('chatly-theme') || '极光'
   })
+  /* 「主题外观」里要显示**当前**的字体大小和动效状态 ——
+     以前这两个值都是写死的（「标准」、开关恒为开），
+     于是用户改了字体大小再回来看，这一页说「标准」，和实际不一致。 */
+  const [fontSize] = useState(() => localStorage.getItem('chatly-font-size') || 'standard')
+  const [motion, setMotion] = useState(() => localStorage.getItem(MOTION_KEY) !== 'off')
+
+  useEffect(() => {
+    let alive = true
+    api.statuses().then(({ statuses = [] }) => {
+      if (alive) setOwnStatus(statuses.find((item) => Number(item.userId) === Number(user?.id)) || null)
+    }).catch(() => {
+      if (alive) setOwnStatus(null)
+    })
+    return () => { alive = false }
+  }, [user?.id])
   const [editing, setEditing] = useState(false)
   /* 「我」页的统计条要给一个真实的动态数量 —— 不能再用 mock 里那个数，
      否则会出现「统计说有 3 条，点进去一条都没有」。 */
   const [myCount, setMyCount] = useState(null)
+
+  /* ---------- 主页背景（「更换主页背景」按钮） ----------
+     真上传、真落库、真换图：`user.profileCover` 来自后端，
+     上传成功 / 恢复默认都会刷新 user，所以封面**不需要**本地 state 镜像。
+     `brokenCover`：文件被服务端清理或网络失败时给个可见的兜底，
+     而不是留一片空白让人以为页面坏了。 */
+  const coverInputRef = useRef(null)
+  const [coverBusy, setCoverBusy] = useState(false)
+  const [brokenCover, setBrokenCover] = useState(false)
+  const coverUrl = user?.profileCover || ''
+
+  /* 换了一张新地址，旧的「加载失败」标记要跟着清掉 ——
+     否则上一张图失败留下的 true 会把刚换好的新图也判成坏图。 */
+  useEffect(() => {
+    setBrokenCover(false)
+  }, [coverUrl])
+
+  const pickCover = () => {
+    if (coverBusy) return
+    coverInputRef.current?.click()
+  }
+
+  const onCoverFile = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = '' /* 允许连续两次选同一个文件：不清空的话 onChange 不再触发 */
+    if (!file) return
+    if (!/^image\//.test(file.type)) return showToast('请选择图片文件')
+    if (file.size > 8 * 1024 * 1024) return showToast('背景图不能超过 8MB')
+    setCoverBusy(true)
+    try {
+      await uploadCover(file)
+      showToast('主页背景已更新')
+    } catch (err) {
+      showToast(err.message || '背景图上传失败')
+    } finally {
+      setCoverBusy(false)
+    }
+  }
+
+  const resetCoverToDefault = async () => {
+    setCoverBusy(true)
+    try {
+      await resetCover()
+      showToast('已恢复默认背景')
+    } catch (err) {
+      showToast(err.message || '恢复失败')
+    } finally {
+      setCoverBusy(false)
+    }
+  }
 
   /**
    * 进「我的收藏」时重拉一次。
@@ -274,6 +344,21 @@ export default function MeTab({ nav }) {
   useEffect(() => {
     if (page === 'fav') refreshFavorites().catch(() => {})
   }, [page, refreshFavorites])
+
+  /**
+   * 通知中心里点「通知设置」→ Phone 切到这一页并把 page 设成 notify。
+   *
+   * 为什么用信号而不是直接调 setPage：page 在 MeTab 自己手里，
+   * Phone 那一层拿不到 setter；而 `nav` 只能往下传，不能反过来改 MeTab 的内部状态。
+   * 传一个「递增的计数」下来，这边用 effect 跟着走 —— nonce 的用法和 jumpTo 一样
+   * （见 Phone.jsx 里那段注释），不然第二次点同一个按钮不会重新触发。
+   */
+  const lastSignal = useRef(0)
+  useEffect(() => {
+    if (!notifySettingsSignal || notifySettingsSignal === lastSignal.current) return
+    lastSignal.current = notifySettingsSignal
+    setPage('notify')
+  }, [notifySettingsSignal])
 
   /**
    * 点一条收藏：能跳就跳到聊天里那条消息，跳不了就把快照内容展示出来。
@@ -318,10 +403,9 @@ export default function MeTab({ nav }) {
     const savedTheme = localStorage.getItem('chatly-theme') || '极光'
     const themeData = THEMES.find((t) => t.name === savedTheme)
     if (themeData) {
-      const root = document.documentElement
-      root.style.setProperty('--primary', themeData.colors[0])
-      root.style.setProperty('--primary-end', themeData.colors[1])
-      root.style.setProperty('--accent', themeData.colors[0])
+      // applyThemeColors 写的是全站真正用的 --brand-* 变量；
+      // 以前只写 --primary（只有「我」页新页面在用），主界面一点没变。
+      applyThemeColors(themeData.colors)
     }
   }, [])
 
@@ -425,12 +509,43 @@ export default function MeTab({ nav }) {
     return <NotificationSettings onBack={() => setPage(null)} showToast={showToast} />
   }
 
-  /* ===== 子页面：外观主题 ===== */
+  /* ===== 子页面：通用设置 / 帮助与反馈 / 关于我们 =====
+   * ⚠️ 这三条分支曾经**根本不存在** —— 组件 import 了、
+   * 列表里三行也都在 `setPage('general' | 'help' | 'about')`，
+   * 但下面没有对应的 if，`page` 变了却匹配不上任何分支，
+   * 于是直接往下走到「主页面」的 return：**点了什么都不发生**。
+   * 这类「state 改了但没有分支接」的死按钮不会报错、也不会崩，
+   * 只会让人以为按钮坏了 —— 加 `page` 值时务必同时加分支。
+   * 这三个组件自带根节点（不套 SubPage），所以和 security / privacy / notify 同一种写法。 */
+  if (page === 'general') {
+    return <GeneralSettings onBack={() => setPage(null)} showToast={showToast} />
+  }
+
+  if (page === 'help') {
+    return <HelpPage onBack={() => setPage(null)} showToast={showToast} />
+  }
+
+  if (page === 'about') {
+    return <AboutPage onBack={() => setPage(null)} />
+  }
+
+  /* ===== 子页面：外观主题 =====
+   * 这一页有两件事容易做错，都写在下面：
+   *   ① 「动效开关」以前是 `on` + `showToast('已切换动效')` ——
+   *      开关永远是开的、点了只弹一句提示，属于**假功能**。
+   *      现在真存 localStorage 并真的停掉全站动画（见 utils/theme.js）。
+   *   ② 「聊天背景 / 气泡颜色 / 强调色」三项点了只弹 toast ——
+   *      底层没有对应实现，按项目铁律一律 disabled 并写明原因。
+   *      注意别把它们写成「点了能弹提示」的样子：那会让人以为功能存在。
+   *
+   * ⚠️ 标题和列表里那一行**必须同名**：入口写「主题外观」、进来变成「外观主题」，
+   *    用户会以为自己点错了地方（这种不一致没有任何收益）。
+   */
   if (page === 'theme') {
     return (
-      <SubPage title="外观主题" onBack={() => setPage(null)}>
-        <SectionTitle action="使用中" onAction={() => showToast('当前主题：' + theme)}>
-          <span>默认主题</span>
+      <SubPage title="主题外观" onBack={() => setPage(null)}>
+        <SectionTitle hint="使用中">
+          <span>当前主题</span>
         </SectionTitle>
         <div className="theme-grid">
           {THEMES.map((t) => (
@@ -442,11 +557,8 @@ export default function MeTab({ nav }) {
                 setTheme(t.name)
                 // 持久化到 localStorage
                 localStorage.setItem('chatly-theme', t.name)
-                // 应用 CSS 变量
-                const root = document.documentElement
-                root.style.setProperty('--primary', t.colors[0])
-                root.style.setProperty('--primary-end', t.colors[1])
-                root.style.setProperty('--accent', t.colors[0])
+                // 应用到全站主色（--brand-*），不只是「我」页新页面的 --primary
+                applyThemeColors(t.colors)
                 showToast('已应用主题 · ' + t.name)
               }}
             >
@@ -466,19 +578,53 @@ export default function MeTab({ nav }) {
         </div>
 
         <SectionTitle>自定义</SectionTitle>
-        <Group>
-          <Row icon={<IconImage size={19} />} label="聊天背景" value="默认" onClick={() => showToast('选择聊天背景')} />
-          <Row icon={<IconPalette size={19} />} label="气泡颜色" value="紫蓝渐变" onClick={() => showToast('选择气泡颜色')} />
-          <Row icon={<IconEye size={19} />} label="强调色" value="荧光蓝" onClick={() => showToast('选择强调色')} />
+        <Group footer="下面三项底层还没实现（只弹提示不算实现），所以先禁用。" >
+          <Row
+            icon={<IconImage size={19} />}
+            label="聊天背景"
+            right={<span className="tag-off">未接入</span>}
+          />
+          <Row
+            icon={<IconPalette size={19} />}
+            label="气泡颜色"
+            sub="未接入：消息气泡还没有可换的配色"
+            right={<span className="tag-off">未接入</span>}
+          />
+          <Row
+            icon={<IconEye size={19} />}
+            label="强调色"
+            sub="未接入：主色由上面的主题统一决定"
+            right={<span className="tag-off">未接入</span>}
+            last
+          />
+        </Group>
+
+        <Group footer="字体大小在「通用设置」里，这里显示的就是当前值。">
           <Row
             icon={<IconInfo size={19} />}
             label="字体大小"
-            value="标准"
+            value={FONT_SIZE_LABEL[fontSize] || '标准'}
             onClick={() => setPage('general')}
           />
-          <Row label="动效开关" right={<Switch on onChange={() => showToast('已切换动效')} />} last />
+          {/* 动效开关：真停动画（`--no-motion` → global.css 里和
+              `prefers-reduced-motion` 同一套规则），并跨会话记住 */}
+          <Row
+            label="动效开关"
+            sub={motion ? '已开启过渡与入场动画' : '已关闭：全站动画立即结束'}
+            right={
+              <Switch
+                on={motion}
+                onChange={(v) => {
+                  setMotion(v)
+                  applyMotion(v)
+                  localStorage.setItem(MOTION_KEY, v ? 'on' : 'off')
+                }}
+              />
+            }
+            last
+          />
         </Group>
-        <p className="sub-note">可以为不同联系人设置独立的聊天主题。</p>
+        <p className="sub-note">可以为不同联系人设置独立的聊天主题（未接入）。</p>
       </SubPage>
     )
   }
@@ -489,25 +635,65 @@ export default function MeTab({ nav }) {
       <div className="me-scroll no-scrollbar">
         {/* 个人空间头部 */}
         <div className="me-hero">
-          <div className="me-cover" style={{ backgroundImage: `linear-gradient(160deg,#2b2b45,#141428)` }}>
-            <svg className="me-cover-svg" viewBox="0 0 390 220" preserveAspectRatio="none">
-              <defs>
-                <linearGradient id="skyG" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0" stopColor="#8ea6d8" />
-                  <stop offset="0.55" stopColor="#b8b0e0" />
-                  <stop offset="1" stopColor="#e0c8d8" />
-                </linearGradient>
-              </defs>
-              <rect width="390" height="220" fill="url(#skyG)" />
-              <circle cx="308" cy="52" r="30" fill="rgba(255,255,255,.5)" />
-              <circle cx="322" cy="44" r="27" fill="#b8b0e0" opacity=".55" />
-              <path d="M0 168l86-84 62 52 46-34 90 74 106-58v102H0z" fill="rgba(255,255,255,.5)" />
-              <path d="M0 190l112-70 74 56 60-40 144 66v18H0z" fill="rgba(255,255,255,.72)" />
-            </svg>
-            <button type="button" className="me-cover-set" onClick={() => showToast('更换主页背景')}>
-              <IconImage size={15} />
+          <div className={`me-cover ${coverUrl && !brokenCover ? 'has-image' : ''}`}>
+            {/* 用真实 <img> 而不是 CSS background-image：
+                背景图抓不到加载失败（文件被服务端清理时就是静默一片黑），
+                <img> 的 onError 能把它降级回默认插画。 */}
+            {coverUrl && !brokenCover && (
+              <img
+                className="me-cover-img"
+                src={mediaUrl(coverUrl)}
+                alt=""
+                onError={() => setBrokenCover(true)}
+              />
+            )}
+            {/* 没设背景图（或图挂了）时才画内置插画 */}
+            {(!coverUrl || brokenCover) && (
+              <svg className="me-cover-svg" viewBox="0 0 390 220" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="skyG" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0" stopColor="#8ea6d8" />
+                    <stop offset="0.55" stopColor="#b8b0e0" />
+                    <stop offset="1" stopColor="#e0c8d8" />
+                  </linearGradient>
+                </defs>
+                <rect width="390" height="220" fill="url(#skyG)" />
+                <circle cx="308" cy="52" r="30" fill="rgba(255,255,255,.5)" />
+                <circle cx="322" cy="44" r="27" fill="#b8b0e0" opacity=".55" />
+                <path d="M0 168l86-84 62 52 46-34 90 74 106-58v102H0z" fill="rgba(255,255,255,.5)" />
+                <path d="M0 190l112-70 74 56 60-40 144 66v18H0z" fill="rgba(255,255,255,.72)" />
+              </svg>
+            )}
+            <button
+              type="button"
+              className="me-cover-set"
+              onClick={pickCover}
+              disabled={coverBusy}
+              aria-label="更换主页背景"
+            >
+              {coverBusy ? <span className="me-cover-spin" /> : <IconImage size={15} />}
             </button>
+            {/* 只有真设了自定义背景才给「恢复默认」——
+                默认状态放一个恢复按钮等于放了个点了没用的按钮。 */}
+            {coverUrl && !brokenCover && (
+              <button
+                type="button"
+                className="me-cover-reset"
+                onClick={resetCoverToDefault}
+                disabled={coverBusy}
+              >
+                恢复默认
+              </button>
+            )}
           </div>
+          {/* 背景选择器：accept 只列图片，和后端 uploadCover 的白名单一致 */}
+          <input
+            ref={coverInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/gif,image/webp"
+            style={{ display: 'none' }}
+            onChange={onCoverFile}
+          />
 
           <div className="me-idcard">
             <Avatar src={avatarOf(user)} name={user?.nickname || ''} size={76} radius={24} ring={0} />
@@ -570,15 +756,12 @@ export default function MeTab({ nav }) {
         <button
           type="button"
           className="me-status"
-          onClick={() => {
-            dispatch({ type: 'SET_STATUS', status: { emoji: '🎧', text: '正在听歌', expire: '还有 24 小时' } })
-            showToast('已切换状态')
-          }}
+          onClick={nav.createStatus}
         >
-          <span className="me-status-emoji">{status.emoji}</span>
+          <span className="me-status-emoji">{ownStatus?.mood || '＋'}</span>
           <span className="me-status-body">
-            <b>{status.text}</b>
-            <em>{status.expire} · 点击切换</em>
+            <b>{ownStatus?.content || '发布我的状态'}</b>
+            <em>{ownStatus ? '24 小时状态 · 点击更新' : '分享此刻的心情'}</em>
           </span>
           <IconChevron size={16} />
         </button>

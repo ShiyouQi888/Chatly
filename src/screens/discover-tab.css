@@ -17,7 +17,11 @@
   display: flex;
   gap: 8px;
   padding: 0 18px 16px;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+
+.disc-segs::-webkit-scrollbar { display: none; }
 
 .disc-block {
   padding: 0 16px;
@@ -244,6 +248,84 @@
   font-weight: 600;
   color: #e8799b;
 }
+
+/* ===== 热门话题榜 ===== */
+.dt-list,
+.dt-moments {
+  overflow: hidden;
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.dt-row,
+.dt-moment {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 12px;
+  padding: 13px 14px;
+  text-align: left;
+  background: transparent;
+  position: relative;
+}
+
+.dt-row:not(:last-child)::after,
+.dt-moment:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 48px;
+  right: 14px;
+  bottom: 0;
+  height: 1px;
+  background: var(--line);
+}
+
+.dt-row > b {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  color: var(--text-3);
+  background: var(--surface-2);
+  font-size: var(--fs-micro);
+}
+
+.dt-row > b.is-top { color: #fff; background: var(--brand-grad); }
+
+.dt-row > span,
+.dt-moment {
+  min-width: 0;
+  flex: 1;
+}
+
+.dt-row > span { display: flex; flex-direction: column; gap: 3px; }
+.dt-row strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-sub); }
+.dt-row em,
+.dt-moment em { color: var(--text-3); font-style: normal; font-size: var(--fs-micro); }
+.dt-row > i { color: var(--brand-2); font-size: var(--fs-micro); font-style: normal; flex: 0 0 auto; }
+.dt-row:disabled { opacity: .65; }
+.dt-moment { flex-direction: column; align-items: flex-start; gap: 5px; }
+.dt-moment b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-sub); }
+
+/* ===== 活动与报名 ===== */
+.da-list { display: flex; flex-direction: column; gap: 12px; }
+.da-card { padding: 15px; border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--shadow-sm); }
+.da-author { display: flex; align-items: center; gap: 9px; color: var(--text-2); font-size: var(--fs-micro); }
+.da-author b { font-weight: 600; }
+.da-author > span { margin-left: auto; color: var(--text-4); }
+.da-card h3 { margin: 13px 0 5px; font-size: var(--fs-body); line-height: 1.4; }
+.da-description { margin: 0 0 10px; color: var(--text-3); font-size: var(--fs-sub); line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.da-meta { display: flex; align-items: center; gap: 6px; padding-top: 7px; color: var(--text-2); font-size: var(--fs-sub); }
+.da-meta svg { flex: 0 0 auto; color: var(--brand-2); }
+.da-counts { margin-top: 12px; color: var(--text-3); font-size: var(--fs-micro); }
+.da-actions { display: flex; gap: 8px; margin-top: 11px; }
+.da-actions button { flex: 1; min-width: 0; padding: 9px 10px; border-radius: var(--r-md); background: var(--surface-2); color: var(--text-2); font-size: var(--fs-sub); font-weight: 550; }
+.da-actions button.is-primary { color: #fff; background: var(--brand-grad); box-shadow: var(--shadow-brand); }
+.da-actions button.is-selected { color: var(--brand-2); background: var(--brand-soft); }
+.da-actions button:disabled { opacity: .55; }
 
 /* ===== 附近的人 ===== */
 .nb-list {

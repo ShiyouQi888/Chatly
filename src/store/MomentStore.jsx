@@ -5,7 +5,7 @@
  * 不能和 AppContext 里的原型数据（发现 / 通知 / 状态）混在一个 store 里 ——
  * 混了之后「这条是不是真的存下来了」就说不清了。
  *
- * 不负责：状态 Stories、发现页推荐，那些仍在 AppContext。
+ * 不负责：状态与发现页推荐，它们由各自模块管理。
  */
 import React, {
   createContext,
@@ -164,6 +164,10 @@ export function MomentProvider({ children }) {
     dispatch({ type: 'REMOVE', id })
   }, [])
 
+  const updateMomentCard = useCallback((id, card) => {
+    dispatch({ type: 'UPSERT', moment: { id, card } })
+  }, [])
+
   /* ---------- 点赞 ----------
      乐观更新：点赞是「点了就有反馈」的交互，等一个来回再变会显得卡。
      失败要回滚 —— 否则计数和红心状态会和服务器对不上，刷新后又跳回去。 */
@@ -228,6 +232,7 @@ export function MomentProvider({ children }) {
       publish,
       editMoment,
       removeMoment,
+      updateMomentCard,
       toggleLike,
       commentsOf: (id) => state.comments[id],
       loadComments,
@@ -248,6 +253,7 @@ export function MomentProvider({ children }) {
       publish,
       editMoment,
       removeMoment,
+      updateMomentCard,
       toggleLike,
       loadComments,
       addComment,

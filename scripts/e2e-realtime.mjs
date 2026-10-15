@@ -314,8 +314,8 @@ window.__imgCount = () => document.querySelectorAll('.room-scroll .img-bubble im
   // 否则每跑一轮 conv1 就多三条「实时消息-时间戳」，演示库没法看
   const { purgeDebris, purgeMessagesAfter, maxMessageId, purgeOrphanUploads } =
     await import('./lib/debris.mjs')
-  purgeDebris({ quiet: true })
-  const msgBaseline = maxMessageId()
+  await purgeDebris({ quiet: true })
+  const msgBaseline = await maxMessageId()
 
   const A = await makeSession(9431, 'chrome-a', 'A')
   const B = await makeSession(9432, 'chrome-b', 'B')
@@ -401,7 +401,7 @@ window.__imgCount = () => document.querySelectorAll('.room-scroll .img-bubble im
     const aImgBefore = (await A.js(`window.__imgCount()`)) || 0
     // 记住上一张图的地址，用来证明「新图」真的换了一张，而不是读了历史残留
     const prevSrc = await A.js(
-      `(() => { const a = [...document.querySelectorAll('.room-scroll .img-bubble img')]; return a.length ? a[a.length-1].getAttribute('src') : null })()`
+      `(() => { const a = [...document.querySelectorAll('.room-scroll .img-bubble img')]; const src = a.length ? a[a.length-1].getAttribute('src') : null; return src ? new URL(src, location.href).pathname : null })()`
     )
 
     await A.js(`window.__click('.cp-btn[aria-label="更多"]')`)
@@ -428,19 +428,19 @@ window.__imgCount = () => document.querySelectorAll('.room-scroll .img-bubble im
     const aImg = await A.waitFor(`window.__imgCount() > ${aImgBefore} ? window.__imgCount() : null`, 15000)
     ok(!!aImg, 'A 侧新增了图片消息', `${aImgBefore} → ${aImg}`)
 
-    // 必须真的解码成功（naturalWidth > 0）、来自 /uploads，且不是上一张历史残留
+    // 必须真的解码成功（naturalWidth > 0）、来自受成员权限保护的私有文件路由，且不是历史残留
     const meta = await A.waitFor(
       `(() => {
         const all = [...document.querySelectorAll('.room-scroll .img-bubble img')]
         const el = all[all.length - 1]
         if (!el || !el.complete || !el.naturalWidth) return null
         const r = el.getBoundingClientRect()
-        return { nw: el.naturalWidth, nh: el.naturalHeight, w: Math.round(r.width), h: Math.round(r.height), src: el.getAttribute('src') }
+        return { nw: el.naturalWidth, nh: el.naturalHeight, w: Math.round(r.width), h: Math.round(r.height), src: new URL(el.getAttribute('src'), location.href).pathname }
       })()`,
       15000
     )
     ok(!!meta && meta.nw > 0, '图片真的解码成功（非空白占位）', meta ? `${meta.nw}×${meta.nh} 显示 ${meta.w}×${meta.h}` : '未解码')
-    ok(!!meta && /^\/uploads\/.+\.png$/.test(meta.src), '图片地址指向后端 /uploads', meta?.src)
+    ok(!!meta && /^\/api\/v1\/files\/private\/.+\.png$/.test(meta.src), '图片地址指向成员校验的私有文件路由', meta?.src)
     ok(!!meta && meta.src !== prevSrc, '渲染的是本次新上传的图片', `prev=${prevSrc} now=${meta?.src}`)
 
     const bImg = await B.waitFor(`window.__imgCount() > ${imgBefore} ? window.__imgCount() : null`, 15000)
@@ -477,9 +477,9 @@ window.__imgCount = () => document.querySelectorAll('.room-scroll .img-bubble im
     A.proc.kill()
     B.proc.kill()
     // 先删本轮消息，再收孤儿文件 —— 顺序反了的话刚传的图还被消息指着，扫不到
-    const gone = purgeMessagesAfter(msgBaseline)
-    purgeDebris({ quiet: true })
-    purgeOrphanUploads({ quiet: false })
+    const gone = await purgeMessagesAfter(msgBaseline)
+    await purgeDebris({ quiet: true })
+    await purgeOrphanUploads({ quiet: false })
     if (gone) console.log(`已清理本轮产生的 ${gone} 条消息`)
   }
 

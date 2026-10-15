@@ -1,0 +1,47 @@
+.status-strip { display: flex; align-items: flex-start; gap: 14px; min-height: 105px; padding: 0 18px 16px; overflow-x: auto; scroll-snap-type: x proximity; }
+.status-card { position: relative; flex: 0 0 64px; width: 64px; display: flex; flex-direction: column; align-items: center; gap: 6px; scroll-snap-align: start; text-align: center; }
+.status-avatar-button { width: 62px; height: 62px; display: grid; place-items: center; }
+.status-avatar-ring { width: 62px; height: 62px; display: grid; place-items: center; padding: 3px; border-radius: 21px; background: linear-gradient(135deg, #a99bfb, #6d5df6); }
+.status-avatar-ring.is-seen { background: var(--line-2, #d8d9e2); }
+.status-avatar-ring.is-empty { background: transparent; border: 1.5px dashed var(--line-2, #d8d9e2); }
+.status-add { position: absolute; top: 43px; right: 0; width: 21px; height: 21px; display: grid; place-items: center; border: 2px solid var(--bg); border-radius: 50%; background: var(--brand-2); color: white; }
+.status-label { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.status-label b { width: 100%; overflow: hidden; color: var(--text-2); font-size: 10px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.status-label small { color: var(--text-3); font-size: 9px; }
+.status-empty-hint { align-self: center; max-width: 165px; padding: 0 2px; color: var(--text-3); font-size: 11px; line-height: 1.5; }
+.status-overlay { position: absolute; z-index: 125; inset: 0; display: flex; align-items: flex-end; justify-content: center; }
+.status-overlay-mask { position: absolute; inset: 0; background: rgba(19, 17, 35, .42); }
+.status-composer { position: relative; width: 100%; padding: 10px 20px calc(24px + env(safe-area-inset-bottom)); border-radius: 24px 24px 0 0; background: var(--bg); animation: statusSheetIn .2s ease-out both; }
+.status-composer header { height: 43px; display: flex; align-items: center; justify-content: space-between; }
+.status-composer header button { min-width: 50px; color: var(--text-2); font-size: 13px; }
+.status-composer header button:last-child { color: var(--brand-2); text-align: right; font-weight: 700; }
+.status-composer header button:disabled { opacity: .4; }
+.status-composer header b { color: var(--text); font-size: 15px; }
+.status-editor { position: relative; display: block; margin-top: 12px; padding: 13px 13px 30px; border-radius: 16px; background: var(--surface-2, #f2f2f7); }
+.status-editor textarea { width: 100%; min-height: 116px; resize: none; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; font-size: 16px; line-height: 1.65; }
+.status-editor textarea::placeholder { color: var(--text-3); }
+.status-editor > span { position: absolute; right: 12px; bottom: 10px; color: var(--text-3); font-size: 10px; }
+.status-mood-title { margin: 17px 0 9px; color: var(--text-2); font-size: 12px; font-weight: 650; }
+.status-moods { display: flex; flex-wrap: wrap; gap: 8px; }
+.status-moods button { width: 39px; height: 39px; display: grid; place-items: center; border: 1px solid transparent; border-radius: 13px; background: var(--surface-2, #f2f2f7); font-size: 20px; }
+.status-moods button.is-selected { border-color: var(--brand-2); background: rgba(109, 93, 246, .1); }
+.status-expiry-note { margin: 15px 0 0; color: var(--text-3); font-size: 10px; line-height: 1.5; }
+.status-viewer-overlay { align-items: center; background: #17152a; }
+.status-viewer-overlay .status-overlay-mask { background: rgba(12, 11, 23, .82); backdrop-filter: blur(12px); }
+.status-viewer { position: relative; width: calc(100% - 30px); max-height: 82%; overflow-y: auto; padding: 17px; border: 1px solid rgba(255,255,255,.18); border-radius: 24px; background: linear-gradient(145deg, rgba(102,91,175,.98), rgba(40,39,76,.98)); box-shadow: 0 22px 60px rgba(0,0,0,.32); color: white; animation: statusCardIn .22s ease-out both; }
+.status-viewer > header { display: flex; align-items: center; gap: 10px; }
+.status-viewer > header > span { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.status-viewer > header b { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.status-viewer > header small { color: rgba(255,255,255,.62); font-size: 10px; }
+.status-viewer > header button { width: 34px; height: 34px; display: grid; place-items: center; color: rgba(255,255,255,.78); }
+.status-viewer-content { min-height: 190px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 26px 12px; text-align: center; }
+.status-viewer-content > span { font-size: 36px; }
+.status-viewer-content p { margin: 14px 0 0; color: white; font-size: 24px; font-weight: 680; line-height: 1.45; overflow-wrap: anywhere; }
+.status-viewers { padding-top: 14px; border-top: 1px solid rgba(255,255,255,.16); }
+.status-viewers-title { margin-bottom: 8px; color: rgba(255,255,255,.75); font-size: 11px; }
+.status-viewers > p, .status-viewer-foot { margin: 10px 0 0; color: rgba(255,255,255,.58); font-size: 10px; text-align: center; }
+.status-viewer-person { min-height: 38px; display: flex; align-items: center; gap: 8px; color: white; font-size: 11px; }
+.status-delete { display: flex; align-items: center; gap: 6px; margin: 14px auto 0; color: #ffd2d5; font-size: 11px; }
+.status-delete:disabled { opacity: .5; }
+@keyframes statusSheetIn { from { transform: translateY(24px); opacity: .45; } to { transform: translateY(0); opacity: 1; } }
+@keyframes statusCardIn { from { transform: translateY(10px) scale(.98); opacity: .4; } to { transform: translateY(0) scale(1); opacity: 1; } }

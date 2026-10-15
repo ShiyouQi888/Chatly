@@ -44,13 +44,14 @@
   --r-full: 999px;
 
   /* ===== 字号 ===== */
-  --fs-display: 30px;
-  --fs-h1: 22px;
-  --fs-h2: 17px;
-  --fs-body: 15px;
-  --fs-sub: 13.5px;
-  --fs-cap: 12px;
-  --fs-micro: 11px;
+  --font-scale: 1;
+  --fs-display: calc(30px * var(--font-scale));
+  --fs-h1: calc(22px * var(--font-scale));
+  --fs-h2: calc(17px * var(--font-scale));
+  --fs-body: calc(15px * var(--font-scale));
+  --fs-sub: calc(13.5px * var(--font-scale));
+  --fs-cap: calc(12px * var(--font-scale));
+  --fs-micro: calc(11px * var(--font-scale));
 
   /* ===== 动效 ===== */
   --ease: cubic-bezier(0.22, 1, 0.36, 1);

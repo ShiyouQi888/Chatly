@@ -49,6 +49,13 @@ export const IconUser = (p) => (
   </S>
 )
 
+export const IconContacts = (p) => (
+  <S {...p}>
+    <circle cx="9" cy="8" r="3.2" />
+    <path d="M3.8 19.5a5.3 5.3 0 0 1 10.4 0M16 5.4a3 3 0 0 1 0 5.7M17 14.3a4.5 4.5 0 0 1 3.2 4.2" />
+  </S>
+)
+
 /* ===== 顶栏 ===== */
 export const IconSearch = (p) => (
   <S {...p}>
@@ -93,6 +100,13 @@ export const IconClose = (p) => (
 export const IconPhone = (p) => (
   <S {...p}>
     <path d="M20.4 16.9v2.5a1.7 1.7 0 0 1-1.9 1.7 16.6 16.6 0 0 1-7.2-2.6 16.3 16.3 0 0 1-5-5A16.6 16.6 0 0 1 3.7 6.3 1.7 1.7 0 0 1 5.4 4.5h2.5a1.7 1.7 0 0 1 1.7 1.5c.1.8.3 1.6.6 2.4a1.7 1.7 0 0 1-.4 1.8l-1 1a13.4 13.4 0 0 0 5 5l1-1a1.7 1.7 0 0 1 1.8-.4c.8.3 1.6.5 2.4.6a1.7 1.7 0 0 1 1.4 1.5Z" />
+  </S>
+)
+
+export const IconMail = (p) => (
+  <S {...p}>
+    <rect x="3" y="5" width="18" height="14" rx="2.5" />
+    <path d="m4 7 8 6 8-6" />
   </S>
 )
 

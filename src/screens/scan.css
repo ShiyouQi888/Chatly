@@ -278,6 +278,22 @@
   background: rgba(52, 211, 166, 0.14);
 }
 
+/* 「无法加为好友」（对方关掉了对应渠道的添加开关）。
+   用中性灰而不是红色：这不是出错，是对方的选择 —— 红色会让人以为是自己操作失败。
+   也不靠默认的 disabled 变淡来表意（那会让原因那行字变得难以阅读）。 */
+.scan-btn--blocked {
+  color: var(--text-3);
+  background: var(--surface-2);
+  opacity: 1;
+  cursor: not-allowed;
+}
+
+/* 为什么加不了。单独一行，因为这句话是这一屏里最重要的信息。 */
+.scan-block-note {
+  color: var(--accent-amber);
+  font-weight: 500;
+}
+
 .scan-btn:active {
   transform: scale(0.97);
 }

@@ -40,14 +40,14 @@ function fail(res, e) {
  * 消息不存在 → 404（不是 403：不泄漏「这个 id 有没有消息」）。
  * 不是该会话成员 → 403。
  */
-function assertCanAccess(userId, messageId) {
-  const cid = conversationOfMessage(messageId)
+async function assertCanAccess(userId, messageId) {
+  const cid = await conversationOfMessage(messageId)
   if (!cid) {
     const e = new Error('消息不存在')
     e.status = 404
     throw e
   }
-  if (!isMember(cid, userId)) {
+  if (!(await isMember(cid, userId))) {
     const e = new Error('无权收藏该消息')
     e.status = 403
     throw e
@@ -55,26 +55,26 @@ function assertCanAccess(userId, messageId) {
 }
 
 /* ---------- 列表 ---------- */
-r.get('/', (req, res) => {
+r.get('/', async (req, res) => {
   const { beforeId, limit } = req.query
-  const out = listFavorites(req.user.id, {
+  const out = await listFavorites(req.user.id, {
     beforeId: beforeId ? Number(beforeId) : null,
     limit,
   })
   /* total 一起给：我页统计条要真数，单独再发一次请求不值得 */
-  res.json({ favorites: out.items, hasMore: out.hasMore, total: countFavorites(req.user.id) })
+  res.json({ favorites: out.items, hasMore: out.hasMore, total: await countFavorites(req.user.id) })
 })
 
 /* ---------- 收藏一条 ----------
    幂等：已经收藏过返回既有那一条（`created:false`），不报错。
    前端那个「收藏 / 取消收藏」是个开关，重复点不该炸。
    已撤回的消息由 favorite.js 抛 400（文案是「这条消息已撤回，不能收藏」）。 */
-r.post('/', (req, res) => {
+r.post('/', async (req, res) => {
   const messageId = Number(req.body?.messageId)
   if (!messageId) return res.status(400).json({ error: '缺少 messageId' })
   try {
-    assertCanAccess(req.user.id, messageId)
-    const out = addFavorite(req.user.id, messageId)
+    await assertCanAccess(req.user.id, messageId)
+    const out = await addFavorite(req.user.id, messageId)
     res.status(out.created ? 201 : 200).json({ favorite: out.favorite, created: out.created })
   } catch (e) {
     return fail(res, e)
@@ -84,16 +84,17 @@ r.post('/', (req, res) => {
 /* ---------- 批量收藏（多选模式） ----------
    **整批鉴权前置**：有一条不属于自己就整批拒（403），
    避免「部分成功」让前端的状态变得难解释。 */
-r.post('/batch', (req, res) => {
+r.post('/batch', async (req, res) => {
   const ids = Array.from(new Set((req.body?.messageIds || []).map(Number).filter(Boolean)))
   if (!ids.length) return res.status(400).json({ error: '请至少选择一条消息' })
   if (ids.length > 50) return res.status(400).json({ error: '一次最多收藏 50 条' })
   try {
-    for (const id of ids) assertCanAccess(req.user.id, id)
+    /* 鉴权逐条做（并发也行，但 50 条上限下串行够快，还更容易定位是哪一条不合法） */
+    for (const id of ids) await assertCanAccess(req.user.id, id)
     /* 逐条收藏：其中混着一条已撤回的，只跳过它、其余照收（skipped 里有原因）。
        整批失败会让用户「选了 10 条一条都没收藏上」，那他只会觉得功能坏了。 */
-    const out = addFavorites(req.user.id, ids)
-    res.json({ ...out, total: countFavorites(req.user.id) })
+    const out = await addFavorites(req.user.id, ids)
+    res.json({ ...out, total: await countFavorites(req.user.id) })
   } catch (e) {
     return fail(res, e)
   }
@@ -103,26 +104,26 @@ r.post('/batch', (req, res) => {
    两种写法：`?messageId=`（消息气泡上的开关，手里只有 messageId）
    与 `/:id`（收藏列表里删那一条）。**都幂等** —— 没收藏过也回 ok，
    「取消失败」不是用户能处理的信息。 */
-r.delete('/', (req, res) => {
+r.delete('/', async (req, res) => {
   const messageId = Number(req.query.messageId)
   if (!messageId) return res.status(400).json({ error: '缺少 messageId' })
-  const removed = removeFavoriteByMessage(req.user.id, messageId)
-  res.json({ ok: true, removed, total: countFavorites(req.user.id) })
+  const removed = await removeFavoriteByMessage(req.user.id, messageId)
+  res.json({ ok: true, removed, total: await countFavorites(req.user.id) })
 })
 
-r.delete('/:id', (req, res) => {
+r.delete('/:id', async (req, res) => {
   const id = Number(req.params.id)
   if (!id) return res.status(400).json({ error: '收藏 id 非法' })
-  const removed = removeFavorite(req.user.id, id)
-  res.json({ ok: true, removed, total: countFavorites(req.user.id) })
+  const removed = await removeFavorite(req.user.id, id)
+  res.json({ ok: true, removed, total: await countFavorites(req.user.id) })
 })
 
 /* ---------- 批量取消（多选模式里对已收藏的那几条） ---------- */
-r.post('/unbatch', (req, res) => {
+r.post('/unbatch', async (req, res) => {
   const ids = Array.from(new Set((req.body?.messageIds || []).map(Number).filter(Boolean)))
   if (!ids.length) return res.status(400).json({ error: '请至少选择一条消息' })
-  const removed = removeFavoritesByMessages(req.user.id, ids)
-  res.json({ ok: true, removed, total: countFavorites(req.user.id) })
+  const removed = await removeFavoritesByMessages(req.user.id, ids)
+  res.json({ ok: true, removed, total: await countFavorites(req.user.id) })
 })
 
 export default r

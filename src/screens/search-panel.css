@@ -356,6 +356,24 @@
   white-space: nowrap;
 }
 
+.sp-message-row .sp-row-body em {
+  display: -webkit-box;
+  white-space: normal;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.sp-load-more {
+  width: 100%;
+  padding: 12px;
+  color: var(--brand-2);
+  font-size: var(--fs-micro);
+}
+
+.sp-load-more:disabled {
+  opacity: 0.55;
+}
+
 .sp-kind {
   font-style: normal;
   font-weight: 600;
@@ -409,4 +427,69 @@
 
 .sp-hot-row:nth-child(-n + 3) > svg {
   color: #e8799b;
+}
+
+/* ===== 「找人」结果行 =====
+   与其它结果行共用 .sp-row 的排版，但**它不是按钮** ——
+   里面还有「关注」「发消息」两个按钮（button 套 button 会被解析器拆开）。
+   所以这里要把它「像按钮」的反馈关掉，否则整行会在点击时闪一下。 */
+.sp-person {
+  cursor: default;
+}
+
+.sp-person:active {
+  background: transparent;
+}
+
+.sp-p-acts {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sp-p-btn {
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  color: var(--text-on-brand);
+  background: var(--brand-grad);
+  padding: 6px 11px;
+  border-radius: var(--r-full);
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.14s var(--ease);
+}
+
+.sp-p-btn:active {
+  transform: scale(0.96);
+}
+
+/* 已关注：从「实心主色」退成中性底 —— 状态一眼能分出来，
+   也避免用户以为点了没反应（按钮还在，只是换了个样子）。 */
+.sp-p-btn.is-on {
+  color: var(--text-3);
+  background: var(--surface-2);
+  box-shadow: none;
+}
+
+.sp-p-btn--ghost {
+  color: var(--brand-2);
+  background: var(--brand-soft);
+  box-shadow: none;
+}
+
+.sp-p-btn[disabled] {
+  opacity: 0.55;
+}
+
+.sp-p-self {
+  flex: 0 0 auto;
+  font-size: var(--fs-micro);
+  color: var(--text-4);
+}
+
+.sp-people-empty {
+  padding: 16px 14px;
+  font-size: var(--fs-sub);
+  color: var(--text-4);
+  text-align: center;
 }

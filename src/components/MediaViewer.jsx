@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { mediaUrl } from '../api/client.js'
 import { IconClose, IconDownload, IconPlay, IconImage } from './Icon.jsx'
 import VideoPlayer from './VideoPlayer.jsx'
 import './media-viewer.css'
@@ -90,7 +91,7 @@ export default function MediaViewer({ m, onClose }) {
 
   const onSave = () => {
     if (!m?.fileUrl) return
-    saveMedia(m.fileUrl, m.fileName)
+    saveMedia(mediaUrl(m.fileUrl), m.fileName)
   }
 
   const meta = [m?.fileName, fmtSize(m?.fileSize), duration ? fmtDuration(duration) : '']
@@ -124,7 +125,7 @@ export default function MediaViewer({ m, onClose }) {
                 那是最像浏览器原生控件的一笔。文件名在下方 mv-meta 里已经有了。 */}
             <VideoPlayer
               key={m.fileUrl}
-              src={m.fileUrl}
+              src={mediaUrl(m.fileUrl)}
               mode="full"
               autoPlay
               onLoadedDuration={setDuration}
@@ -134,7 +135,7 @@ export default function MediaViewer({ m, onClose }) {
           <img
             key={m.fileUrl}
             className="mv-media"
-            src={m.fileUrl}
+            src={mediaUrl(m.fileUrl)}
             alt={m.fileName || '图片'}
             onError={() => setBroken(true)}
           />
@@ -170,7 +171,7 @@ export function VideoBubble({ m, onOpen }) {
     <button type="button" className="video-bubble" onClick={() => onOpen(m)}>
       <video
         className="vb-media"
-        src={m.fileUrl}
+        src={mediaUrl(m.fileUrl)}
         muted
         playsInline
         preload="metadata"

@@ -16,7 +16,7 @@ import { purgeMessagesAfter, maxMessageId, purgeOrphanUploads } from './lib/debr
 
 /* 为了打开已读回执弹层，下面会真的发一条「控制台体检探针」—— 不清理的话
    每体检一次演示群里就多一条这种消息。开跑前记基线，收尾按基线删。 */
-const msgBaseline = maxMessageId()
+const msgBaseline = await maxMessageId()
 
 const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe'
 const PORT = 9441
@@ -287,8 +287,8 @@ await sleep(800)
 
 proc.kill()
 
-const gone = purgeMessagesAfter(msgBaseline)
-purgeOrphanUploads({ quiet: false })
+const gone = await purgeMessagesAfter(msgBaseline)
+await purgeOrphanUploads({ quiet: false })
 if (gone) console.log(`已清理本次体检产生的 ${gone} 条消息`)
 
 console.log('\n─── 控制台问题 ───')

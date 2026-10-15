@@ -96,7 +96,7 @@ async function ensureGroup(title, usernames) {
    所以每跑一轮就多留一批同名孤儿，「回执演示·部分」一度攒到 13 个。
    真要清只能从这里直接删库（见 scripts/lib/debris.mjs）。 */
 {
-  const r = purgeDebris({ quiet: true })
+  const r = await purgeDebris({ quiet: true })
   if (r.conversations) console.log(`已清理历次自检残留：${r.conversations} 个会话 / ${r.messages} 条消息`)
 }
 
@@ -532,7 +532,7 @@ try {
 /* 三个小组都是一次性道具，跑完真删掉，别在演示库里堆孤儿会话。
    想手动体验回执效果的话，跑之前把 --keep 去掉前先看截图，或者自己在 App 里建个群。 */
 {
-  const r = purgeDebris({ quiet: true })
+  const r = await purgeDebris({ quiet: true })
   console.log(`\n已清理本次自检残留：${r.conversations} 个会话 / ${r.messages} 条消息`)
 }
 

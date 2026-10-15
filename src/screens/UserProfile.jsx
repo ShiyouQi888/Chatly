@@ -5,7 +5,7 @@
  * 既然入口一定在私聊里，就一定已经存在会话 —— 所以「发消息」只是收起这一页回到聊天。
  */
 import React, { useEffect, useState } from 'react'
-import { api } from '../api/client.js'
+import { api, mediaUrl } from '../api/client.js'
 import { avatarOf } from '../store/ChatStore.jsx'
 import { Avatar, Chip, Empty } from '../components/ui.jsx'
 import {
@@ -23,11 +23,16 @@ const GENDER_LABEL = { male: '男', female: '女', other: '其他' }
 export default function UserProfile({ userId, onBack, onMessage }) {
   const [data, setData] = useState(null)
   const [err, setErr] = useState('')
+  /* 对方背景图挂了（文件被清理 / 网络失败）→ 退回默认渐变。
+     和「我」页同一个原则：坏图不能留一片空白，但也不用 toast 打扰 ——
+     这是在看别人的资料，不是自己操作失败。 */
+  const [coverBroken, setCoverBroken] = useState(false)
 
   useEffect(() => {
     let alive = true
     setData(null)
     setErr('')
+    setCoverBroken(false)
     api
       .userProfile(userId)
       .then((d) => alive && setData(d))
@@ -61,9 +66,17 @@ export default function UserProfile({ userId, onBack, onMessage }) {
         <>
           <div className="up-scroll no-scrollbar">
             <div className="up-hero">
-              <div className="up-cover" aria-hidden="true">
-                <span className="up-cover-a" />
-                <span className="up-cover-b" />
+              <div className={`up-cover ${u.profileCover && !coverBroken ? 'has-image' : ''}`} aria-hidden="true">
+                {/* 对方设过背景就显示他的背景；没设或挂了就是他自己的渐变（和「我」页同一套兜底）。 */}
+                {u.profileCover && !coverBroken && (
+                  <img className="up-cover-img" src={mediaUrl(u.profileCover)} alt="" onError={() => setCoverBroken(true)} />
+                )}
+                {(!u.profileCover || coverBroken) && (
+                  <>
+                    <span className="up-cover-a" />
+                    <span className="up-cover-b" />
+                  </>
+                )}
               </div>
               <div className="up-idcard">
                 <Avatar src={avatarOf(u)} name={u.nickname} size={82} radius={26} online={data.online} />

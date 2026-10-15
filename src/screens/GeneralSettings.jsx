@@ -1,15 +1,23 @@
 import React, { useState, useEffect } from 'react'
-import { IconBack, IconChevron } from '../components/Icon.jsx'
+import { IconBack } from '../components/Icon.jsx'
+import { applyFontSize } from '../utils/theme.js'
 import './me-tab.css'
 
 /* ===== 通用设置 =====
  * 所有设置项持久化到 localStorage
- * 字体大小通过 CSS 变量 --font-scale 应用到全局 */
+ * 字体大小通过 CSS 变量 --font-scale 应用到全局
+ *
+ * 这一页最要紧的是**每个开关都得有代码读它**，否则关掉它什么都不会发生。
+ * 逐项核对：
+ *   · 聊天列表左滑删除 → ChatTab 读 `chatly-swipe-delete`
+ *   · 回车键发送       → ChatRoom 读 `chatly-enter-to-send`
+ *   · 自动下载图片     → ChatRoom 的图片气泡读 `chatly-auto-download`
+ *   · 字体大小         → tokens.css 的 --fs-* 都乘 --font-scale
+ */
 export default function GeneralSettings({ onBack, showToast }) {
   const [fontSize, setFontSize] = useState(() => {
     return localStorage.getItem('chatly-font-size') || 'standard'
   })
-  const [language] = useState('zh-CN')
   const [swipeDelete, setSwipeDelete] = useState(() => {
     return localStorage.getItem('chatly-swipe-delete') !== 'false'
   })
@@ -22,14 +30,9 @@ export default function GeneralSettings({ onBack, showToast }) {
   const [cacheSize, setCacheSize] = useState('0 MB')
 
   useEffect(() => {
-    // 应用字体大小到全局
-    const scaleMap = {
-      small: '0.9',
-      standard: '1',
-      large: '1.1',
-      xlarge: '1.2',
-    }
-    document.documentElement.style.setProperty('--font-scale', scaleMap[fontSize] || '1')
+    /* 复用 utils/theme.js 的 applyFontSize，不在这里再抄一份倍率表 ——
+       两份 map 迟早会漂（改了 1.15 只改一处，另一个入口还是 1.1）。 */
+    applyFontSize(fontSize)
     localStorage.setItem('chatly-font-size', fontSize)
   }, [fontSize])
 
@@ -60,10 +63,11 @@ export default function GeneralSettings({ onBack, showToast }) {
   }, [])
 
   const clearCache = () => {
-    // 清除缓存（保留登录状态和设置）
+    // 清除缓存（保留登录状态和设置）。
+    // ⚠️ token 的真实 key 是 'chatly.token'（见 api/client.js 的 TOKEN_KEY），
+    // 以前这里写的是 'chatly-token'，对不上 —— 点「清除缓存」会把人直接登出。
     const keysToKeep = [
-      'chatly-token',
-      'chatly-user',
+      'chatly.token',
       'chatly-font-size',
       'chatly-swipe-delete',
       'chatly-enter-to-send',
@@ -140,7 +144,11 @@ export default function GeneralSettings({ onBack, showToast }) {
               </label>
             </div>
             <div className="settings-item">
-              <span className="settings-label">发送键回车换行</span>
+              {/* ⚠️ 这一项的标签原来写的是「发送键回车换行」，而 `chatly-enter-to-send`
+                  为 true（默认）时回车是**发送**。也就是说标签的字面意思和实际行为是反的：
+                  想要「回车即发送」的人会以为要关掉它，一关反而变成回车换行。
+                  标签必须写成它真的做的事。 */}
+              <span className="settings-label">回车键发送</span>
               <label className="settings-switch">
                 <input
                   type="checkbox"
@@ -162,6 +170,10 @@ export default function GeneralSettings({ onBack, showToast }) {
               </label>
             </div>
           </div>
+          <p className="settings-hint">
+            关掉「回车键发送」后回车是换行，发送请点输入框右侧的按钮。
+            关掉「自动下载图片」后，聊天里的图片会先显示为「点击加载」。
+          </p>
         </div>
 
         {/* 清除缓存 */}

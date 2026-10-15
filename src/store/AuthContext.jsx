@@ -42,11 +42,14 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
-  const login = useCallback(async ({ type = 'login', username, password, nickname } = {}) => {
-    const out =
-      type === 'register'
-        ? await api.register(username, password, nickname)
-        : await api.login(username, password)
+  const login = useCallback(async ({ type = 'login', username, identifier, phone, email, code, password, nickname } = {}) => {
+    const out = type === 'registerPhone'
+      ? await api.registerPhone({ phone, code, password, nickname })
+      : type === 'registerEmail'
+        ? await api.registerEmail({ email, code, password, nickname })
+        : type === 'register'
+          ? await api.register(username, password, nickname)
+          : await api.login(identifier || username, password)
 
     if (!out?.token) throw new Error('服务端未返回 token')
     tokenStore.set(out.token)
@@ -56,6 +59,7 @@ export function AuthProvider({ children }) {
   }, [])
 
   const logout = useCallback(() => {
+    void api.logout().catch(() => {})
     tokenStore.clear()
     setToken(null)
     setUser(null)
@@ -76,14 +80,27 @@ export function AuthProvider({ children }) {
     return { user: u, url }
   }, [])
 
+  /* 主页背景：和头像同一套规矩 —— 以后端回包的 user 为准回写本地 */
+  const uploadCover = useCallback(async (file) => {
+    const { user: u, url } = await api.uploadCover(file)
+    setUser(u)
+    return { user: u, url }
+  }, [])
+
+  const resetCover = useCallback(async () => {
+    const { user: u } = await api.resetCover()
+    setUser(u)
+    return u
+  }, [])
+
   /** 让别处（如 WS 推来的资料变更）也能刷新当前用户 */
   const applyUser = useCallback((u) => {
     if (u?.id) setUser((prev) => (prev && prev.id === u.id ? { ...prev, ...u } : prev))
   }, [])
 
   const value = useMemo(
-    () => ({ user, token, ready, login, logout, updateProfile, uploadAvatar, applyUser }),
-    [user, token, ready, login, logout, updateProfile, uploadAvatar, applyUser]
+    () => ({ user, token, ready, login, logout, updateProfile, uploadAvatar, uploadCover, resetCover, applyUser }),
+    [user, token, ready, login, logout, updateProfile, uploadAvatar, uploadCover, resetCover, applyUser]
   )
 
   return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>

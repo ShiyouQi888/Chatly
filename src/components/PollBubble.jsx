@@ -193,7 +193,7 @@ export function PollSheet({ open, onClose, onSubmit }) {
           >
             <span className="poll-toggle-main">
               <b>多选</b>
-              <em>{multi ? '每人可以选多个选项' : '每人只能选一个（可改票）'}</em>
+              <em>{multi ? '每人可以选多个选项，提交后不可修改' : '每人只能选一个，提交后不可修改'}</em>
             </span>
             <SwitchDot on={multi} />
           </button>
@@ -278,6 +278,7 @@ export function PollBubble({ poll, loading, me, onVote, onClose, onOpenDetail })
      统一成 Set 之后 `.has()` 和 `[...selected]` 两个用法都成立。 */
   const selected = useMemo(() => new Set(pending !== null ? pending : mine), [pending, mine])
   const closed = !!poll?.closed
+  const hasVoted = mine.size > 0
 
   /* 换了一条投票（气泡被复用）就把本地态清掉 */
   useEffect(() => {
@@ -307,9 +308,13 @@ export function PollBubble({ poll, loading, me, onVote, onClose, onOpenDetail })
       setNote('投票已结束，不能再投了')
       return
     }
-    /* 单选：点一下就发（点已选项 = 取消投票，这是唯一的「反悔」入口）。 */
+    if (hasVoted) {
+      setNote('你已经投过票，不能修改或撤销')
+      return
+    }
+    /* 单选：点一下即提交，提交后锁定。 */
     if (!poll.multi) {
-      const next = mine.has(optId) ? [] : [optId]
+      const next = [optId]
       setBusy(true)
       try {
         await onVote?.(next)
@@ -330,7 +335,7 @@ export function PollBubble({ poll, loading, me, onVote, onClose, onOpenDetail })
   }
 
   const submitMulti = async () => {
-    if (busy || !poll.multi) return
+    if (busy || !poll.multi || hasVoted) return
     setBusy(true)
     setNote('')
     try {
@@ -378,7 +383,7 @@ export function PollBubble({ poll, loading, me, onVote, onClose, onOpenDetail })
               type="button"
               key={o.id}
               className={`pb-opt ${on ? 'is-on' : ''}`}
-              disabled={busy}
+              disabled={busy || closed || hasVoted}
               onClick={() => tap(o.id)}
               data-testid={`pb-opt-${o.id}`}
               data-selected={on ? '1' : '0'}
@@ -427,7 +432,7 @@ export function PollBubble({ poll, loading, me, onVote, onClose, onOpenDetail })
         </button>
       </div>
 
-      {poll.multi && !closed && (
+      {poll.multi && !closed && !hasVoted && (
         <div className="pb-actions">
           <span className="pb-tip">
             {pending === null ? '可以选多项' : `已选 ${pending.length} 项`}
@@ -443,6 +448,8 @@ export function PollBubble({ poll, loading, me, onVote, onClose, onOpenDetail })
           </button>
         </div>
       )}
+
+      {hasVoted && !closed && <p className="pb-note" data-testid="poll-locked">你已投票，不能再次修改</p>}
 
       {(note || (closed && !mine.size)) && (
         <p className="pb-note" data-testid="poll-note">
@@ -527,7 +534,7 @@ export function PollDetailSheet({ poll, me, onClose, onVote, onClosePoll }) {
                 type="button"
                 key={o.id}
                 className={`pd-opt ${mineOpt ? 'is-on' : ''}`}
-                disabled={closed}
+                disabled={closed || (poll.myOptionIds || []).length > 0}
                 onClick={() => onVote?.([o.id])}
               >
                 <span className="pd-opt-top">
@@ -550,6 +557,10 @@ export function PollDetailSheet({ poll, me, onClose, onVote, onClosePoll }) {
             )
           })}
         </section>
+
+        {(poll.myOptionIds || []).length > 0 && !closed && (
+          <p className="pd-empty" data-testid="poll-locked">你已投票，不能再次修改或撤销</p>
+        )}
 
         <section className="poll-card">
           <div className="poll-card-title">

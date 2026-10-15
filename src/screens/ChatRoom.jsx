@@ -9,7 +9,7 @@ import React, {
 } from 'react'
 import { useApp } from '../store/AppContext.jsx'
 import { useChat, avatarOf } from '../store/ChatStore.jsx'
-import { api, formatDayLabel } from '../api/client.js'
+import { api, formatDayLabel, mediaUrl } from '../api/client.js'
 import { Avatar, ActionMenu, Sheet, Switch } from '../components/ui.jsx'
 import EmojiPanel, { isEmojiSticker } from '../components/EmojiPanel.jsx'
 import MediaViewer, { VideoBubble, isVideoMessage } from '../components/MediaViewer.jsx'
@@ -22,7 +22,6 @@ import { useWatchLater } from '../store/WatchLaterStore.jsx'
 import { useLongPress } from '../hooks/useLongPress.js'
 import {
   IconBack,
-  IconPhone,
   IconVideo,
   IconMore,
   IconPlus,
@@ -45,9 +44,9 @@ import {
   IconLocate,
   IconChevron,
 } from '../components/Icon.jsx'
-import { AI_REPLIES } from '../data/mock.js'
 import UserProfile from './UserProfile.jsx'
 import GroupSettings from './GroupSettings.jsx'
+import GroupFilesPage from './GroupFilesPage.jsx'
 import './chat-room.css'
 
 const REVOKE_WINDOW = 2 * 60 * 1000
@@ -91,14 +90,6 @@ function Header({ chat, onBack, onInfo, onProfile, onGroup, typing, connected })
       </div>
 
       <div className="rh-act">
-        <button type="button" className="rh-btn" aria-label="语音通话" onClick={() => onInfo('call')}>
-          <IconPhone size={19} />
-        </button>
-        {!isGroup && (
-          <button type="button" className="rh-btn" aria-label="视频通话" onClick={() => onInfo('video')}>
-            <IconVideo size={19} />
-          </button>
-        )}
         <button type="button" className="rh-btn" aria-label="会话设置" onClick={() => onInfo()}>
           <IconMore size={19} />
         </button>
@@ -131,7 +122,7 @@ function FileCard({ m, mine }) {
 
   const open = () => {
     if (!m.fileUrl) return showToast('文件地址缺失')
-    window.open(m.fileUrl, '_blank', 'noopener')
+    window.open(mediaUrl(m.fileUrl), '_blank', 'noopener')
   }
 
   return (
@@ -150,9 +141,37 @@ function FileCard({ m, mine }) {
   )
 }
 
-/* ===== 图片（带加载失败兜底：文件被清理时不显示浏览器的破图标） ===== */
+function isVoiceMessage(m) {
+  return m?.kind === 'file' && /^voice-note-.*\.(webm|m4a|ogg|opus|wav|mp3)$/i.test(m.fileName || '')
+}
+
+function VoiceBubble({ m, mine }) {
+  return (
+    <div className={`voice-bubble ${mine ? 'is-mine' : ''}`}>
+      <IconMic size={18} />
+      <audio controls preload="metadata" src={mediaUrl(m.fileUrl)} aria-label="语音消息" />
+    </div>
+  )
+}
+
+/* ===== 图片（带加载失败兜底：文件被清理时不显示浏览器的破图标） =====
+ *
+ * 「自动下载图片」这个开关（我 → 通用设置）**只有在这里读它才有意义**。
+ * 以前它谁都不读：用户关掉之后聊天里照样把所有图都下载下来，
+ * 而且没有任何迹象表明开关没生效 —— 典型的「存得下、不生效」。
+ * 关掉时的占位样式（`.img-bubble.is-locked` / `.img-lock-hint`）早就写好了，
+ * 只是没人接上（CSS 里那段注释就是当年留下的）。
+ */
+const AUTO_DOWNLOAD_KEY = 'chatly-auto-download'
+
 function ImageBubble({ m, onOpen }) {
   const [broken, setBroken] = useState(false)
+  /* 每张图**各自**记「这一张已经点了加载」。
+     用一个共享状态的话，点一张会把这个会话里所有图一起放出来 ——
+     用户点的是「这一张」，不是「全部」。 */
+  const [locked, setLocked] = useState(
+    () => localStorage.getItem(AUTO_DOWNLOAD_KEY) === 'false'
+  )
 
   if (broken) {
     return (
@@ -163,9 +182,25 @@ function ImageBubble({ m, onOpen }) {
     )
   }
 
+  /* 自动下载关掉时先不请求图片，只显示一个明说「点击加载」的占位 ——
+     直接放一张空灰块会让人以为图坏了 */
+  if (locked) {
+    return (
+      <button
+        type="button"
+        className="img-bubble is-locked"
+        onClick={() => setLocked(false)}
+        aria-label="加载图片"
+        data-testid="img-locked"
+      >
+        <span className="img-lock-hint">点击加载图片</span>
+      </button>
+    )
+  }
+
   return (
     <button type="button" className="img-bubble" onClick={() => onOpen(m)}>
-      <img src={m.fileUrl} alt={m.fileName || '图片'} loading="lazy" onError={() => setBroken(true)} />
+      <img src={mediaUrl(m.fileUrl)} alt={m.fileName || '图片'} loading="lazy" onError={() => setBroken(true)} />
     </button>
   )
 }
@@ -190,7 +225,7 @@ function Sticker({ m }) {
   return (
     <img
       className="sticker"
-      src={m.fileUrl}
+      src={mediaUrl(m.fileUrl)}
       alt={m.fileName || '表情'}
       loading="lazy"
       draggable={false}
@@ -392,11 +427,12 @@ function Message({ m, chat, me, peersWithState, readPopMsgId, onLongPress, onOpe
         {/* 视频有两种来源：`kind === 'video'` 是走「视频」入口发的；
             早先没有视频入口时只能走「文件」，库里存的是 file，
             所以按扩展名补判一次 —— 否则用户以前发的视频点开还是播不了。 */}
-        {(m.kind === 'video' || isVideoMessage(m)) && (
+        {(m.kind === 'video' || (isVideoMessage(m) && !isVoiceMessage(m))) && (
           <VideoBubble m={m} onOpen={onOpenImage} />
         )}
 
-        {m.kind === 'file' && !isVideoMessage(m) && <FileCard m={m} mine={mine} />}
+        {isVoiceMessage(m) && <VoiceBubble m={m} mine={mine} />}
+        {m.kind === 'file' && !isVideoMessage(m) && !isVoiceMessage(m) && <FileCard m={m} mine={mine} />}
 
         {/* 位置消息：地图缩略 + 地点名 + 地址。坐标可能缺（用户手输的地点名），
             缺的时候气泡里会写清「只发了地点名」，不画地图。 */}
@@ -434,9 +470,10 @@ function Message({ m, chat, me, peersWithState, readPopMsgId, onLongPress, onOpe
 }
 
 /* ===== 会话设置面板 ===== */
-function InfoSheet({ open, onClose, chat, me, onDelete, onProfile, onGroup }) {
+function InfoSheet({ open, onClose, chat, me, onDelete, onProfile, onGroup, onEditAnnouncement, onFiles }) {
   const { showToast } = useApp()
-  const { togglePin, toggleMute } = useChat()
+  const { togglePin, toggleMute, mergeGroupMeta } = useChat()
+  const [pushBusy, setPushBusy] = useState(false)
 
   if (!open) return null
 
@@ -444,7 +481,19 @@ function InfoSheet({ open, onClose, chat, me, onDelete, onProfile, onGroup }) {
   const peer = others[0]?.user
   const isGroup = chat.type === 'group'
 
-  const call = (t) => showToast(`${t} · 尚未接入`)
+  const pushAnnouncement = async () => {
+    if (!chat.announcement || !['owner', 'admin'].includes(chat.myRole) || pushBusy) return
+    setPushBusy(true)
+    try {
+      const { meta } = await api.pushGroupAnnouncement(chat.id)
+      mergeGroupMeta(chat.id, meta)
+      showToast('群公告已置顶并通知全体成员')
+    } catch (e) {
+      showToast(e.message || '公告推送失败')
+    } finally {
+      setPushBusy(false)
+    }
+  }
 
   return (
     <Sheet open={open} onClose={onClose} title="会话设置">
@@ -468,16 +517,28 @@ function InfoSheet({ open, onClose, chat, me, onDelete, onProfile, onGroup }) {
       </div>
 
       {isGroup && (
-        /* 群聊多一条「群设置」：改群名 / 发公告 / 管成员都在那一页，
-           这里只放个入口 —— 两处都做完整编辑会让同一份状态有两个写入点。 */
+        /* 群文件和公告直接放在会话信息外层；群设置保留成员与资料管理。 */
         <div className="info-block">
+          <h5>群内容</h5>
+          <div className="inline-rows">
+            <button type="button" className="inline-row" onClick={onFiles}>
+              <span>群文件</span>
+              <span className="inline-right">分类浏览<IconChevron size={15} /></span>
+            </button>
+          </div>
+          <div className="info-announcement">
+            <div className="info-announcement-head"><b>群公告</b><span>{chat.announcementAt ? formatDayLabel(Number(chat.announcementAt) || new Date(chat.announcementAt).getTime()) : ''}</span></div>
+            <p>{chat.announcement || '还没有群公告'}</p>
+            <div className="info-announcement-actions">
+              <button type="button" className="info-ann-action" onClick={chat.myRole === 'owner' || chat.myRole === 'admin' ? onEditAnnouncement : onGroup}>{chat.myRole === 'owner' || chat.myRole === 'admin' ? (chat.announcement ? '编辑公告' : '发布公告') : '群管理'}</button>
+              {chat.announcement && ['owner', 'admin'].includes(chat.myRole) && (
+                <button type="button" className="info-ann-action is-muted" disabled={pushBusy} onClick={pushAnnouncement}>{pushBusy ? '推送中…' : '置顶并推送'}</button>
+              )}
+            </div>
+          </div>
           <div className="inline-rows">
             <button type="button" className="inline-row" onClick={onGroup}>
-              <span>群设置</span>
-              <span className="inline-right">
-                {chat.announcement ? '有公告' : '公告 / 成员'}
-                <IconChevron size={15} />
-              </span>
+              <span>群设置与成员管理</span><span className="inline-right"><IconChevron size={15} /></span>
             </button>
           </div>
         </div>
@@ -534,20 +595,6 @@ function InfoSheet({ open, onClose, chat, me, onDelete, onProfile, onGroup }) {
         </div>
       </div>
 
-      <div className="info-block">
-        <h5>尚未接入</h5>
-        <div className="inline-rows">
-          <button type="button" className="inline-row is-pending" onClick={() => call('语音通话')}>
-            <span>语音通话</span>
-            <span className="inline-right">未接入</span>
-          </button>
-          <button type="button" className="inline-row is-pending" onClick={() => call('视频通话')}>
-            <span>视频通话</span>
-            <span className="inline-right">未接入</span>
-          </button>
-        </div>
-      </div>
-
       <button
         type="button"
         className="info-danger"
@@ -567,7 +614,7 @@ function InfoSheet({ open, onClose, chat, me, onDelete, onProfile, onGroup }) {
    用 useImperativeHandle 而不是把 text 状态提到 ChatRoom ——
    那样输入框每敲一个字都要重渲染整个消息列表，长会话下会明显卡。 */
 const Composer = forwardRef(function Composer(
-  { onSend, onPlus, onTyping, disabled, emojiOpen, onToggleEmoji, onCloseEmoji, quote, onCancelQuote },
+  { onSend, onPlus, onTyping, onVoiceRecord, recording, disabled, emojiOpen, onToggleEmoji, onCloseEmoji, quote, onCancelQuote },
   ref
 ) {
   const [text, setText] = useState('')
@@ -646,7 +693,14 @@ const Composer = forwardRef(function Composer(
         </div>
       )}
       <div className="cp-row">
-      <button type="button" className="cp-btn" onClick={() => showToast('语音消息 · 尚未接入')} aria-label="语音">
+      <button
+        type="button"
+        className={`cp-btn ${recording ? 'is-recording' : ''}`}
+        onClick={onVoiceRecord}
+        disabled={disabled}
+        aria-label={recording ? '结束并发送语音' : '录制语音消息'}
+        title={recording ? '点击结束并发送' : '录制语音消息'}
+      >
         <IconMic size={21} />
       </button>
       {/* 点输入框就收起表情面板。挂在外层 .cp-field 而不是 textarea 上：
@@ -680,7 +734,9 @@ const Composer = forwardRef(function Composer(
           onFocus={() => setFocus(true)}
           onBlur={() => setFocus(false)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
+            // 读取设置：回车是发送还是换行
+            const enterToSend = localStorage.getItem('chatly-enter-to-send') !== 'false'
+            if (e.key === 'Enter' && !e.shiftKey && enterToSend) {
               e.preventDefault()
               submit()
             }
@@ -832,6 +888,8 @@ export default function ChatRoom({ chat, onBack, jumpTo, onJumped }) {
   const [profileId, setProfileId] = useState(null) // 正在查看的对方 user id
   const [emoji, setEmoji] = useState(false) // 表情面板
   const [gset, setGset] = useState(false) // 群设置页（只有群聊会开）
+  const [editAnnouncementOnOpen, setEditAnnouncementOnOpen] = useState(false)
+  const [groupFilesOpen, setGroupFilesOpen] = useState(false)
   const [annOpen, setAnnOpen] = useState(false) // 群公告是否已展开
 
   const composerRef = useRef(null)
@@ -840,6 +898,11 @@ export default function ChatRoom({ chat, onBack, jumpTo, onJumped }) {
   const roomRef = useRef(null)
   const fileRef = useRef(null)
   const fileKindRef = useRef('file')
+  const voiceRecorderRef = useRef(null)
+  const voiceStreamRef = useRef(null)
+  const voiceChunksRef = useRef([])
+  const voiceTimeoutRef = useRef(null)
+  const [recording, setRecording] = useState(false)
   const lastIdRef = useRef(null)
   const flashTimer = useRef(null)
 
@@ -1295,6 +1358,88 @@ export default function ChatRoom({ chat, onBack, jumpTo, onJumped }) {
     }
   }
 
+  const stopVoiceStream = () => {
+    clearTimeout(voiceTimeoutRef.current)
+    voiceTimeoutRef.current = null
+    voiceStreamRef.current?.getTracks().forEach((track) => track.stop())
+    voiceStreamRef.current = null
+    voiceRecorderRef.current = null
+    setRecording(false)
+  }
+
+  const recordVoice = async () => {
+    if (recording) {
+      voiceRecorderRef.current?.stop()
+      return
+    }
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      showToast('当前浏览器不支持语音录制')
+      return
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const candidates = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus']
+      const mimeType = candidates.find((type) => MediaRecorder.isTypeSupported?.(type))
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
+      voiceStreamRef.current = stream
+      voiceRecorderRef.current = recorder
+      voiceChunksRef.current = []
+      recorder.ondataavailable = (event) => {
+        if (event.data?.size) voiceChunksRef.current.push(event.data)
+      }
+      recorder.onerror = () => {
+        showToast('录音失败，请检查麦克风权限')
+        stopVoiceStream()
+      }
+      recorder.onstop = async () => {
+        const blob = new Blob(voiceChunksRef.current, { type: recorder.mimeType || 'audio/webm' })
+        const extension = blob.type.includes('mp4') ? 'm4a' : blob.type.includes('ogg') ? 'ogg' : 'webm'
+        stopVoiceStream()
+        if (!blob.size) {
+          showToast('没有录到声音')
+          return
+        }
+        if (blob.size > 20 * 1024 * 1024) {
+          showToast('语音消息超过 20MB，请缩短后重试')
+          return
+        }
+        const file = new File([blob], `voice-note-${Date.now()}.${extension}`, { type: blob.type })
+        showToast('语音上传中…')
+        try {
+          const uploaded = await api.upload(file)
+          await sendMessage({
+            conversationId: chat.id,
+            kind: 'file',
+            fileUrl: uploaded.url,
+            fileName: uploaded.fileName,
+            fileSize: uploaded.fileSize,
+          })
+        } catch (error) {
+          showToast(error.message || '语音发送失败')
+        }
+      }
+      recorder.start(250)
+      setRecording(true)
+      voiceTimeoutRef.current = setTimeout(() => {
+        if (recorder.state === 'recording') recorder.stop()
+        showToast('语音录制达到 2 分钟上限，正在发送')
+      }, 120_000)
+    } catch (error) {
+      stopVoiceStream()
+      showToast(error.name === 'NotAllowedError' ? '请允许麦克风权限后重试' : '无法访问麦克风')
+    }
+  }
+
+  useEffect(() => () => {
+    clearTimeout(voiceTimeoutRef.current)
+    const recorder = voiceRecorderRef.current
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.onstop = null
+      recorder.stop()
+    }
+    voiceStreamRef.current?.getTracks().forEach((track) => track.stop())
+  }, [])
+
   /* ---------- 撤回 ---------- */
   const doRevoke = async (m) => {
     try {
@@ -1399,11 +1544,7 @@ export default function ChatRoom({ chat, onBack, jumpTo, onJumped }) {
         typing={!!typingUser && typingUser !== me?.id}
         connected={connected}
         onBack={onBack}
-        onInfo={(kind) => {
-          if (kind === 'call') showToast('语音通话 · 尚未接入')
-          else if (kind === 'video') showToast('视频通话 · 尚未接入')
-          else setInfo(true)
-        }}
+        onInfo={() => setInfo(true)}
         onProfile={openPeerProfile}
         onGroup={() => setGset(true)}
       />
@@ -1475,23 +1616,6 @@ export default function ChatRoom({ chat, onBack, jumpTo, onJumped }) {
             <i />
             <i />
             <i />
-          </div>
-        )}
-
-        {/* 快捷回复：点一下真的会发出去 */}
-        {list && list.length > 0 && chat.type !== 'group' && (
-          <div className="ai-bar">
-            <div className="ai-head">
-              <span className="ai-badge">快捷</span>
-              <span className="ai-title">一键回复</span>
-            </div>
-            <div className="ai-chips">
-              {AI_REPLIES.slice(0, 3).map((r) => (
-                <button key={r} type="button" className="ai-chip" onClick={() => send(r)}>
-                  {r}
-                </button>
-              ))}
-            </div>
           </div>
         )}
 
@@ -1568,6 +1692,8 @@ export default function ChatRoom({ chat, onBack, jumpTo, onJumped }) {
             setPlus(true)
           }}
           disabled={!connected}
+          onVoiceRecord={recordVoice}
+          recording={recording}
           emojiOpen={emoji}
           onToggleEmoji={() => setEmoji((v) => !v)}
           onCloseEmoji={() => setEmoji(false)}
@@ -1578,7 +1704,8 @@ export default function ChatRoom({ chat, onBack, jumpTo, onJumped }) {
 
       <input ref={fileRef} type="file" hidden onChange={onFileChosen} />
 
-      <ActionMenu open={!!menuState} onClose={() => setMenuState(null)} items={menuItems} />
+      {/* 消息菜单由**长按**弹出来（onLongPress），所以要开那道「补发 click」防御 */}
+      <ActionMenu open={!!menuState} onClose={() => setMenuState(null)} items={menuItems} longPress />
 
       {/* 转发目标选择器：整屏层。forward.ids 可能是 1 条（长按菜单）或 N 条（多选）。
           ⚠️ 和投票面板（PollSheet）/ 选位置（LocationPicker）是**互斥**的整屏层，
@@ -1609,7 +1736,17 @@ export default function ChatRoom({ chat, onBack, jumpTo, onJumped }) {
           setInfo(false)
           setGset(true)
         }}
+        onEditAnnouncement={() => {
+          setInfo(false)
+          setEditAnnouncementOnOpen(true)
+          setGset(true)
+        }}
+        onFiles={() => {
+          setInfo(false)
+          setGroupFilesOpen(true)
+        }}
       />
+      {groupFilesOpen && <GroupFilesPage chat={chat} sendMessage={sendMessage} onBack={() => setGroupFilesOpen(false)} />}
       <PlusSheet
         open={plus}
         onClose={() => setPlus(false)}
@@ -1679,6 +1816,8 @@ export default function ChatRoom({ chat, onBack, jumpTo, onJumped }) {
       {gset && (
         <GroupSettings
           chat={chat}
+          openAnnouncementEditor={editAnnouncementOnOpen}
+          onAnnouncementEditorOpened={() => setEditAnnouncementOnOpen(false)}
           onBack={() => setGset(false)}
           onOpenProfile={(id) => setProfileId(id)}
           onLeft={() => {

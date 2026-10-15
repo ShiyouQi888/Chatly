@@ -79,7 +79,36 @@
   box-shadow: var(--shadow-sm);
 }
 
+.lg-method-seg {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.lg-method-seg button {
+  min-width: 0;
+  min-height: 42px;
+  padding: 8px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-3);
+  font-size: var(--fs-sub);
+  font-weight: 550;
+  white-space: nowrap;
+}
+
+.lg-method-seg button.is-on {
+  border-color: var(--brand-2);
+  background: var(--brand-soft);
+  color: var(--brand-2);
+}
+
 .lg-field {
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -104,6 +133,36 @@
 
 .lg-field input::placeholder {
   color: var(--text-4);
+}
+
+.lg-code-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.lg-code-button {
+  min-width: 100px;
+  max-width: 132px;
+  padding: 0 10px;
+  border-radius: var(--r-md);
+  background: var(--brand-soft);
+  color: var(--brand-2);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.lg-code-button:disabled {
+  opacity: 0.55;
+}
+
+.lg-method-hint {
+  margin: -4px 3px 0;
+  color: var(--text-4);
+  font-size: var(--fs-micro);
+  line-height: 1.5;
 }
 
 .lg-error {

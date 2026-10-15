@@ -79,6 +79,17 @@
   background: linear-gradient(150deg, #b6a7fb, #7b5cf6 55%, #5b6ef5);
 }
 
+/* 对方设置的主页背景（公开资料的一部分，和头像同性质）。
+   cover 铺满 + 圆角由父层 overflow:hidden 裁切，和「我」页的 .me-cover-img 同构。 */
+.up-cover-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
 .up-cover-a,
 .up-cover-b {
   position: absolute;

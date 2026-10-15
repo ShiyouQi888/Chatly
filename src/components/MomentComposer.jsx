@@ -8,14 +8,14 @@
  *   1. **媒体先上传再发布**，不是「先本地预览、发布时才传」。
  *      图 / 视频就是这条动态的内容本身，发布失败却留下一堆孤儿文件是最难收拾的状态。
  *      代价是取消发布要清掉已传的文件 —— 这个代价小得多（由清理脚本按「无人引用」回收）。
- *   2. **未接入的类型（投票 / 活动 / 链接卡片）一律 disabled 并写明**，不弹 toast 假装成功。
+ *   2. **投票 / 活动 / 链接卡片与动态一起落库**，编辑动态时也会同步更新卡片内容。
  *
  * 视频与图片**互斥**（一条动态要么图文、要么 1 个视频）：
  * 朋友圈也是这个规则 —— 视频动态是「一段视频 + 一段话」，
  * 混着发的话九宫格里要起好几个解码器，滚动起来手机发烫，收益却几乎为零。
  */
 import React, { useRef, useState } from 'react'
-import { api } from '../api/client.js'
+import { api, mediaUrl } from '../api/client.js'
 import VideoPlayer, { fmtTime } from './VideoPlayer.jsx'
 import LocationPicker from './LocationPicker.jsx'
 import {
@@ -26,8 +26,6 @@ import {
   IconLocate,
   IconVideo,
   IconCheck,
-  IconFolder,
-  IconStar,
   IconChevron,
 } from './Icon.jsx'
 import './moment-composer.css'
@@ -42,6 +40,11 @@ const VIDEO_MAX_SEC = 180
 const CONTENT_MAX = 2000
 const TOPIC_MAX = 40
 
+function localDateTimeValue(date) {
+  const offset = date.getTimezoneOffset() * 60000
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16)
+}
+
 function fmtBytes(n) {
   const b = Number(n) || 0
   if (b >= 1024 * 1024) return `${(b / 1024 / 1024).toFixed(1)} MB`
@@ -54,7 +57,7 @@ const SCOPES = [
   { v: 'private', label: '仅自己', desc: '只有我能看' },
 ]
 
-export default function MomentComposer({ open, editing, onClose, onSubmit }) {
+export default function MomentComposer({ open, editing, defaultVisibility = 'public', onClose, onSubmit }) {
   const [content, setContent] = useState('')
   const [topic, setTopic] = useState('')
   const [location, setLocation] = useState('')
@@ -64,6 +67,7 @@ export default function MomentComposer({ open, editing, onClose, onSubmit }) {
   const [locOpen, setLocOpen] = useState(false)
   const [visibility, setVisibility] = useState('public')
   const [media, setMedia] = useState([]) // { url, fileName, fileSize, kind, width, height, duration }
+  const [card, setCard] = useState(null) // { kind, data }
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const fileRef = useRef(null)
@@ -73,10 +77,20 @@ export default function MomentComposer({ open, editing, onClose, onSubmit }) {
 
   /* 打开 / 编辑对象变化时预填。
      放在渲染期同步 setState 是刻意的：写成 useEffect 会先渲染一帧空表单再填，
-     编辑时能看到内容「跳」一下。这里没有副作用，只是把初始值算出来。 */
+     编辑时能看到内容「跳」一下。这里没有副作用，只是把初始值算出来。
+
+     ⚠️ 判据**不能**写 `loaded !== editing`。新建时 `editing` 是 null，
+     而 `loaded` 初值也是 null → 条件恒为 false，于是：
+       ① 新建**从来不预填**（这时问题不大，靠 useState 初值兜住了）；
+       ② 但编辑过一次之后 `loaded` 会变成那条动态，关掉面板只把 `loaded` 清回 null，
+          **表单 state 还留着上一条的正文** —— 再点「+」新建，
+          输入框里赫然是刚才编辑的那条内容，一不小心就重复发一条。
+     所以用「本次打开的唯一标识」来判断：新建 = 'new'，编辑 = `e<id>`。
+     关掉时清成 null，下次打开必定重新预填一遍。 */
   const [loaded, setLoaded] = useState(null)
-  if (open && loaded !== editing) {
-    setLoaded(editing)
+  const sessionKey = open ? (editing ? `e${editing.id}` : 'new') : null
+  if (sessionKey && loaded !== sessionKey) {
+    setLoaded(sessionKey)
     setContent(editing?.content || '')
     setTopic(editing?.topic || '')
     setLocation(editing?.location || '')
@@ -86,12 +100,20 @@ export default function MomentComposer({ open, editing, onClose, onSubmit }) {
         : null
     )
     setLocOpen(false)
-    setVisibility(editing?.visibility || 'public')
+    /* 编辑保留原可见范围；新建用「我 → 隐私设置」里的默认范围 */
+    setVisibility(editing ? editing.visibility || 'public' : defaultVisibility)
     setMedia((editing?.media || []).map((m) => ({ ...m, kind: m.kind || 'image' })))
+    setCard(editing?.card ? {
+      kind: editing.card.kind,
+      data: {
+        ...editing.card.data,
+        ...(editing.card.kind === 'activity' ? { startsAt: localDateTimeValue(new Date(editing.card.data.startsAt)) } : {}),
+      },
+    } : null)
     setErr('')
     setBusy(false)
   }
-  if (!open && loaded !== null) setLoaded(null)
+  if (!sessionKey && loaded !== null) setLoaded(null)
 
   if (!open) return null
 
@@ -170,10 +192,45 @@ export default function MomentComposer({ open, editing, onClose, onSubmit }) {
     }
   }
 
-  const canSubmit = (content.trim() || media.length > 0) && !busy
+  const canSubmit = (content.trim() || media.length > 0 || card) && !busy
+
+  const chooseCard = (kind) => {
+    if (card?.kind === kind) {
+      setCard(null)
+      return
+    }
+    const data = kind === 'poll'
+      ? { question: '', options: ['', ''], multi: false }
+      : kind === 'activity'
+        ? { title: '', startsAt: localDateTimeValue(new Date(Date.now() + 60 * 60 * 1000)), location: '', description: '' }
+        : { url: '', title: '', description: '' }
+    setCard({ kind, data })
+    setErr('')
+  }
+
+  const updateCard = (key, value) => setCard((current) => current ? { ...current, data: { ...current.data, [key]: value } } : current)
 
   const submit = async () => {
     if (!canSubmit) return
+    if (card?.kind === 'poll') {
+      const options = [...new Set(card.data.options.map((value) => value.trim()).filter(Boolean))]
+      if (!card.data.question.trim()) return setErr('请填写投票问题')
+      if (options.length < 2) return setErr('投票至少需要两个不同的有效选项')
+    }
+    if (card?.kind === 'activity') {
+      if (!card.data.title.trim()) return setErr('请填写活动名称')
+      if (!Number.isFinite(new Date(card.data.startsAt).getTime()) || new Date(card.data.startsAt).getTime() <= Date.now()) {
+        return setErr('活动时间必须晚于现在')
+      }
+    }
+    if (card?.kind === 'link') {
+      if (!card.data.title.trim()) return setErr('请填写链接标题')
+      try {
+        if (!['http:', 'https:'].includes(new URL(card.data.url).protocol)) throw new Error()
+      } catch {
+        return setErr('请输入以 http:// 或 https:// 开头的有效链接')
+      }
+    }
     setBusy(true)
     setErr('')
     try {
@@ -198,6 +255,13 @@ export default function MomentComposer({ open, editing, onClose, onSubmit }) {
           height: m.height || null,
           duration: m.duration || null,
         })),
+        card: card ? {
+          kind: card.kind,
+          data: {
+            ...card.data,
+            ...(card.kind === 'activity' ? { startsAt: new Date(card.data.startsAt).getTime() } : {}),
+          },
+        } : null,
       })
       onClose()
     } catch (e) {
@@ -235,7 +299,7 @@ export default function MomentComposer({ open, editing, onClose, onSubmit }) {
             {media.map((m, i) => (
               <div key={m.url + i} className="mc-video-box">
                 {/* 发布前能直接试播：不给 onOpen，VideoPlayer 就原地播 */}
-                <VideoPlayer src={m.url} width={m.width} height={m.height} duration={m.duration} />
+                <VideoPlayer src={mediaUrl(m.url)} width={m.width} height={m.height} duration={m.duration} />
                 <button type="button" className="mc-cell-del" aria-label="移除视频" onClick={() => setMedia([])}>
                   <IconTrash size={13} />
                 </button>
@@ -251,7 +315,7 @@ export default function MomentComposer({ open, editing, onClose, onSubmit }) {
           <div className="mc-grid">
             {media.map((m, i) => (
               <div key={m.url + i} className="mc-cell">
-                <img src={m.url} alt={m.fileName || '配图'} />
+                <img src={mediaUrl(m.url)} alt={m.fileName || '配图'} />
                 <button
                   type="button"
                   className="mc-cell-del"
@@ -388,21 +452,49 @@ export default function MomentComposer({ open, editing, onClose, onSubmit }) {
           </div>
         </div>
 
-        {/* 未接入：一律禁用并写明，不做「点了弹个 toast 假装成功」 */}
         <div className="mc-sec">
-          <h4>尚未接入</h4>
-          <div className="mc-pending">
-            {/* 「视频动态」已经接入了（上面那个按钮就是），不要再挂一个 disabled 的假入口 */}
-            <button type="button" className="mc-pending-item" disabled>
-              <IconCheck size={17} /> 投票
+          <h4>添加卡片（选填）</h4>
+          <div className="mc-card-types">
+            <button type="button" className={`mc-card-type ${card?.kind === 'poll' ? 'is-on' : ''}`} onClick={() => chooseCard('poll')} aria-pressed={card?.kind === 'poll'}>
+              投票
             </button>
-            <button type="button" className="mc-pending-item" disabled>
-              <IconStar size={17} /> 活动
+            <button type="button" className={`mc-card-type ${card?.kind === 'activity' ? 'is-on' : ''}`} onClick={() => chooseCard('activity')} aria-pressed={card?.kind === 'activity'}>
+              活动
             </button>
-            <button type="button" className="mc-pending-item" disabled>
-              <IconFolder size={17} /> 链接卡片
+            <button type="button" className={`mc-card-type ${card?.kind === 'link' ? 'is-on' : ''}`} onClick={() => chooseCard('link')} aria-pressed={card?.kind === 'link'}>
+              链接卡片
             </button>
           </div>
+          {card?.kind === 'poll' && (
+            <div className="mc-card-editor">
+              <label className="mc-card-label">投票问题<input value={card.data.question} maxLength={120} placeholder="你更喜欢哪种？" onChange={(e) => updateCard('question', e.target.value)} /></label>
+              <div className="mc-card-options">
+                {card.data.options.map((option, index) => (
+                  <div className="mc-card-option" key={index}>
+                    <input aria-label={`选项 ${index + 1}`} value={option} maxLength={60} placeholder={`选项 ${index + 1}`} onChange={(e) => updateCard('options', card.data.options.map((x, i) => i === index ? e.target.value : x))} />
+                    {card.data.options.length > 2 && <button type="button" onClick={() => updateCard('options', card.data.options.filter((_, i) => i !== index))} aria-label={`删除选项 ${index + 1}`}>移除</button>}
+                  </div>
+                ))}
+              </div>
+              {card.data.options.length < 6 && <button type="button" className="mc-card-add" onClick={() => updateCard('options', [...card.data.options, ''])}>＋ 添加选项</button>}
+              <label className="mc-card-check"><input type="checkbox" checked={card.data.multi} onChange={(e) => updateCard('multi', e.target.checked)} /> 允许多选</label>
+            </div>
+          )}
+          {card?.kind === 'activity' && (
+            <div className="mc-card-editor">
+              <label className="mc-card-label">活动名称<input value={card.data.title} maxLength={100} placeholder="周末一起去徒步" onChange={(e) => updateCard('title', e.target.value)} /></label>
+              <label className="mc-card-label">开始时间<input type="datetime-local" value={card.data.startsAt} onChange={(e) => updateCard('startsAt', e.target.value)} /></label>
+              <label className="mc-card-label">活动地点<input value={card.data.location} maxLength={120} placeholder="填写集合地点（选填）" onChange={(e) => updateCard('location', e.target.value)} /></label>
+              <label className="mc-card-label">活动说明<textarea value={card.data.description} maxLength={500} placeholder="补充活动安排（选填）" onChange={(e) => updateCard('description', e.target.value)} /></label>
+            </div>
+          )}
+          {card?.kind === 'link' && (
+            <div className="mc-card-editor">
+              <label className="mc-card-label">链接地址<input type="url" value={card.data.url} maxLength={2048} placeholder="https://example.com" onChange={(e) => updateCard('url', e.target.value)} /></label>
+              <label className="mc-card-label">卡片标题<input value={card.data.title} maxLength={120} placeholder="给链接起个标题" onChange={(e) => updateCard('title', e.target.value)} /></label>
+              <label className="mc-card-label">链接简介<textarea value={card.data.description} maxLength={300} placeholder="简单介绍这个链接（选填）" onChange={(e) => updateCard('description', e.target.value)} /></label>
+            </div>
+          )}
         </div>
 
         {err && <p className="mc-err">{err}</p>}

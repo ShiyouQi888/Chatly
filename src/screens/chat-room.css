@@ -587,6 +587,27 @@ button.quote--jump:active {
   box-shadow: var(--shadow-sm);
 }
 
+/* 「自动下载」关掉后图片显示为占位，点一下才加载。
+   给一个看得见的「加载」入口，而不是一张灰图让人以为坏了。 */
+button.img-bubble.is-locked {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 140px;
+  width: 190px;
+  background: var(--surface-2);
+  cursor: pointer;
+}
+
+.img-lock-hint {
+  font-size: var(--fs-micro);
+  color: var(--text-2);
+  background: var(--surface);
+  padding: 7px 12px;
+  border-radius: var(--r-full);
+  box-shadow: var(--shadow-sm);
+}
+
 .img-ph {
   width: 100%;
   aspect-ratio: 200 / 140;
@@ -1006,73 +1027,6 @@ button.quote--jump:active {
   line-height: 1.55;
 }
 
-/* ===== AI 条 ===== */
-.ai-bar {
-  flex: 0 0 auto;
-  align-self: stretch;
-  padding: 11px 13px;
-  border-radius: var(--r-md);
-  background: linear-gradient(135deg, rgba(155, 140, 251, 0.1), rgba(91, 110, 245, 0.07));
-  border: 1px solid rgba(124, 92, 246, 0.16);
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-}
-
-.ai-head {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.ai-badge {
-  font-size: 9.5px;
-  font-weight: 700;
-  color: #fff;
-  background: var(--brand-grad);
-  padding: 2px 7px;
-  border-radius: 6px;
-  letter-spacing: 0.04em;
-}
-
-.ai-title {
-  font-size: var(--fs-micro);
-  font-weight: 600;
-  color: var(--brand-2);
-}
-
-.ai-close {
-  margin-left: auto;
-  font-size: var(--fs-micro);
-  color: var(--text-3);
-  /* 保证 ≥32px 点击区（文字本身只有 ~16px 高） */
-  min-height: 32px;
-  padding: 0 4px;
-  margin-top: -8px;
-  margin-bottom: -8px;
-}
-
-.ai-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-}
-
-.ai-chip {
-  padding: 7px 12px;
-  border-radius: var(--r-full);
-  background: var(--surface);
-  font-size: var(--fs-sub);
-  font-weight: 500;
-  color: var(--text-2);
-  box-shadow: var(--shadow-sm);
-  transition: transform 0.14s var(--ease);
-}
-
-.ai-chip:active {
-  transform: scale(0.95);
-}
-
 .ai-chip--ghost {
   background: transparent;
   border: 1px dashed rgba(124, 92, 246, 0.4);
@@ -1331,6 +1285,35 @@ button.quote--jump:active {
   color: var(--brand-2);
   background: var(--brand-soft);
 }
+
+.cp-btn.is-recording {
+  color: #fff;
+  background: #e34d59;
+  animation: voicePulse 1.1s ease-in-out infinite alternate;
+}
+
+@keyframes voicePulse {
+  to { box-shadow: 0 0 0 5px rgb(227 77 89 / 16%); }
+}
+
+.voice-bubble {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: min(260px, 68vw);
+  padding: 6px 9px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--text-2);
+}
+
+.voice-bubble audio {
+  width: 100%;
+  height: 34px;
+  min-width: 0;
+}
+
+.voice-bubble.is-mine { background: var(--brand-soft); }
 
 .cp-field {
   flex: 1;
@@ -1629,6 +1612,54 @@ button.quote--jump:active {
   background: var(--surface-2);
   padding: 12px;
   border-radius: var(--r-md);
+}
+
+.info-announcement {
+  margin: 8px 0 4px;
+  padding: 12px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+
+.info-announcement-head,
+.info-announcement-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.info-announcement-head b {
+  font-size: var(--fs-sub);
+}
+
+.info-announcement-head span {
+  color: var(--text-3);
+  font-size: var(--fs-micro);
+}
+
+.info-announcement p {
+  margin: 8px 0 10px;
+  color: var(--text-2);
+  font-size: var(--fs-sub);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.info-ann-action {
+  padding: 4px 0;
+  color: var(--brand-2);
+  font-size: var(--fs-micro);
+  font-weight: 650;
+}
+
+.info-ann-action:disabled {
+  opacity: 0.55;
+}
+
+.info-ann-action.is-muted {
+  color: var(--text-3);
 }
 
 .inline-rows {

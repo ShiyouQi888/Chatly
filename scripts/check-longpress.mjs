@@ -19,7 +19,8 @@
  * 会误判成「长按没生效」。探针第一版就是这么错的。
  */
 import fs from 'node:fs'
-import { db, q } from '../server/src/db.js'
+/* ⚠️ qSync 是 SQLite 专有的**同步**直连，只给自检脚本用（q 已 async）。 */
+import { db, qSync as q } from '../server/src/db.js'
 import { freePort, waitAppTarget, connectCdp, launchChrome, shoot } from './lib/cdp.mjs'
 
 const API = 'http://127.0.0.1:3002/api/v1'
@@ -60,7 +61,17 @@ console.log(`\n私聊 #${priv.id}，探针 #${t1.id}（长按）/ #${t2.id}（�
 
 const port = await freePort()
 const profileDir = 'D:/BS-chat-os/.tmp/chrome-longpress'
-fs.rmSync(profileDir, { recursive: true, force: true })
+/* ⚠️ 清不掉临时 profile **不能**让整个自检崩掉。
+   本机（Windows + 沙箱）对 `.tmp/` 的删除会被 safe-delete 拦下并抛
+   「Some operations were aborted」，结果这支自检在**启动时**就退出、
+   一条断言都跑不到 —— 报出来的现象是「长按自检挂了」，
+   而真实原因只是临时目录没删干净。
+   一个 Chrome profile 目录本来就是个可以覆盖的缓存：删不掉就复用。 */
+try {
+  fs.rmSync(profileDir, { recursive: true, force: true })
+} catch (e) {
+  console.log(`（临时 profile 未能清空，继续复用：${String(e.message).slice(0, 80)}）`)
+}
 fs.mkdirSync(profileDir, { recursive: true })
 const proc = launchChrome({ url: APP, port, profileDir })
 

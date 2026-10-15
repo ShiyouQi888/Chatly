@@ -16,13 +16,19 @@
 import { useEffect } from 'react'
 import MapView from './MapView.jsx'
 import { IconClose, IconLocate } from './Icon.jsx'
+import { parseGeoPair } from '../lib/geo.js'
 import './location-view.css'
 
-/** 坐标只有成对才有意义 —— 缺一个就当没有，别拿 0 兜底 */
+/**
+ * 坐标只有成对才有意义 —— 走共享的 `parseGeoPair()`，**不在这里自己判**。
+ *
+ * ⚠️ 千万别写 `Number.isFinite(Number(geo.lat))`：`Number(null) === 0`，
+ *    于是「只有地点名、没有坐标」的位置消息会被判成合法的 **(0, 0)** ——
+ *    界面上认真画出一张几内亚湾的地图，而对方其实只是说了个地名。
+ *    不报错、不崩，只是安静地指错地方。（服务端同款坑见 `parseGeoPair` 的注释。）
+ */
 function coordsOf(geo) {
-  const lat = Number(geo?.lat)
-  const lng = Number(geo?.lng)
-  return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null
+  return parseGeoPair(geo?.lat, geo?.lng)
 }
 
 /** 让一个 div 具备按钮的键盘可达性（外壳不能用真 button，见文件头第 1 条） */

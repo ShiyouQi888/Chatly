@@ -11,7 +11,7 @@
  *              这样用户中途取消也不会在服务器留下孤儿文件
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { PRESET_COUNT, presetAvatar, resolveAvatarValue } from '../api/client.js'
+import { PRESET_COUNT, presetAvatar, resolveAvatarValue, mediaUrl } from '../api/client.js'
 import { IconCheck, IconClose, IconUndo, IconUpload } from './Icon.jsx'
 import './avatar-picker.css'
 
@@ -185,7 +185,7 @@ export default function AvatarPicker({ open, name = '', current, previewSrc, onA
           <div className="avp-body no-scrollbar">
             <div className="avp-preview">
               {shown ? (
-                <img src={shown} alt={name} />
+                <img src={mediaUrl(shown)} alt={name} />
               ) : (
                 <span className="avp-preview-fallback">{(name || '?').slice(-2)}</span>
               )}

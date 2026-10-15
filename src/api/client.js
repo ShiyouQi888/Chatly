@@ -11,6 +11,15 @@ export const tokenStore = {
   clear: () => localStorage.removeItem(TOKEN_KEY),
 }
 
+/** Browser media tags cannot attach Authorization headers; pass the session token only for uploads. */
+export function mediaUrl(url) {
+  const value = String(url || '')
+  const token = tokenStore.get()
+  if (!token || (!value.startsWith('/uploads/') && !value.startsWith('/api/v1/files/private/'))) return value
+  const join = value.includes('?') ? '&' : '?'
+  return `${value}${join}token=${encodeURIComponent(token)}`
+}
+
 async function request(path, { method = 'GET', body, raw = false } = {}) {
   const headers = {}
   const token = tokenStore.get()
@@ -41,10 +50,15 @@ async function request(path, { method = 'GET', body, raw = false } = {}) {
 
 export const api = {
   /* ---- 认证 ---- */
-  login: (username, password) => request('/auth/login', { method: 'POST', body: { username, password } }),
+  login: (identifier, password) => request('/auth/login', { method: 'POST', body: { identifier, password } }),
   register: (username, password, nickname) =>
     request('/auth/register', { method: 'POST', body: { username, password, nickname } }),
+  sendPhoneRegistrationCode: (phone) => request('/auth/register/phone/code', { method: 'POST', body: { phone } }),
+  sendEmailRegistrationCode: (email) => request('/auth/register/email/code', { method: 'POST', body: { email } }),
+  registerPhone: (payload) => request('/auth/register/phone', { method: 'POST', body: payload }),
+  registerEmail: (payload) => request('/auth/register/email', { method: 'POST', body: payload }),
   me: () => request('/auth/me'),
+  logout: () => request('/auth/logout', { method: 'POST' }),
 
   /* ---- 资料 ---- */
   updateProfile: (fields) => request('/auth/me', { method: 'PATCH', body: fields }),
@@ -53,15 +67,39 @@ export const api = {
     fd.append('file', file, file.name || 'avatar.png')
     return request('/auth/me/avatar', { method: 'POST', body: fd, raw: true })
   },
+  /** 主页背景图：和头像同构，服务端一步落库并删掉旧图 */
+  uploadCover: (file) => {
+    const fd = new FormData()
+    fd.append('file', file, file.name || 'cover.jpg')
+    return request('/auth/me/cover', { method: 'POST', body: fd, raw: true })
+  },
+  /** 恢复默认背景（库里把 profile_cover 置空，前端画原来的插画） */
+  resetCover: () => request('/auth/me', { method: 'PATCH', body: { profileCover: null } }),
+  /** 修改密码：服务端会先校验旧密码（见 routes/auth.js 的说明） */
+  changePassword: (oldPassword, newPassword) =>
+    request('/auth/me/password', { method: 'POST', body: { oldPassword, newPassword } }),
 
   /* ---- 用户 ---- */
   users: () => request('/users'),
   userProfile: (userId) => request(`/users/${userId}`),
   /**
    * 按界面上的「ID: xxxx」（username）查用户 —— 扫一扫和手动输入走的都是这一条。
-   * 返回体与 `userProfile` 同形（含 following / conversationId / isSelf）。
+   * 返回体与 `userProfile` 同形（含 following / conversationId / isSelf），
+   * 外加 `addable: { allowed, reason }`。
+   *
+   * ⚠️ `from` 决定服务端走哪个隐私开关：`'qr'` ← 扫码，`'search'` ← 手动输 ID。
+   * 不传就不设闸 —— 但「扫码」和「手输」都必须传，否则用户关掉的开关形同虚设。
    */
-  findUserByUsername: (username) => request(`/users/by-username/${encodeURIComponent(String(username).replace(/^@+/, '').trim())}`),
+  findUserByUsername: (username, from) => {
+    const u = encodeURIComponent(String(username).replace(/^@+/, '').trim())
+    return request(`/users/by-username/${u}${from ? `?from=${encodeURIComponent(from)}` : ''}`)
+  },
+  /**
+   * 全局「找人」——在**全体用户**里搜，不是搜自己的会话。
+   * q 是手机号形态时后端按精确手机号找，否则按 ID / 昵称模糊找。
+   * 命中对方隐私开关的人不会出现在结果里（后端过滤，不是前端藏起来）。
+   */
+  searchUsers: (q) => request(`/users/search?q=${encodeURIComponent(String(q))}`),
 
   /* ---- 会话 ---- */
   conversations: () => request('/conversations'),
@@ -79,6 +117,8 @@ export const api = {
   /** 改群名 / 群头像 / 群公告 / 群开关（只有群主和管理员能调，否则 403） */
   updateGroup: (conversationId, fields) =>
     request(`/conversations/${conversationId}`, { method: 'PATCH', body: fields }),
+  pushGroupAnnouncement: (conversationId) =>
+    request(`/conversations/${conversationId}/announcement/push`, { method: 'POST' }),
   addGroupMembers: (conversationId, userIds) =>
     request(`/conversations/${conversationId}/members`, { method: 'POST', body: { userIds } }),
   /** 移出成员；userId 传自己就是「退出群聊」 */
@@ -90,6 +130,11 @@ export const api = {
     const qs = new URLSearchParams({ limit: String(limit) })
     if (beforeId) qs.set('beforeId', String(beforeId))
     return request(`/conversations/${conversationId}/messages?${qs}`)
+  },
+  searchMessages: ({ q, limit = 30, beforeId } = {}) => {
+    const params = new URLSearchParams({ q: String(q || ''), limit: String(limit) })
+    if (beforeId) params.set('beforeId', String(beforeId))
+    return request(`/messages/search?${params}`)
   },
   markRead: (conversationId, messageId) =>
     request(`/conversations/${conversationId}/read`, { method: 'POST', body: messageId ? { messageId } : {} }),
@@ -103,6 +148,10 @@ export const api = {
     request('/messages/forward', { method: 'POST', body: { targetConversationId, messageIds } }),
 
   /* ---- 动态 ---- */
+  statuses: () => request('/statuses'),
+  createStatus: (payload) => request('/statuses', { method: 'POST', body: payload }),
+  viewStatus: (id) => request(`/statuses/${id}/view`, { method: 'POST' }),
+  deleteStatus: (id) => request(`/statuses/${id}`, { method: 'DELETE' }),
   /** scope: friends（默认）| mine | hot */
   moments: ({ scope = 'friends', beforeId, limit = 20 } = {}) => {
     const qs = new URLSearchParams({ scope, limit: String(limit) })
@@ -113,6 +162,8 @@ export const api = {
   publishMoment: (payload) => request('/moments', { method: 'POST', body: payload }),
   editMoment: (id, fields) => request(`/moments/${id}`, { method: 'PATCH', body: fields }),
   deleteMoment: (id) => request(`/moments/${id}`, { method: 'DELETE' }),
+  voteMomentCard: (id, optionIndexes) => request(`/moments/${id}/card-vote`, { method: 'POST', body: { optionIndexes } }),
+  respondMomentActivity: (id, status) => request(`/moments/${id}/activity-rsvp`, { method: 'POST', body: { status } }),
   /** 点赞 / 取消：同一个接口，服务端按当前状态翻转 */
   toggleMomentLike: (id) => request(`/moments/${id}/like`, { method: 'POST' }),
   momentLikes: (id) => request(`/moments/${id}/likes`),
@@ -129,9 +180,35 @@ export const api = {
   polls: (ids) => request(`/polls?ids=${ids.join(',')}`),
   pollsOf: (conversationId) => request(`/polls/of/${conversationId}`),
   createPoll: (payload) => request('/polls', { method: 'POST', body: payload }),
-  /** optionIds 是**投票后的完整状态**：单选 1 个、多选 N 个、空数组 = 取消投票 */
+  /** optionIds 是首次提交的选项：至少 1 个；提交后服务端禁止改票或撤销。 */
   votePoll: (pollId, optionIds) => request(`/polls/${pollId}/vote`, { method: 'POST', body: { optionIds } }),
   closePoll: (pollId) => request(`/polls/${pollId}/close`, { method: 'POST' }),
+
+  /* ---- 运营管理后台（所有权限由服务端 ADMIN_USER_IDS 再校验） ---- */
+  adminOverview: () => request('/admin/overview'),
+  adminAnalytics: (days = 7) => request(`/admin/analytics?days=${days}`),
+  adminUsers: ({ q = '', status = '', page = 1, limit = 20 } = {}) =>
+    request(`/admin/users?q=${encodeURIComponent(q)}&status=${encodeURIComponent(status)}&page=${page}&limit=${limit}`),
+  adminUser: (id) => request(`/admin/users/${id}`),
+  adminSetUserStatus: (id, banned, reason = '') =>
+    request(`/admin/users/${id}/status`, { method: 'PATCH', body: { banned, reason } }),
+  adminMoments: ({ q = '', page = 1, limit = 20 } = {}) =>
+    request(`/admin/moments?q=${encodeURIComponent(q)}&page=${page}&limit=${limit}`),
+  adminRemoveMoment: (id, reason = '') =>
+    request(`/admin/moments/${id}`, { method: 'DELETE', body: { reason } }),
+  adminComments: ({ q = '', page = 1, limit = 20 } = {}) =>
+    request(`/admin/comments?q=${encodeURIComponent(q)}&page=${page}&limit=${limit}`),
+  adminRemoveComment: (id, reason = '') =>
+    request(`/admin/comments/${id}`, { method: 'DELETE', body: { reason } }),
+  adminFeedback: ({ status = '', page = 1, limit = 20 } = {}) =>
+    request(`/admin/feedback?status=${encodeURIComponent(status)}&page=${page}&limit=${limit}`),
+  adminSetFeedbackStatus: (id, status) =>
+    request(`/admin/feedback/${id}`, { method: 'PATCH', body: { status } }),
+  adminAudit: ({ q = '', page = 1, limit = 50 } = {}) =>
+    request(`/admin/audit?q=${encodeURIComponent(q)}&page=${page}&limit=${limit}`),
+  adminStaff: () => request('/admin/staff'),
+  adminSetStaffRole: (userId, role) => request('/admin/staff', { method: 'POST', body: { userId, role } }),
+  adminRemoveStaff: (userId) => request(`/admin/staff/${userId}`, { method: 'DELETE' }),
 
   /* ---- 消息收藏（PRD §9） ----
      收藏是**快照**：原消息撤回后收藏里的内容仍在，所以列表出参自带正文与文件地址，
@@ -166,8 +243,14 @@ export const api = {
     request(`/watch-later/message/${messageId}`, { method: 'DELETE' }),
 
   /* ---- 最近文件 ---- */
-  recentFiles: ({ limit = 20, beforeId, type = 'all' } = {}) => {
+  recentFiles: ({ limit = 20, beforeId, type = 'all', conversationId } = {}) => {
     const params = new URLSearchParams({ limit: String(limit), type })
+    if (beforeId) params.set('beforeId', String(beforeId))
+    if (conversationId) params.set('conversationId', String(conversationId))
+    return request(`/files?${params}`)
+  },
+  groupFiles: (conversationId, { limit = 30, beforeId, type = 'all' } = {}) => {
+    const params = new URLSearchParams({ conversationId: String(conversationId), limit: String(limit), type })
     if (beforeId) params.set('beforeId', String(beforeId))
     return request(`/files?${params}`)
   },
@@ -179,6 +262,20 @@ export const api = {
   updateSettings: (settings) =>
     request('/settings', { method: 'PUT', body: settings }),
 
+  /* ---- 通知（「消息通知」与通知中心的数据源） ----
+     偏好写入复用上面的 /settings（那里已经是 key-value 通用存储，
+     再开一套专用接口等于给同一份数据两个写入点）。
+     /notifications/prefs 只是把默认值合并好交出来，省得前端各页自己拼。 */
+  notifications: ({ beforeId, limit = 30, group = 'all' } = {}) => {
+    const qs = new URLSearchParams({ group, limit: String(limit) })
+    if (beforeId) qs.set('beforeId', String(beforeId))
+    return request(`/notifications?${qs}`)
+  },
+  unreadNotifications: () => request('/notifications/unread'),
+  notificationPrefs: () => request('/notifications/prefs'),
+  markNotificationsRead: (ids) =>
+    request('/notifications/read', { method: 'POST', body: ids ? { ids } : {} }),
+
   /* ---- 设备管理 ---- */
   getDevices: () => request('/devices'),
   removeDevice: (id) => request(`/devices/${id}`, { method: 'DELETE' }),
@@ -186,9 +283,21 @@ export const api = {
   updateSecuritySettings: (settings) =>
     request('/devices/settings', { method: 'PUT', body: settings }),
 
-  /* ---- 关注（动态的「仅好友可见」按互相关注判定） ---- */
-  followUser: (id) => request(`/users/${id}/follow`, { method: 'POST' }),
+  /* ---- 用户反馈（「我 → 帮助与反馈」） ---- */
+  /** 截图先单独上传，拿到 /uploads 地址后再随反馈一起提交 */
+  uploadFeedbackScreenshot: (formData) =>
+    request('/feedback/screenshot', { method: 'POST', body: formData, raw: true }),
+  submitFeedback: ({ type, description, contact, screenshotUrl }) =>
+    request('/feedback', { method: 'POST', body: { type, description, contact, screenshotUrl } }),
+
+  /* ---- 关注（动态的「仅好友可见」按互相关注判定） ----
+     `source` 是**可选**的渠道声明：只有「扫码 / 搜索」这类「被找到」的入口才传，
+     服务端据此校验对方的隐私开关。群成员列表、发现页推荐不传（那些人本就在你眼前）。 */
+  followUser: (id, source) =>
+    request(`/users/${id}/follow`, { method: 'POST', body: source ? { source } : undefined }),
   unfollowUser: (id) => request(`/users/${id}/follow`, { method: 'DELETE' }),
+  contacts: () => request('/users/contacts'),
+  removeContact: (id) => request(`/users/contacts/${id}`, { method: 'DELETE' }),
 
   /* ---- 发现页 ---- */
   /** 推荐用户。tag 为空=全部；排序由后端按「共同群聊 > 共同兴趣 > 同城」给 */
@@ -197,7 +306,7 @@ export const api = {
     if (tag) qs.set('tag', tag)
     return request(`/discover/recommend?${qs}`)
   },
-  /** 附近的人：按资料地区匹配，**没有公里数**（库里没有定位数据） */
+  /** 附近的人：默认按资料地区匹配；双方都明确分享城市后才显示城市中心点估算距离 */
   discoverNearby: (limit = 20) => request(`/discover/nearby?limit=${limit}`),
   /** 兴趣标签聚合（人数 + 我是否选了这个标签） */
   discoverTags: () => request('/discover/tags'),
@@ -205,6 +314,13 @@ export const api = {
   discoverGroups: () => request('/discover/groups'),
   /** 加入公开群。非公开群会被 403 挡下（不是邀请制） */
   joinGroup: (groupId) => request(`/discover/groups/${groupId}/join`, { method: 'POST' }),
+  /** 尚未开始、且当前用户有权查看的动态活动 */
+  discoverActivities: (limit = 20) => request(`/discover/activities?limit=${limit}`),
+  /** 仅由公开动态聚合的话题榜 */
+  discoverTopics: () => request('/discover/topics'),
+  viewDiscoverTopic: (topic) => request(`/discover/topics/${encodeURIComponent(topic)}/view`, { method: 'POST' }),
+  discoverTopicMoments: (topic, limit = 20) =>
+    request(`/discover/topics/${encodeURIComponent(topic)}/moments?limit=${limit}`),
 
   /* ---- 位置 ----
      这两条都只是「转发给服务端」——key 在服务端，前端不认识腾讯那套接口。

@@ -37,7 +37,7 @@ const { EMOJI_ANIM } = await import('../src/data/emoji-anim.js')
 
 /* 本轮会往演示会话里发好几条大表情（动画的、回退静态的），开跑前记基线，
    收尾按基线删 —— 只记住一条 id 的话，多发的就留在演示库里了。 */
-const msgBaseline = maxMessageId()
+const msgBaseline = await maxMessageId()
 
 let failures = 0
 const ok = (cond, label, extra = '') => {
@@ -725,7 +725,7 @@ try {
   } catch {}
   proc.kill()
   // 按基线删：本轮发了动画贴纸 + 静态回退贴纸两条，只记住一个 id 会漏
-  const gone = purgeMessagesAfter(msgBaseline)
+  const gone = await purgeMessagesAfter(msgBaseline)
   if (gone) console.log(`已清理自检发出的 ${gone} 条大表情消息`)
   process.exit(failures ? 1 : 0)
 }

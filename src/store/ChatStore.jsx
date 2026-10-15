@@ -6,7 +6,7 @@
  *   - 订阅 WebSocket，把实时事件折进本地状态
  *   - 乐观发送：先插入 pending 消息，REST 返回后用真实 id 顶掉
  *
- * 不负责：动态 / 通知 / 状态 —— 那些仍在 AppContext（原型数据）。
+ * 不负责：动态 / 通知 / 状态 —— 它们各自使用独立 store 或 API。
  */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { api, fallbackAvatar, formatRelative, formatTime, resolveAvatarValue } from '../api/client.js'
@@ -150,6 +150,7 @@ function mapMessage(raw, meId) {
     createdAt: Number(raw.createdAt) || Date.now(),
     read: !!raw.read,
     revoked: !!raw.revoked,
+    burnAt: raw.burnAt ? Number(raw.burnAt) : null,
     pending: !!raw.pending,
     failed: !!raw.failed,
   }
@@ -342,10 +343,35 @@ function reducer(state, action) {
       }
     }
 
+    case 'SET_BURN': {
+      const list = state.messages[action.convId]
+      return list ? { ...state, messages: { ...state.messages, [action.convId]: list.map((m) => m.id === action.messageId ? { ...m, burnAt: action.burnAt } : m) } } : state
+    }
+
+    case 'EXPIRE_MESSAGE': {
+      const list = state.messages[action.convId]
+      const nextList = (list || []).filter((m) => m.id !== action.messageId)
+      const conv = state.conversations.find((c) => c.id === action.convId)
+      const wasLast = conv?.lastMessageId === action.messageId
+      const last = nextList.at(-1)
+      return {
+        ...state,
+        messages: list ? { ...state.messages, [action.convId]: nextList } : state.messages,
+        conversations: wasLast
+          ? state.conversations.map((c) => c.id === action.convId
+            ? { ...c, lastMessageId: last?.id || 0, preview: last ? previewFromMessage(last, c) : '阅后即焚消息已销毁' }
+            : c)
+          : state.conversations,
+      }
+    }
+
     /** 某个成员的已读位置推进（来自 WS conversation.read） */
     case 'SET_MEMBER_CURSOR': {
       const cur = state.readCursors[action.convId] || {}
       const prev = cur[action.userId] || 0
+      if (action.cursor === 0 && prev > 0) {
+        return { ...state, readCursors: { ...state.readCursors, [action.convId]: { ...cur, [action.userId]: 0 } } }
+      }
       if (action.cursor <= prev) return state
       return {
         ...state,
@@ -454,7 +480,20 @@ function reducer(state, action) {
     }
 
     case 'SET_PRESENCE':
-      return { ...state, presence: { ...state.presence, [action.userId]: action.online } }
+      return {
+        ...state,
+        presence: { ...state.presence, [action.userId]: action.online },
+        /* ⚠️ 会话列表那一行的在线圆点读的是 `conversations[].online` ——
+           它是**加载时**由 `mapConversation()` 烘进去的，不会自己跟着 presence 走。
+           只改 presence 的话症状是：推送收到了、store 里 presence 也对了，
+           但圆点纹丝不动（要等下一次重新拉列表才变）。
+           所以这里把**受影响的那几条私聊行**同步刷一遍；群聊行的 online 恒为 false，不用动。 */
+        conversations: state.conversations.map((c) =>
+          c.type === 'private' && c.peers?.[0] && Number(c.peers[0].id) === Number(action.userId)
+            ? { ...c, online: !!action.online }
+            : c
+        ),
+      }
 
     case 'SET_PRESENCE_MAP':
       return { ...state, presence: { ...state.presence, ...action.map } }
@@ -560,10 +599,21 @@ export function ChatProvider({ children }) {
     const p = evt.payload || {}
 
     switch (evt.type) {
-      case 'hello':
+      case 'hello': {
         // （重）连成功：补齐断线期间错过的消息
         refresh()
+        if (activeRef.current && me.id) {
+          const cid = activeRef.current
+          api.messages(cid, { limit: 40 }).then(({ messages }) => {
+            const mapped = messages.map((m) => mapMessage(m, me.id))
+            dispatch({ type: 'SET_MESSAGES', convId: cid, messages: mapped, hasMore: messages.length === 40 })
+            for (const message of mapped) if (message.burnAt) {
+              setTimeout(() => dispatch({ type: 'EXPIRE_MESSAGE', convId: cid, messageId: message.id }), Math.max(0, message.burnAt - Date.now()))
+            }
+          }).catch(() => {})
+        }
         break
+      }
 
       case 'message.new': {
         const raw = p.message
@@ -579,6 +629,12 @@ export function ChatProvider({ children }) {
       case 'message.revoked':
         dispatch({ type: 'REVOKE', convId: p.conversationId, messageId: p.messageId })
         break
+
+      case 'message.burn': {
+        dispatch({ type: 'SET_BURN', convId: p.conversationId, messageId: p.messageId, burnAt: p.burnAt })
+        setTimeout(() => dispatch({ type: 'EXPIRE_MESSAGE', convId: p.conversationId, messageId: p.messageId }), Math.max(0, Number(p.burnAt) - Date.now()))
+        break
+      }
 
       /**
        * 群里有人投票 / 改票 / 结束投票。
@@ -659,6 +715,9 @@ export function ChatProvider({ children }) {
       if (!me) return
       const { messages, hasMore } = await api.messages(convId, { limit, beforeId })
       const mapped = messages.map((m) => mapMessage(m, me.id))
+      for (const message of mapped) if (message.burnAt) {
+        setTimeout(() => dispatch({ type: 'EXPIRE_MESSAGE', convId, messageId: message.id }), Math.max(0, message.burnAt - Date.now()))
+      }
       dispatch(
         beforeId
           ? { type: 'PREPEND_MESSAGES', convId, messages: mapped, hasMore }
@@ -984,6 +1043,10 @@ export function ChatProvider({ children }) {
     return meta
   }, [])
 
+  const mergeGroupMeta = useCallback((convId, meta) => {
+    if (meta) dispatch({ type: 'GROUP_META', convId, meta })
+  }, [])
+
   const addGroupMembers = useCallback(
     async (convId, userIds) => {
       const out = await api.addGroupMembers(convId, userIds)
@@ -1077,6 +1140,7 @@ export function ChatProvider({ children }) {
       deleteConversation,
       loadGroupMembers,
       updateGroup,
+      mergeGroupMeta,
       addGroupMembers,
       removeGroupMember,
       setGroupRole,
@@ -1116,6 +1180,7 @@ export function ChatProvider({ children }) {
       deleteConversation,
       loadGroupMembers,
       updateGroup,
+      mergeGroupMeta,
       addGroupMembers,
       removeGroupMember,
       setGroupRole,

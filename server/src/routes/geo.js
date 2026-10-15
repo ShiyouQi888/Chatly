@@ -11,6 +11,7 @@
 import { Router } from 'express'
 import { authRequired } from '../auth.js'
 import { isGeoConfigured, reverseGeocode } from '../geo.js'
+import { parseGeoPair } from '../../../shared/geo-math.mjs'
 
 const r = Router()
 r.use(authRequired)
@@ -25,6 +26,16 @@ r.get('/status', (_req, res) => {
  * GET /api/v1/geo/locate?lat=22.54&lng=114.05&radius=1000&pois=1
  */
 r.get('/locate', async (req, res) => {
+  /* ⚠️ 参数校验必须排在「有没有配 key」**前面**。
+     反过来的话，没配 key 的机器上脏参数会被 200 放过，而配上 key 之后同一个请求变成 400 ——
+     同一份客户端代码在两种环境下行为不同，而且这种差异**只有装上 key 那天才会暴露**。
+
+     ⚠️ 也别自己写 `Number(req.query.lat)` 来判：`Number('') === 0`、`Number(null) === 0`，
+     空参数会被当成合法的 (0, 0)，正好落在几内亚湾。
+     统一走共享的 `parseGeoPair()`（成对 + 范围 + 空值一起管住）。 */
+  const pair = parseGeoPair(req.query.lat, req.query.lng)
+  if (!pair) return res.status(400).json({ error: '缺少合法的经纬度（lat / lng）' })
+
   if (!isGeoConfigured()) {
     return res.json({
       configured: false,
@@ -34,14 +45,8 @@ r.get('/locate', async (req, res) => {
     })
   }
 
-  const lat = Number(req.query.lat)
-  const lng = Number(req.query.lng)
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-    return res.status(400).json({ error: '缺少合法的经纬度（lat / lng）' })
-  }
-
   try {
-    const out = await reverseGeocode(lat, lng, {
+    const out = await reverseGeocode(pair.lat, pair.lng, {
       pois: req.query.pois !== '0',
       radius: req.query.radius ? Number(req.query.radius) : 1000,
     })

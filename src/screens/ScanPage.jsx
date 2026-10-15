@@ -85,8 +85,10 @@ export default function ScanPage({ onBack, nav }) {
     }
   }, [])
 
-  /** 通用：拿到一段文本后决定怎么落地 */
-  const handleRecognized = useCallback(async (text) => {
+  /** 通用：拿到一段文本后决定怎么落地
+   *  `from` 是要报给服务端的**渠道**：摄像头 / 相册 是 `qr`，手输 ID 与「按 ID 查一下」是 `search`。
+   *  这个参数不能省 —— 服务端就是靠它判断该不该受对方「通过二维码 / 通过搜索添加」的开关约束。 */
+  const handleRecognized = useCallback(async (text, from = 'search') => {
     const payload = parseQrPayload(text)
     debugRef.current.lastText = String(text)
     debugRef.current.resultType = payload.type
@@ -94,15 +96,15 @@ export default function ScanPage({ onBack, nav }) {
 
     if (payload.type === 'user') {
       try {
-        const d = await api.findUserByUsername(payload.username)
-        setResult({ payload, profile: d })
+        const d = await api.findUserByUsername(payload.username, from)
+        setResult({ payload, profile: d, from })
       } catch (e) {
         debugRef.current.error = e.message || '查询失败'
-        setResult({ payload, lookupError: e.message || '查询失败' })
+        setResult({ payload, lookupError: e.message || '查询失败', from })
       }
       return
     }
-    setResult({ payload })
+    setResult({ payload, from })
   }, [])
 
   /* ---------- 摄像头 ---------- */
@@ -147,7 +149,7 @@ export default function ScanPage({ onBack, nav }) {
       if (text) {
         lockedRef.current = true
         stop()
-        handleRecognized(text)
+        handleRecognized(text, 'qr')
       }
     }
 
@@ -227,7 +229,7 @@ export default function ScanPage({ onBack, nav }) {
           return
         }
         lockedRef.current = true
-        await handleRecognized(text)
+        await handleRecognized(text, 'qr')
       } finally {
         URL.revokeObjectURL(url)
         setBusy(false)
@@ -245,10 +247,10 @@ export default function ScanPage({ onBack, nav }) {
     }
     setBusy(true)
     try {
-      const d = await api.findUserByUsername(username)
-      setResult({ payload: { type: 'user', raw: username, username }, profile: d })
+      const d = await api.findUserByUsername(username, 'search')
+      setResult({ payload: { type: 'user', raw: username, username }, profile: d, from: 'search' })
     } catch (e) {
-      setResult({ payload: { type: 'user', raw: username, username }, lookupError: e.message || '查询失败' })
+      setResult({ payload: { type: 'user', raw: username, username }, lookupError: e.message || '查询失败', from: 'search' })
     } finally {
       setBusy(false)
     }
@@ -260,7 +262,10 @@ export default function ScanPage({ onBack, nav }) {
     if (!id) return
     setBusy(true)
     try {
-      await api.followUser(id)
+      /* 把识别时的渠道原样带给服务端（`qr` 或 `search`）——
+         服务端据此校验对方的「通过二维码 / 通过搜索添加」开关。
+         界面上把按钮禁掉只是提示，真正拦住的是这一层。 */
+      await api.followUser(id, result?.from)
       setResult((r) => (r ? { ...r, profile: { ...r.profile, following: true } } : r))
       showToast('已加为好友')
     } catch (e) {
@@ -309,6 +314,9 @@ export default function ScanPage({ onBack, nav }) {
   const p = result?.payload
   const prof = result?.profile?.user
   const camLive = cam.status === 'live'
+  /* 对方关掉了对应渠道的「添加好友」开关：能看见是谁，但加不了。
+     这是**真拦截**（服务端 follow 也会 403），不是只把按钮灰掉。 */
+  const blocked = result?.profile?.addable?.allowed === false
 
   return (
     <div className="scan">
@@ -441,6 +449,15 @@ export default function ScanPage({ onBack, nav }) {
                       <button type="button" className="scan-btn scan-btn--done" disabled>
                         <IconCheck size={18} /> 已加为好友
                       </button>
+                    ) : blocked ? (
+                      <button
+                        type="button"
+                        className="scan-btn scan-btn--blocked"
+                        disabled
+                        data-testid="scan-follow-blocked"
+                      >
+                        <IconInfo size={18} /> 无法加为好友
+                      </button>
                     ) : (
                       <button
                         type="button"
@@ -463,6 +480,12 @@ export default function ScanPage({ onBack, nav }) {
                       {copied ? '已复制' : '复制我的 ID'}
                     </button>
                   </div>
+                )}
+
+                {blocked && (
+                  <p className="scan-note scan-block-note" data-testid="scan-follow-reason">
+                    {result.profile.addable.reason}
+                  </p>
                 )}
 
                 <p className="scan-note">

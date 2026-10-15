@@ -2,6 +2,7 @@
  * 通用 UI 原语组件
  */
 import React, { useEffect, useRef } from 'react'
+import { mediaUrl } from '../api/client.js'
 import { IconChevron } from './Icon.jsx'
 import './ui.css'
 
@@ -23,7 +24,7 @@ export function Avatar({ src, name = '', size = 48, ring = 0, online = false, ba
           ...(ring ? { boxShadow: `0 0 0 ${ring}px #fff, 0 0 0 ${ring + 2.5}px var(--brand-1)` } : null),
         }}
       >
-        {src ? <img src={src} alt={name} /> : <em>{initial}</em>}
+        {src ? <img src={mediaUrl(src)} alt={name} /> : <em>{initial}</em>}
       </span>
       {online && <i className="av-online" style={{ width: size * 0.26, height: size * 0.26 }} />}
       {badge > 0 && <b className="av-badge">{badge > 99 ? '99+' : badge}</b>}
@@ -80,13 +81,17 @@ export function Group({ title, children, footer }) {
 }
 
 /* ===== 开关 ===== */
-export function Switch({ on, onChange }) {
+/* `disabled` 是给「开关存得进去、但没有任何代码读它」的设置项用的 ——
+   那种开关能让用户以为「我开了这个保护」，而实际上什么都不会发生。
+   按项目规矩：**不做假功能**，未接通的开关一律 disabled 并在行内写明原因。 */
+export function Switch({ on, onChange, disabled = false }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={on}
-      className={`switch ${on ? 'is-on' : ''}`}
+      disabled={disabled}
+      className={`switch ${on ? 'is-on' : ''} ${disabled ? 'is-off' : ''}`}
       onClick={() => onChange?.(!on)}
     >
       <i />
@@ -115,7 +120,11 @@ export function AvatarStack({ items = [], size = 28, max = 4 }) {
 }
 
 /* ===== 分组标题栏 ===== */
-export function SectionTitle({ children, action, onAction }) {
+/* `hint` 是**纯文字**的右上角说明（例如「使用中」）。
+   和 `action` 的区别很重要：`action` 是个按钮，点了必须有事发生；
+   只写 `action` 不给 `onAction` 会渲染出一个点了毫无反应的按钮。
+   只为展示状态就用 `hint`。 */
+export function SectionTitle({ children, action, onAction, hint }) {
   return (
     <div className="sec-title">
       <h3>{children}</h3>
@@ -124,6 +133,7 @@ export function SectionTitle({ children, action, onAction }) {
           {action}
         </button>
       )}
+      {hint && <span className="sec-hint">{hint}</span>}
     </div>
   )
 }
@@ -172,12 +182,24 @@ export function Sheet({ open, onClose, title, children, footer }) {
  *
  * 所以防御必须**同时盖住遮罩和菜单项**，而且两者用同一个时间窗。
  * 450ms 是实测出来的：`touchEnd` 到补发 click 之间几乎没有延迟，
- * 但不同浏览器/设备有一些差异，留够余量；而真人「长按 → 看清楚 → 点某一项」
- * 绝不会在 450ms 内完成，所以不会挡住正常操作。
+ * 但不同浏览器/设备有一些差异，留够余量。
+ *
+ * ## ⚠️ 这道防御**只对长按弹出的菜单**开（`longPress` 属性）
+ *
+ * 补发的 click 是「长按」这个手势独有的。点「⋯」、点某个成员弹出的菜单
+ * 根本没有前置手势，也就不存在尾巴 —— 对它照样上 450ms 死区，
+ * 只会造成一个真实的缺陷：**点开菜单后马上点第一项，那一下被吞掉，什么都不发生**
+ * （菜单不关、操作不执行，用户只会以为「这个功能坏了」）。
+ *
+ * 这个坑已经真实咬过一次：动态页「编辑」的端到端自检就报过
+ * 「点编辑后面板打不开」，查到最后既没有报错也不是回归，
+ * 而是脚本点得太快、正好落进死区 —— 断言指向了完全错误的方向。
+ * 所以：**能用 `longPress` 区分就不要靠时间窗兜底**，
+ * 调用方只要说明「这个菜单是长按弹出来的」即可。
  */
 const LONG_PRESS_CLICK_GUARD_MS = 450
 
-export function ActionMenu({ open, onClose, title, items = [] }) {
+export function ActionMenu({ open, onClose, title, items = [], longPress = false }) {
   const openedAt = useRef(0)
   useEffect(() => {
     if (open) openedAt.current = Date.now()
@@ -185,8 +207,9 @@ export function ActionMenu({ open, onClose, title, items = [] }) {
 
   if (!open) return null
 
-  /** 菜单刚弹出的这段时间里，任何 click 都是「上一次长按的尾巴」，一律忽略 */
-  const guarded = () => Date.now() - openedAt.current < LONG_PRESS_CLICK_GUARD_MS
+  /** 菜单刚弹出的这段时间里，任何 click 都是「上一次长按的尾巴」，一律忽略。
+      只对长按菜单生效 —— 点击弹出的菜单没有尾巴要防。 */
+  const guarded = () => longPress && Date.now() - openedAt.current < LONG_PRESS_CLICK_GUARD_MS
   const guardClose = () => {
     if (guarded()) return
     onClose?.()

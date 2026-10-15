@@ -10,7 +10,7 @@ import { purgeMessagesAfter, maxMessageId, purgeOrphanUploads } from './lib/debr
 /* 这个脚本是「遍历所有界面并点开能点的一切」—— 包括表情面板的大表情格子，
    点下去就是真发一条消息。所以它会往演示库里留东西（实测一轮留下一条
    `/emoji-anim/1f602.webp` 贴纸）。开跑前记基线，收尾按基线删。 */
-const msgBaseline = maxMessageId()
+const msgBaseline = await maxMessageId()
 
 const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe'
 const PORT = 9420
@@ -288,8 +288,8 @@ await audit('搜索结果')
 await ev(`document.querySelector('.sub-back').click()`); await sleep(500)
 
 cdp.close(); chrome.kill()
-const gone = purgeMessagesAfter(msgBaseline)
-purgeOrphanUploads({ quiet: false })
+const gone = await purgeMessagesAfter(msgBaseline)
+await purgeOrphanUploads({ quiet: false })
 if (gone) console.log(`已清理审计过程中发出的 ${gone} 条消息`)
 console.log('\n✅ 审计完成')
 process.exit(0)

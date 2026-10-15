@@ -35,9 +35,12 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
+import { DatabaseSync } from 'node:sqlite'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-import { db, insert, q } from '../server/src/db.js'
+/* ⚠️ qSync / insertSync 是 SQLite 专有的**同步**直连，只给自检脚本用 ——
+ *    理由同 check-favorite.mjs（回库核对是同步取值，而 q/insert 已 async）。 */
+import { db, insertSync as insert, qSync as q } from '../server/src/db.js'
 import { purgeDebris, purgeMoments } from './lib/debris.mjs'
 import { freePort, waitAppTarget, connectCdp, launchChrome, shoot } from './lib/cdp.mjs'
 
@@ -88,7 +91,7 @@ const j = async (m, p, body, auth) => {
 }
 
 /* ================= 基线（收尾靠它） ================= */
-purgeDebris({ quiet: true })
+await purgeDebris({ quiet: true })
 const maxPollBefore = q.get('SELECT COALESCE(MAX(id),0) v FROM polls').v
 const maxMsgBefore = q.get('SELECT COALESCE(MAX(id),0) v FROM messages').v
 const pollsBefore = q.get('SELECT COUNT(*) n FROM polls').n
@@ -154,53 +157,81 @@ CREATE TABLE messages (id INTEGER PRIMARY KEY AUTOINCREMENT,
 CREATE INDEX idx_messages_conv_id ON messages(conversation_id, id);
 `
 
+/* 老库直接用 node:sqlite 在**本进程**建 —— 建库不需要独立进程，
+   需要独立进程的只是「让 db.js 重新求值一次」。 */
 const mkOldDb = (file) => {
   fs.rmSync(file, { force: true })
-  const script = path.join(MIG_TMP, 'mk.mjs')
-  fs.writeFileSync(
-    script,
-    `
-import { DatabaseSync } from 'node:sqlite'
-const db = new DatabaseSync(${JSON.stringify(file)})
-db.exec(${JSON.stringify(OLD_DDL)})
-db.exec("INSERT INTO users (username,password_hash,nickname) VALUES ('a','x','甲'),('b','x','乙')")
-db.exec("INSERT INTO conversations (type,title,owner_id) VALUES ('group','老群',1)")
-db.exec("INSERT INTO conversation_members (conversation_id,user_id,role) VALUES (1,1,'owner'),(1,2,'member')")
-db.exec("INSERT INTO messages (conversation_id,sender_id,kind,content) VALUES (1,1,'text','迁移前 A'),(1,2,'text','迁移前 B')")
-db.close()
-`
-  )
-  execFileSync(process.execPath, [script], { encoding: 'utf8' })
+  const d = new DatabaseSync(file)
+  d.exec(OLD_DDL)
+  d.exec("INSERT INTO users (username,password_hash,nickname) VALUES ('a','x','甲'),('b','x','乙')")
+  d.exec("INSERT INTO conversations (type,title,owner_id) VALUES ('group','老群',1)")
+  d.exec("INSERT INTO conversation_members (conversation_id,user_id,role) VALUES (1,1,'owner'),(1,2,'member')")
+  d.exec("INSERT INTO messages (conversation_id,sender_id,kind,content) VALUES (1,1,'text','迁移前 A'),(1,2,'text','迁移前 B')")
+  d.close()
 }
 
-/** 在独立进程里用**真正的 db.js** 打开这个库（迁移发生在 import 时） */
-const migrateAndInspect = (dbFile) => {
+/** 要看的六个量 —— **只写一份**，子进程探针用 `toString()` 注入同一份实现，
+ *  避免「两条路径各写一遍、慢慢漂移」。 */
+const inspectWith = (d) => ({
+  kindHasPoll: d.prepare("SELECT sql FROM sqlite_master WHERE name='messages'").get().sql.includes("'poll'"),
+  cols: d.prepare('PRAGMA table_info(messages)').all().map((c) => c.name),
+  tables: d.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map((r) => r.name),
+  messages: d.prepare('SELECT COUNT(*) n FROM messages').get().n,
+  texts: d.prepare('SELECT content FROM messages ORDER BY id').all().map((r) => r.content),
+  fkOk: d.prepare('PRAGMA foreign_key_check').all().length === 0,
+})
+
+/** 用**真正的 db.js** 打开这个老库（迁移发生在 import 时）。
+ *
+ * 首选**独立子进程** —— 最干净。但有些机器上**创建 node 子进程会被系统安全策略
+ * 直接拒掉**（`spawnSync … EBUSY`，与 exe 路径、cwd、沙箱都无关：受管的和系统的
+ * node.exe 一样失败，连复制一份出来也一样；Chrome 不受影响，所以其余自检都正常）。
+ * 那种情况下**测试不能因此被跳过** —— 否则「老库迁移」这段最关键的正向验证就成了
+ * 永久盲区，而这正是本项目最怕的「补丁从不触发」那类假绿。
+ *
+ * 退路：**同进程**重新求值一次 db.js —— 用带 query 的 URL 让 ESM 缓存失效
+ * （`?mig=…` 与已加载的 specifier 不是同一个模块实例），并在 import 前把
+ * `DB_PATH` 指向老库（db.js 是在模块求值时读它的）。
+ * 两条路径验证的是同一件事：老库被真 db.js 打开后必须长出投票能力。
+ */
+const migrateAndInspect = async (dbFile) => {
+  const dbjs = pathToFileURL(path.join(ROOT, 'server/src/db.js')).href
   const probe = path.join(MIG_TMP, 'probe.mjs')
   fs.writeFileSync(
     probe,
     `
-import { db } from ${JSON.stringify(pathToFileURL(path.join(ROOT, 'server/src/db.js')).href)}
-const sql = db.prepare("SELECT sql FROM sqlite_master WHERE name='messages'").get().sql
-console.log(JSON.stringify({
-  kindHasPoll: sql.includes("'poll'"),
-  cols: db.prepare('PRAGMA table_info(messages)').all().map(c => c.name),
-  tables: db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(r => r.name),
-  messages: db.prepare('SELECT COUNT(*) n FROM messages').get().n,
-  texts: db.prepare('SELECT content FROM messages ORDER BY id').all().map(r => r.content),
-  fkOk: db.prepare('PRAGMA foreign_key_check').all().length === 0,
-}))
+import { db } from ${JSON.stringify(dbjs)}
+const inspectWith = ${inspectWith.toString()}
+console.log(JSON.stringify(inspectWith(db)))
 `
   )
-  const out = execFileSync(process.execPath, [probe], {
-    encoding: 'utf8',
-    env: { ...process.env, DB_PATH: dbFile },
-  })
-  return JSON.parse(out.trim().split('\n').pop())
+  try {
+    const out = execFileSync(process.execPath, [probe], {
+      encoding: 'utf8',
+      env: { ...process.env, DB_PATH: dbFile },
+    })
+    return JSON.parse(out.trim().split('\n').pop())
+  } catch (e) {
+    const code = String(e.code || e.message)
+    if (!/EBUSY|EPERM|EACCES|ENOENT|UNKNOWN/.test(code)) throw e
+    console.log(`（本机不能起 node 子进程：${code.slice(0, 60)} —— 退到同进程重新求值 db.js）`)
+    const prev = process.env.DB_PATH
+    process.env.DB_PATH = dbFile
+    let fresh
+    try {
+      fresh = await import(dbjs + `?mig=${Date.now()}`)
+      return inspectWith(fresh.db)
+    } finally {
+      try { fresh?.db?.close() } catch {}
+      if (prev === undefined) delete process.env.DB_PATH
+      else process.env.DB_PATH = prev
+    }
+  }
 }
 
 const oldDb = path.join(MIG_TMP, 'old.db')
 mkOldDb(oldDb)
-const mig = migrateAndInspect(oldDb)
+const mig = await migrateAndInspect(oldDb)
 ok(mig.kindHasPoll, '老库启动后 messages.kind 的 CHECK 含 poll')
 ok(mig.cols.includes('poll_id'), '老库启动后补上了 poll_id 列', mig.cols.join(','))
 ok(
@@ -210,7 +241,7 @@ ok(
 ok(mig.messages === 2 && mig.texts.join('|') === '迁移前 A|迁移前 B', '老消息一条没少、内容原样', `${mig.messages} 条`)
 ok(mig.fkOk, '迁移后外键无断裂')
 
-const mig2 = migrateAndInspect(oldDb)
+const mig2 = await migrateAndInspect(oldDb)
 ok(mig2.messages === mig.messages && mig2.texts.join('|') === mig.texts.join('|'), '再启动一次幂等：不重复迁移、不丢数据')
 
 /* ============================================================
@@ -963,7 +994,7 @@ console.log('\n─── 收尾 ───')
 const pollRows = q.get('SELECT COUNT(*) n FROM polls WHERE id > ?', maxPollBefore).n
 db.prepare('DELETE FROM polls WHERE id > ?').run(maxPollBefore)
 q.run('DELETE FROM messages WHERE id > ?', maxMsgBefore)
-purgeDebris({ quiet: true })
+await purgeDebris({ quiet: true })
 fs.rmSync(MIG_TMP, { recursive: true, force: true })
 
 const pollsAfter = q.get('SELECT COUNT(*) n FROM polls').n

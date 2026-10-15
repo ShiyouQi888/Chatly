@@ -1,9 +1,9 @@
 /**
- * 发现页数据层：推荐用户 / 附近的人 / 兴趣标签 / 可加入的兴趣群 / 热门动态
+ * 发现页数据层：推荐用户 / 附近的人 / 兴趣标签 / 群组 / 动态 / 活动 / 话题
  *
  * 为什么单独一个 store 而不是塞进 AppContext：
  *   这一页的内容是**真实落库**的（关注关系、群成员、动态），
- *   和 AppContext 里那些纯粹的原型数据（通知、状态 Stories）混在一起，
+ *   和 AppContext 里的通知原型数据混在一起，
  *   「这条是不是真的存下来了」就说不清了 —— 这正是本项目一直在避免的事。
  *
  * 三件刻意的设计：
@@ -11,8 +11,8 @@
  *      但失败必须回滚，否则界面上的「已关注」和库里的关系对不上。
  *   2. **热门动态复用 MomentStore 的接口**（`scope=hot`），不自己再造一份列表 ——
  *      两处各存一份，点赞数就会打架。
- *   3. **附近的人没有距离**。库里没有定位数据，任何 "2.3 km" 都是编的；
- *      后端给的是「同城 / 同省 / 地区名」，这里原样透出，不加工成数字。
+ *   3. **附近分享默认关闭**。发现页不会请求设备定位；只有双方明确授权城市级分享，
+ *      后端才返回基于行政区划中心点估算的距离。
  */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { api } from '../api/client.js'
@@ -31,6 +31,8 @@ const initial = {
   tags: [],
   groups: [],
   hot: [],
+  activities: [],
+  topics: [],
 }
 
 function reducer(state, action) {
@@ -98,12 +100,14 @@ export function DiscoverProvider({ children }) {
     setError('')
     try {
       const tag = tagRef.current
-      const [u, n, t, g, h] = await Promise.all([
+      const [u, n, t, g, h, a, topics] = await Promise.all([
         api.discoverUsers({ tag, limit: 20, offset: 0 }),
         api.discoverNearby(20),
         api.discoverTags(),
         api.discoverGroups(),
         api.moments({ scope: 'hot', limit: 10 }),
+        api.discoverActivities(30),
+        api.discoverTopics(),
       ])
       offsetRef.current = 0
       dispatch({
@@ -117,6 +121,8 @@ export function DiscoverProvider({ children }) {
           tags: t.tags,
           groups: g.groups,
           hot: h.moments || [],
+          activities: a.activities || [],
+          topics: topics.topics || [],
         },
       })
     } catch (e) {

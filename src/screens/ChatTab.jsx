@@ -1,53 +1,31 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useApp } from '../store/AppContext.jsx'
 import { useChat, avatarOf } from '../store/ChatStore.jsx'
+import { useNotifications } from '../store/NotificationStore.jsx'
 import { api } from '../api/client.js'
-import { STORIES } from '../data/mock.js'
 import { Avatar, Badge, ActionMenu, Empty } from '../components/ui.jsx'
+import StatusStories from '../components/StatusStories.jsx'
 import { useLongPress } from '../hooks/useLongPress.js'
 import {
   IconSearch,
   IconPlus,
   IconScan,
+  IconBell,
   IconBellOff,
   IconPin,
   IconMarkRead,
   IconTrash,
   IconUser,
+  IconMoment,
   IconPlusCircle,
   IconChat,
   IconCheck,
 } from '../components/Icon.jsx'
 import './chat-tab.css'
 
-/* ===== 状态区（动态功能的入口，仍为原型数据） ===== */
-function StatusRow({ nav }) {
-  const { showToast } = useApp()
-  return (
-    <div className="status-scroll no-scrollbar">
-      {STORIES.map((s) => (
-        <button
-          key={s.id}
-          type="button"
-          className={`story ${s.self ? 'is-self' : ''}`}
-          onClick={() => showToast(s.self ? '发布你的状态' : `查看 ${s.name} 的状态 · ${s.state}`)}
-        >
-          <span className={`story-ring ${s.seen ? 'is-seen' : ''}`}>
-            <Avatar src={s.src} name={s.name} size={56} radius={19} />
-            {s.self && (
-              <i className="story-add">
-                <IconPlus size={13} sw={2.6} />
-              </i>
-            )}
-          </span>
-          <span className="story-name">{s.name}</span>
-        </button>
-      ))}
-    </div>
-  )
-}
-
-/* ===== 会话行 ===== */
+/* ===== 会话行 =====
+   左滑删除：关掉「聊天列表左滑删除」后，长按菜单里不再出现删除项。
+   ⚠️ 不是「藏掉菜单」，是**整项拿掉** —— 留一个点了没反应的灰项更糟。 */
 function ChatRow({ c, onOpen, onMenu }) {
   /* 长按 / 右键 → 会话操作菜单（置顶 / 免打扰 / 删除…）。
      ⚠️ 原来只绑 onContextMenu（桌面右键），**手机上根本触发不了** ——
@@ -98,12 +76,12 @@ function SearchEntry({ onOpen }) {
 }
 
 /* ===== 新建面板 ===== */
-function ComposeSheet({ open, onClose, onPickGroup, onPickFriend }) {
+function ComposeSheet({ open, onClose, onPickGroup, onPickFriend, onPickStatus }) {
   if (!open) return null
   const items = [
     { label: '发起群聊', desc: '选择联系人建群', icon: <IconPlusCircle size={20} />, key: 'group', onClick: onPickGroup },
     { label: '发起私聊', desc: '找个人开始聊', icon: <IconChat size={20} />, key: 'private', onClick: onPickFriend },
-    { label: '查看状态', desc: '看看大家在做什么', icon: <IconUser size={20} />, key: 'status', disabled: true },
+    { label: '发布状态', desc: '分享此刻的心情', icon: <IconMoment size={20} />, key: 'status', onClick: onPickStatus },
   ]
   return (
     <div className="compose-root">
@@ -256,7 +234,7 @@ function NewChatSheet({ mode, onClose, onCreated }) {
   )
 }
 
-export default function ChatTab({ nav }) {
+export default function ChatTab({ nav, statusComposeSignal = 0 }) {
   const { showToast } = useApp()
   const {
     conversations,
@@ -267,10 +245,14 @@ export default function ChatTab({ nav }) {
     toggleUnread,
     deleteConversation,
   } = useChat()
+  /* 互动通知的未读数（铃铛上的角标）。和会话未读是**两件事**：
+     后者是「有消息没看」，前者是「有人赞你 / 评论你 / @ 你」。 */
+  const { unread: notifyUnread } = useNotifications()
 
   const [menuChat, setMenuChat] = useState(null)
   const [compose, setCompose] = useState(false)
   const [newMode, setNewMode] = useState(null)
+  const [statusComposeRequest, setStatusComposeRequest] = useState(0)
 
   /* 后端已按「置顶优先 + 时间倒序」返回，这里只做兜底排序 */
   const ordered = useMemo(
@@ -280,6 +262,17 @@ export default function ChatTab({ nav }) {
       ),
     [conversations]
   )
+
+  /* 「聊天列表左滑删除」关掉后，长按菜单里也不再给删除项。
+     读 localStorage 而不用 state：ChatTab 和设置页是两个独立页面，
+     关掉开关切回来时要**立刻**生效，不等人为刷新。 */
+  const swipeDeleteEnabled = (() => {
+    try {
+      return localStorage.getItem('chatly-swipe-delete') !== 'false'
+    } catch {
+      return true
+    }
+  })()
 
   const menuItems = menuChat
     ? [
@@ -307,15 +300,20 @@ export default function ChatTab({ nav }) {
             showToast(menuChat.muted ? '已关闭免打扰' : '已开启免打扰')
           },
         },
-        {
-          label: '删除会话',
-          icon: <IconTrash size={20} />,
-          danger: true,
-          onClick: async () => {
-            await deleteConversation(menuChat.id)
-            showToast('会话已删除')
-          },
-        },
+        // 开关关掉时整项拿掉，不留灰按钮
+        ...(swipeDeleteEnabled
+          ? [
+              {
+                label: '删除会话',
+                icon: <IconTrash size={20} />,
+                danger: true,
+                onClick: async () => {
+                  await deleteConversation(menuChat.id)
+                  showToast('会话已删除')
+                },
+              },
+            ]
+          : []),
       ]
     : []
 
@@ -330,6 +328,18 @@ export default function ChatTab({ nav }) {
           <p className="brand-sub">连接更有趣的人</p>
         </div>
         <div className="chat-head-act">
+          {/* 通知中心入口。以前它根本没有入口（nav.openNotice 定义了却没人调用），
+              所以这一整块功能等于不存在。铃铛上挂互动未读数。 */}
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={() => nav.openNotice?.()}
+            aria-label="通知中心"
+            data-testid="open-notice"
+          >
+            <IconBell size={20} />
+            {notifyUnread > 0 && <Badge count={notifyUnread} />}
+          </button>
           <button type="button" className="icon-btn" onClick={nav.openSearch} aria-label="搜索">
             <IconSearch size={20} />
           </button>
@@ -355,7 +365,7 @@ export default function ChatTab({ nav }) {
 
       <div className="chat-scroll no-scrollbar">
         <SearchEntry onOpen={nav.openSearch} />
-        <StatusRow nav={nav} />
+        <StatusStories composeRequest={statusComposeRequest + statusComposeSignal} />
 
         <div className="chat-list">
           {ordered.map((c) => (
@@ -371,11 +381,13 @@ export default function ChatTab({ nav }) {
         {ordered.length > 0 && <p className="chat-foot">已显示全部会话</p>}
       </div>
 
+      {/* 会话列表的菜单是**长按**弹出来的，所以要开那道「补发 click」防御 */}
       <ActionMenu
         open={!!menuChat}
         onClose={() => setMenuChat(null)}
         title={menuChat?.name}
         items={menuItems}
+        longPress
       />
 
       <ComposeSheet
@@ -383,6 +395,7 @@ export default function ChatTab({ nav }) {
         onClose={() => setCompose(false)}
         onPickGroup={() => setNewMode('group')}
         onPickFriend={() => setNewMode('private')}
+        onPickStatus={() => setStatusComposeRequest((value) => value + 1)}
       />
 
       <NewChatSheet

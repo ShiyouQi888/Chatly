@@ -366,24 +366,211 @@
   background: var(--brand-grad);
 }
 
-/* ===== 未接入 ===== */
-.mc-pending {
+/* ===== 动态卡片编辑器 ===== */
+.mc-card-types {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
-.mc-pending-item {
+.mc-card-type {
+  min-width: 0;
+  padding: 10px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: var(--fs-micro);
+}
+
+.mc-card-type.is-on {
+  border-color: var(--brand-2);
+  background: var(--brand-soft);
+  color: var(--brand-2);
+}
+
+.mc-card-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+
+.mc-card-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text-3);
+  font-size: var(--fs-micro);
+}
+
+.mc-card-label input,
+.mc-card-label textarea,
+.mc-card-option input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  color: var(--text-1);
+  font: inherit;
+  font-size: var(--fs-sub);
+}
+
+.mc-card-label textarea {
+  min-height: 76px;
+  resize: vertical;
+}
+
+.mc-card-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mc-card-option {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 11px 13px;
+  min-width: 0;
+}
+
+.mc-card-option button,
+.mc-card-add {
+  flex: 0 0 auto;
+  color: var(--brand-2);
+  font-size: var(--fs-micro);
+}
+
+.mc-card-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: var(--fs-micro);
+}
+
+.mc-card-check input {
+  accent-color: var(--brand-2);
+}
+
+.mc-card-add {
+  align-self: flex-start;
+}
+
+.mc-card {
+  margin-top: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
   border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+
+.mc-card h3 {
+  margin: 0 0 8px;
+  color: var(--text-1);
   font-size: var(--fs-sub);
-  color: var(--text-4);
+}
+
+.mc-card p {
+  margin: 6px 0 0;
+  color: var(--text-3);
+  font-size: var(--fs-micro);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.mc-card-poll-options {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.mc-card-poll-option {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
   background: var(--surface);
-  opacity: 0.7;
-  cursor: not-allowed;
+  color: var(--text-2);
+  text-align: left;
+}
+
+.mc-card-poll-option.is-selected {
+  border-color: var(--brand-2);
+  color: var(--brand-2);
+}
+
+.mc-card-poll-option:disabled {
+  cursor: default;
+}
+
+.mc-card-poll-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  color: var(--text-3);
+  font-size: var(--fs-micro);
+}
+
+.mc-card-poll-actions button,
+.mc-card-rsvp button {
+  padding: 8px 12px;
+  border-radius: var(--r-full);
+  background: var(--brand-grad);
+  color: var(--text-on-brand);
+  font-size: var(--fs-micro);
+}
+
+.mc-card-poll-actions button:disabled,
+.mc-card-rsvp button:disabled {
+  opacity: 0.55;
+}
+
+.mc-card-rsvp {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.mc-card-rsvp button.is-active {
+  background: var(--brand-soft);
+  color: var(--brand-2);
+}
+
+.mc-card-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+
+.mc-card-link::after {
+  content: '打开链接 ↗';
+  display: block;
+  margin-top: 10px;
+  color: var(--brand-2);
+  font-size: var(--fs-micro);
+}
+
+.mc-card-link:focus-visible,
+.mc-card-poll-option:focus-visible,
+.mc-card-rsvp button:focus-visible,
+.mc-card-poll-actions button:focus-visible,
+.mc-card-type:focus-visible {
+  outline: 2px solid var(--brand-2);
+  outline-offset: 2px;
 }
 
 .mc-err {

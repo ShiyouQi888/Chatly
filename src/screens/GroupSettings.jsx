@@ -27,7 +27,6 @@ import {
   IconBellOff,
   IconLock,
   IconLogout,
-  IconFolder,
   IconCheck,
   IconChevron,
 } from '../components/Icon.jsx'
@@ -39,7 +38,7 @@ const ROLE_ORDER = { owner: 0, admin: 1, member: 2 }
 const ANNOUNCE_MAX = 500
 const TITLE_MAX = 40
 
-export default function GroupSettings({ chat, onBack, onOpenProfile, onLeft, onOpenPoll }) {
+export default function GroupSettings({ chat, onBack, onOpenProfile, onLeft, onOpenPoll, openAnnouncementEditor, onAnnouncementEditorOpened }) {
   const { showToast } = useApp()
   const {
     me,
@@ -96,6 +95,13 @@ export default function GroupSettings({ chat, onBack, onOpenProfile, onLeft, onO
   const [candidates, setCandidates] = useState(null)
   const [picked, setPicked] = useState([])
   const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (!openAnnouncementEditor) return
+    setAnnText(chat.announcement || '')
+    setEditAnn(true)
+    onAnnouncementEditorOpened?.()
+  }, [openAnnouncementEditor, chat.announcement, onAnnouncementEditorOpened])
 
   const openInvite = async () => {
     setInvite(true)
@@ -398,8 +404,6 @@ export default function GroupSettings({ chat, onBack, onOpenProfile, onLeft, onO
           </section>
         )}
 
-        {/* ===== 未接入 =====
-             一律 disabled + 明确标注，不做「点了弹个 toast 假装成功」的假功能。 */}
         {/* ===== 群投票 =====
             这一块原来是「未接入」的禁用项。做成真的之后**两处入口都通**：
             聊天页加号面板发起，这里看全部历史（点了跳到聊天里那条消息）。 */}
@@ -452,32 +456,6 @@ export default function GroupSettings({ chat, onBack, onOpenProfile, onLeft, onO
           )}
         </section>
 
-        <section className="gs-card">
-          <h4 className="gs-card-title">
-            <IconFolder size={15} /> 尚未接入
-          </h4>
-          <div className="gs-rows">
-            <button type="button" className="gs-row is-pending" disabled>
-              <span className="gs-row-ic">
-                <IconFolder size={16} />
-              </span>
-              <span className="gs-row-body">
-                <b>群文件</b>
-              </span>
-              <span className="gs-row-right">未接入</span>
-            </button>
-            <button type="button" className="gs-row is-pending" disabled>
-              <span className="gs-row-ic">
-                <IconChevron size={16} />
-              </span>
-              <span className="gs-row-body">
-                <b>群公告置顶推送</b>
-              </span>
-              <span className="gs-row-right">未接入</span>
-            </button>
-          </div>
-        </section>
-
         {/* ===== 退出群聊 ===== */}
         <section className="gs-card">
           {/* 群主不能退出 —— 服务端 removeMember 对 owner 直接 403，
@@ -505,7 +483,7 @@ export default function GroupSettings({ chat, onBack, onOpenProfile, onLeft, onO
           )}
         </section>
 
-        <p className="gs-foot">群资料由群主和管理员维护，均为演示数据。</p>
+        <p className="gs-foot">群资料、文件和公告均会同步到服务器；公告推送受成员的通知设置影响。</p>
       </div>
 
       {/* ===== 弹层 ===== */}
@@ -562,11 +540,11 @@ export default function GroupSettings({ chat, onBack, onOpenProfile, onLeft, onO
               onClick={() =>
                 save({ announcement: annText.trim() }, () => {
                   setEditAnn(false)
-                  showToast(annText.trim() ? '群公告已发布' : '群公告已清空')
+                  showToast(annText.trim() ? '群公告已发布，群通知已发送' : '群公告已清空')
                 })
               }
             >
-              发布
+              发布并提醒成员
             </button>
           </div>
         }

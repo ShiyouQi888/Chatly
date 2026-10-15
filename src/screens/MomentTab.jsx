@@ -9,7 +9,7 @@
  * 点赞走乐观更新（点了立刻变，失败回滚）；删除与编辑只有自己的动态才有入口。
  */
 import React, { useEffect, useState } from 'react'
-import { formatAgo } from '../api/client.js'
+import { api, formatAgo } from '../api/client.js'
 import { useMoments } from '../store/MomentStore.jsx'
 import { useApp } from '../store/AppContext.jsx'
 import { Avatar, Chip, ActionMenu, Empty } from '../components/ui.jsx'
@@ -67,8 +67,91 @@ function MusicCard({ m }) {
   )
 }
 
+function MomentAttachment({ moment, onAction }) {
+  const card = moment.card
+  const [selected, setSelected] = useState(card?.myOptions || [])
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  useEffect(() => setSelected(card?.myOptions || []), [card?.myOptions])
+  if (!card) return null
+
+  const act = async (type, payload) => {
+    setBusy(true)
+    setError('')
+    try { await onAction(moment.id, type, payload) }
+    catch (e) { setError(e.message || '操作失败，请重试') }
+    finally { setBusy(false) }
+  }
+
+  if (card.kind === 'poll') {
+    const total = Number(card.totalVotes) || 0
+    const hasVoted = (card.myOptions || []).length > 0
+    const toggle = (index) => setSelected((current) => {
+      if (!card.data.multi) return [index]
+      return current.includes(index) ? current.filter((i) => i !== index) : [...current, index]
+    })
+    return (
+      <section className="mc-card mc-card-poll" aria-label="动态投票">
+        <h3>投票 · {card.data.question}</h3>
+        <div className="mc-card-poll-options">
+          {card.data.options.map((option, index) => {
+            const count = Number(card.counts?.[index]) || 0
+            const percent = total ? Math.round(count / total * 100) : 0
+            return (
+              <button type="button" key={`${index}-${option}`} className={`mc-card-poll-option ${selected.includes(index) ? 'is-selected' : ''}`} onClick={() => toggle(index)} disabled={busy || hasVoted} aria-pressed={selected.includes(index)}>
+                <span>{option}{card.myOptions?.includes(index) ? ' ✓' : ''}</span>
+                <span>{count} 票 · {percent}%</span>
+              </button>
+            )
+          })}
+        </div>
+        <div className="mc-card-poll-actions">
+          <span>{total} 人参与{card.data.multi ? ' · 多选' : ' · 单选'}</span>
+          <button type="button" onClick={() => act('vote', { optionIndexes: selected })} disabled={busy || !selected.length || hasVoted}>
+            {busy ? '提交中…' : hasVoted ? '已投票' : '投票'}
+          </button>
+        </div>
+        {hasVoted && <p className="mc-card-poll-locked">已投票，不能再次修改</p>}
+        {error && <p role="alert">{error}</p>}
+      </section>
+    )
+  }
+
+  if (card.kind === 'activity') {
+    const date = Number(card.data.startsAt)
+    return (
+      <section className="mc-card mc-card-activity" aria-label="活动">
+        <h3>活动 · {card.data.title}</h3>
+        <p>{Number.isFinite(date) ? new Date(date).toLocaleString('zh-CN', { hour12: false }) : '时间待定'}</p>
+        {card.data.location && <p>地点：{card.data.location}</p>}
+        {card.data.description && <p>{card.data.description}</p>}
+        <div className="mc-card-rsvp">
+          <button type="button" className={card.myStatus === 'going' ? 'is-active' : ''} onClick={() => act('rsvp', { status: card.myStatus === 'going' ? null : 'going' })} disabled={busy} aria-pressed={card.myStatus === 'going'}>
+            {busy ? '处理中…' : `参加 ${card.going || 0}`}
+          </button>
+          <button type="button" className={card.myStatus === 'interested' ? 'is-active' : ''} onClick={() => act('rsvp', { status: card.myStatus === 'interested' ? null : 'interested' })} disabled={busy} aria-pressed={card.myStatus === 'interested'}>
+            感兴趣 {card.interested || 0}
+          </button>
+        </div>
+        {error && <p role="alert">{error}</p>}
+      </section>
+    )
+  }
+
+  if (card.kind === 'link') {
+    return (
+      <a className="mc-card mc-card-link" href={card.data.url} target="_blank" rel="noopener noreferrer">
+        <h3>{card.data.title}</h3>
+        {card.data.description && <p>{card.data.description}</p>}
+        <p>{new URL(card.data.url).hostname}</p>
+      </a>
+    )
+  }
+  return null
+}
+
 /* ===== 单条动态 ===== */
-function MomentCard({ m, onLike, onOpen, onEdit, onRemove }) {
+function MomentCard({ m, onLike, onOpen, onEdit, onRemove, onCardAction }) {
   const { showToast } = useApp()
   const [menu, setMenu] = useState(false)
 
@@ -124,6 +207,7 @@ function MomentCard({ m, onLike, onOpen, onEdit, onRemove }) {
       {/* 图片走网格、视频走播放器 —— 分支在 MomentMedia 里，列表和详情共用 */}
       {m.media?.length > 0 && <MomentMedia media={m.media} prefix="mgrid" onOpen={onOpen(m)} />}
       {m.music && <MusicCard m={m.music} />}
+      <MomentAttachment moment={m} onAction={onCardAction} />
 
       <div className="mc-acts">
         <button
@@ -161,6 +245,7 @@ export default function MomentTab({ nav }) {
     publish,
     editMoment,
     removeMoment,
+    updateMomentCard,
     toggleLike,
   } = useMoments()
   const { showToast } = useApp()
@@ -177,6 +262,24 @@ export default function MomentTab({ nav }) {
   const [detail, setDetail] = useState(null)
   const [viewer, setViewer] = useState(null)
   const [askRemove, setAskRemove] = useState(null)
+  /* 发布面板的**初始可见范围**读「我 → 隐私设置 → 动态可见范围」。
+     以前这里写死 'public'，于是那个设置项存进库之后没有任何人读它 ——
+     一个「能拨、存得下、不生效」的假开关。
+     读不到（没登录 / 接口失败）就用 'public'，不弹错：这只是个默认值。 */
+  const [defaultVisibility, setDefaultVisibility] = useState('public')
+
+  useEffect(() => {
+    let alive = true
+    api
+      .getSettings()
+      .then((s) => {
+        if (alive && s?.moment_visibility) setDefaultVisibility(s.moment_visibility)
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
 
   /** 点图 / 评论 / 详情都走这里：返回该条动态对应的打开函数 */
   const openFor = (m) => (arg) => {
@@ -185,6 +288,13 @@ export default function MomentTab({ nav }) {
   }
 
   const onLike = (id) => toggleLike(id).catch((e) => showToast(e.message))
+
+  const onCardAction = async (id, type, payload) => {
+    const out = type === 'vote'
+      ? await api.voteMomentCard(id, payload.optionIndexes)
+      : await api.respondMomentActivity(id, payload.status)
+    updateMomentCard(id, out.card)
+  }
 
   const onSubmit = async (payload) => {
     if (composer?.mode === 'edit') {
@@ -250,6 +360,7 @@ export default function MomentTab({ nav }) {
                 onOpen={openFor}
                 onEdit={(x) => setComposer({ mode: 'edit', moment: x })}
                 onRemove={(x) => setAskRemove(x)}
+                onCardAction={onCardAction}
               />
             ))}
           </div>
@@ -262,6 +373,7 @@ export default function MomentTab({ nav }) {
       <MomentComposer
         open={!!composer}
         editing={composer?.mode === 'edit' ? composer.moment : null}
+        defaultVisibility={defaultVisibility}
         onClose={() => setComposer(null)}
         onSubmit={onSubmit}
       />

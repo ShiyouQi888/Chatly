@@ -18,6 +18,55 @@
   overflow: hidden;
 }
 
+/* 自定义背景：真实图片 cover 铺满整条封面。
+   z-index 让插画（默认态）永远不挡在它前面。 */
+.me-cover-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.me-cover.has-image .me-cover-svg {
+  display: none;
+}
+
+/* 换背景时图片在按钮底下，右下角放一个「恢复默认」的小胶囊 */
+.me-cover-reset {
+  position: absolute;
+  right: 14px;
+  top: calc(var(--safe-top) + 44px);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  color: #fff;
+  background: rgba(22, 22, 31, 0.42);
+  backdrop-filter: blur(8px);
+  padding: 5px 11px;
+  border-radius: var(--r-full);
+}
+
+.me-cover-reset:disabled {
+  opacity: 0.55;
+}
+
+/* 上传中的转圈（替换相机图标，按钮尺寸不变） */
+.me-cover-spin {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  animation: cover-spin 0.7s linear infinite;
+}
+
+@keyframes cover-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .me-cover-svg {
   width: 100%;
   height: 100%;
@@ -353,8 +402,21 @@
   background: rgba(240, 74, 94, 0.07);
 }
 
-/* ===== 子页面 ===== */
-.subpage {
+/* ===== 子页面 =====
+ * ⚠️ `.sub-page` 和 `.subpage` 是**同一个东西的两个名字**，必须合并成一条规则。
+ *
+ * 这里曾经只有 `.subpage`。而 SecuritySettings / PrivacySettings /
+ * NotificationSettings / GeneralSettings / HelpPage / AboutPage / RecentFilesPage
+ * 这七个页面写的都是 `.sub-page` —— 全项目 CSS 里**从来没有定义过它**。
+ * 结果是这七个子页套在一个零样式 <div> 上：没有绝对定位、没有 flex 纵向排布，
+ * 于是标题栏不固定、`.sub-scroll` 的 `flex:1` 失效、正文一路铺到屏幕底部
+ * 被底部导航栏压住。每次点进去都像「这页没做完」——因为版式真的没生效。
+ *
+ * 两个类名都留着（而不是把七个文件改一遍）：改名容易漏，
+ * 而 CSS 里多一个选择器是零成本的。
+ */
+.subpage,
+.sub-page {
   position: absolute;
   inset: 0;
   z-index: 78;
@@ -433,6 +495,66 @@
 
 .sub-note.is-warn {
   color: var(--accent-pink);
+}
+
+/* ===== 通知免打扰时段 =====
+   时间控件有浏览器自带的最小宽度，直接横排会把窄屏上的分组卡片撑开。 */
+.dnd-times {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px 16px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.dnd-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-2);
+  font-size: var(--fs-cap);
+}
+
+.dnd-field input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  color: var(--text-1);
+  font: inherit;
+  font-size: var(--fs-sub);
+}
+
+.dnd-save {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 14px;
+  border-radius: var(--r-md);
+  background: var(--brand-grad);
+  color: var(--text-on-brand);
+  font-size: var(--fs-sub);
+  font-weight: 600;
+}
+
+.dnd-save:disabled {
+  opacity: 0.6;
+}
+
+@media (max-width: 340px) {
+  .dnd-times {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dnd-save {
+    grid-column: auto;
+  }
 }
 
 /* ===== 收藏行（PRD §9） =====
@@ -861,6 +983,15 @@
   border-radius: var(--r-full);
 }
 
+/* 「未接入」徽标：和 `.tag-now` 同为灰调，但明显更弱 —— 它不是状态，是缺省 */.tag-off {
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  color: var(--text-3);
+  background: var(--line);
+  padding: 3px 9px;
+  border-radius: var(--r-full);
+}
+
 /* ===== 编辑资料 ===== */
 .edit-av {
   display: flex;
@@ -1198,6 +1329,58 @@
   text-align: right;
 }
 
+/* ===== 修改密码弹层（账号与安全 → 密码） ===== */
+.pw-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 4px 2px 8px;
+}
+
+.pw-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pw-field label {
+  font-size: var(--fs-cap);
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.pw-err {
+  font-size: var(--fs-cap);
+  color: #e5484d;
+}
+
+.pw-note {
+  font-size: var(--fs-cap);
+  line-height: 1.5;
+  color: var(--text-3);
+}
+
+.pw-submit {
+  align-self: stretch;
+  margin-top: 2px;
+  padding: 11px 0;
+  border-radius: var(--r-md);
+  background: var(--brand-grad);
+  color: #fff;
+  font-size: var(--fs-body);
+  font-weight: 600;
+  box-shadow: var(--shadow-brand);
+  transition: transform 0.14s var(--ease);
+}
+
+.pw-submit:disabled {
+  opacity: 0.55;
+}
+
+.pw-submit:active:not(:disabled) {
+  transform: scale(0.985);
+}
+
 .screenshot-upload {
   cursor: pointer;
 }
@@ -1225,6 +1408,35 @@
   flex-direction: column;
   align-items: center;
   gap: 8px;
+  color: var(--text-2);
+}
+
+/* 已选中截图的状态：把「虚线可点击区」换成「实线已选」，并给一个移除按钮。
+   选中之后还保持虚线框 + 光标手型，用户会以为还能再点，其实再点只是重选。 */
+.upload-area.is-picked {
+  border-style: solid;
+  border-color: var(--brand-2);
+  background: var(--brand-soft);
+  cursor: default;
+}
+
+.upload-area.is-picked:hover {
+  border-color: var(--brand-2);
+  color: inherit;
+}
+
+.upload-clear {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--brand-2);
+  padding: 4px 12px;
+  border-radius: var(--r-full);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+/* 提交成功后的落库说明：它不是计数器，别跟着 `.form-hint` 右对齐 */
+.form-hint.is-ok {
+  text-align: left;
   color: var(--text-2);
 }
 
@@ -1322,6 +1534,14 @@
 .settings-hint {
   font-size: 12px;
   color: var(--text-3);
+}
+
+/* 作为分组下的说明段落时（而不是行内的小字）要自己的间距。
+   用直接子选择器，免得影响 `.settings-item` 里的行内用法。 */
+.settings-section > .settings-hint {
+  margin-top: 8px;
+  line-height: 1.6;
+  display: block;
 }
 
 .settings-value {

@@ -79,7 +79,7 @@ async function up(filePath, kind, auth, { mime, name } = {}) {
 }
 
 const author = await login('chenmo')
-purgeMoments()
+await purgeMoments()
 const baselineCount = (await j('GET', '/moments?scope=mine', null, author.auth)).d.moments.length
 console.log(`自检开始（作者现有 ${baselineCount} 条自己的动态）\n`)
 
@@ -173,7 +173,7 @@ ok(
   JSON.stringify(zero.d?.moment?.media?.[0])
 )
 
-await purgeMoments()
+await await purgeMoments()
 
 /* ================= 浏览器 ================= */
 const port = await freePort()
@@ -588,8 +588,8 @@ try {
   failures++
 } finally {
   proc.kill()
-  const p = purgeMoments()
-  purgeOrphanUploads({ quiet: true })
+  const p = await purgeMoments()
+  await purgeOrphanUploads({ quiet: true })
   if (p.moments) console.log(`\n已清理临时动态 ${p.moments} 条（媒体 ${p.media} / 赞 ${p.likes} / 评论 ${p.comments}）`)
 
   const noise = /favicon|DevTools|ExperimentalWarning|Autoplay is only allowed/i

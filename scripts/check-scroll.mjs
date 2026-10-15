@@ -401,7 +401,7 @@ try {
    DELETE /conversations/:id 只是「退出成员」，会话和消息都还在 ——
    不从这里真删的话，每跑一次自检就多留一个 52 条的孤儿会话。 */
 if (seeded) {
-  const r = purgeDebris({ quiet: true })
+  const r = await purgeDebris({ quiet: true })
   console.log(`\n已清理自检残留：${r.conversations} 个会话 / ${r.messages} 条消息`)
 }
 

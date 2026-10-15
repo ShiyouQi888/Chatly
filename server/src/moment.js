@@ -32,37 +32,37 @@ export const MOMENT_KINDS = ['text', 'image', 'video', 'music']
 
 /* ================= 关注关系 ================= */
 
-export function isFollowing(followerId, followeeId) {
-  return !!q.get(
-    'SELECT 1 FROM follows WHERE follower_id = ? AND followee_id = ?',
-    followerId,
-    followeeId
+export async function isFollowing(followerId, followeeId) {
+  return !!(
+    await q.get('SELECT 1 FROM follows WHERE follower_id = ? AND followee_id = ?', followerId, followeeId)
   )
 }
 
 /** 互相关注才算「好友」—— 单向关注是关注，不是好友 */
-export function isMutual(aId, bId) {
+export async function isMutual(aId, bId) {
   if (!aId || !bId || aId === bId) return false
-  return isFollowing(aId, bId) && isFollowing(bId, aId)
+  return (await isFollowing(aId, bId)) && (await isFollowing(bId, aId))
 }
 
-export function follow(followerId, followeeId) {
+export async function follow(followerId, followeeId) {
   if (followerId === followeeId) return false
-  if (isFollowing(followerId, followeeId)) return false
-  q.run(
-    'INSERT INTO follows (follower_id, followee_id) VALUES (?, ?)',
-    followerId,
-    followeeId
-  )
+  if (await isFollowing(followerId, followeeId)) return false
+  await q.run('INSERT INTO follows (follower_id, followee_id) VALUES (?, ?)', followerId, followeeId)
   return true
 }
 
-export function unfollow(followerId, followeeId) {
-  q.run(
-    'DELETE FROM follows WHERE follower_id = ? AND followee_id = ?',
-    followerId,
-    followeeId
-  )
+export async function unfollow(followerId, followeeId) {
+  await q.run('DELETE FROM follows WHERE follower_id = ? AND followee_id = ?', followerId, followeeId)
+}
+
+/**
+ * 我关注的全部人（一个 Set）。
+ * 给「找人」搜索结果用：逐行 `isFollowing` 在 PG 模式下就是 N 次往返，
+ * 而这个列表上限只有 20 条 —— 一次拉全量再在内存里判，比逐条查便宜得多。
+ */
+export async function followingIds(followerId) {
+  const rows = await q.all('SELECT followee_id FROM follows WHERE follower_id = ?', followerId)
+  return new Set(rows.map((r) => Number(r.followee_id)))
 }
 
 /**
@@ -74,11 +74,9 @@ export function unfollow(followerId, followeeId) {
  * 客户端 `!!out.following` 恒为 true（数量 > 0），于是「取关」之后按钮还写着「已关注」。
  * 这个 bug 界面上一眼看不出（库里其实已经删了），只有回查数据才会露。
  */
-export function followCounts(userId) {
-  const followingCount = q
-    .get('SELECT COUNT(*) AS n FROM follows WHERE follower_id = ?', userId).n
-  const followerCount = q
-    .get('SELECT COUNT(*) AS n FROM follows WHERE followee_id = ?', userId).n
+export async function followCounts(userId) {
+  const followingCount = (await q.get('SELECT COUNT(*) AS n FROM follows WHERE follower_id = ?', userId)).n
+  const followerCount = (await q.get('SELECT COUNT(*) AS n FROM follows WHERE followee_id = ?', userId)).n
   return { followingCount, followerCount }
 }
 
@@ -95,46 +93,196 @@ const VISIBLE_SQL = `
 `
 
 /** 这条动态 viewer 看得见吗 —— 列表与详情共用同一份判定 */
-export function visibleTo(momentId, viewerId) {
-  const row = q.get('SELECT user_id AS userId, visibility FROM moments WHERE id = ?', momentId)
+export async function visibleTo(momentId, viewerId) {
+  const row = await q.get('SELECT user_id AS userId, visibility FROM moments WHERE id = ?', momentId)
   if (!row) return false
-  return row.userId === viewerId || row.visibility === 'public' || (row.visibility === 'friends' && isMutual(row.userId, viewerId))
+  return (
+    row.userId === viewerId ||
+    row.visibility === 'public' ||
+    (row.visibility === 'friends' && (await isMutual(row.userId, viewerId)))
+  )
 }
 
 /* ================= 查询 ================= */
 
-function mediaOf(momentId) {
-  return q
-    .all(
+async function mediaOf(momentId) {
+  return (
+    await q.all(
       `SELECT id, kind, url, file_name AS fileName, file_size AS fileSize, sort,
               width, height, duration
        FROM moment_media WHERE moment_id = ? ORDER BY sort, id`,
       momentId
     )
-    .map((r) => ({
-      id: r.id,
-      kind: r.kind,
-      url: r.url,
-      fileName: r.fileName,
-      fileSize: Number(r.fileSize) || 0,
-      /* 宽高时长可能为 NULL（老数据 / 客户端没读到）—— 交给前端决定兜底比例，
-         这里不要编一个 0 或 16:9 出来：0 会让 aspect-ratio 直接失效。 */
-      width: r.width ? Number(r.width) : null,
-      height: r.height ? Number(r.height) : null,
-      duration: Number.isFinite(Number(r.duration)) && r.duration > 0 ? Number(r.duration) : null,
-    }))
+  ).map((r) => ({
+    id: r.id,
+    kind: r.kind,
+    url: r.url,
+    fileName: r.fileName,
+    fileSize: Number(r.fileSize) || 0,
+    /* 宽高时长可能为 NULL（老数据 / 客户端没读到）—— 交给前端决定兜底比例，
+       这里不要编一个 0 或 16:9 出来：0 会让 aspect-ratio 直接失效。 */
+    width: r.width ? Number(r.width) : null,
+    height: r.height ? Number(r.height) : null,
+    duration: Number.isFinite(Number(r.duration)) && r.duration > 0 ? Number(r.duration) : null,
+  }))
 }
 
-function authorOf(userId) {
-  const u = q.get(
-    'SELECT id, username, nickname, avatar, bio FROM users WHERE id = ?',
-    userId
-  )
+async function authorOf(userId) {
+  const u = await q.get('SELECT id, username, nickname, avatar, bio FROM users WHERE id = ?', userId)
   return publicUser(u)
 }
 
-function shape(row, viewerId) {
-  const media = mediaOf(row.id)
+function invalidCard(message) {
+  return Object.assign(new Error(message), { status: 400 })
+}
+
+function validateCard(input, { allowPastActivity = false } = {}) {
+  if (input == null) return null
+  const kind = input?.kind
+  const data = input?.data || {}
+  if (kind === 'poll') {
+    const question = cleanText(data.question, 120)
+    const options = [...new Set((Array.isArray(data.options) ? data.options : []).map((v) => cleanText(v, 60)).filter(Boolean))]
+    if (!question) throw invalidCard('请填写投票问题')
+    if (options.length < 2 || options.length > 6) throw invalidCard('投票需要 2 到 6 个不同选项')
+    return { kind, data: { question, options, multi: !!data.multi } }
+  }
+  if (kind === 'activity') {
+    const title = cleanText(data.title, 100)
+    const startsAt = Number(data.startsAt)
+    if (!title) throw invalidCard('请填写活动名称')
+    if (!Number.isSafeInteger(startsAt) || (!allowPastActivity && startsAt <= Date.now())) throw invalidCard('活动时间必须晚于现在')
+    return {
+      kind,
+      data: {
+        title,
+        startsAt,
+        location: cleanText(data.location, 120),
+        description: cleanText(data.description, 500),
+      },
+    }
+  }
+  if (kind === 'link') {
+    const rawUrl = cleanText(data.url, 2048)
+    let parsed
+    try {
+      parsed = new URL(rawUrl)
+    } catch {
+      throw invalidCard('请输入有效的链接地址')
+    }
+    if (!['http:', 'https:'].includes(parsed.protocol)) throw invalidCard('链接只支持 http 或 https')
+    const title = cleanText(data.title, 120)
+    if (!title) throw invalidCard('请填写链接标题')
+    return { kind, data: { url: parsed.href, title, description: cleanText(data.description, 300) } }
+  }
+  throw invalidCard('动态卡片类型无效')
+}
+
+async function storeCard(momentId, card) {
+  const previous = await q.get('SELECT kind, payload FROM moment_cards WHERE moment_id = ?', momentId)
+  const nextPayload = card ? JSON.stringify(card.data) : null
+  const isChangingVotedPoll = previous?.kind === 'poll' &&
+    (!card || card.kind !== previous.kind || nextPayload !== previous.payload)
+  if (isChangingVotedPoll) {
+    const existing = await q.get('SELECT 1 AS found FROM moment_card_voters WHERE moment_id = ? LIMIT 1', momentId)
+    if (existing) throw Object.assign(new Error('投票已有成员参与，不能编辑或删除投票卡片'), { status: 409 })
+  }
+  if (!card) {
+    await q.run('DELETE FROM moment_card_votes WHERE moment_id = ?', momentId)
+    await q.run('DELETE FROM moment_card_rsvps WHERE moment_id = ?', momentId)
+    await q.run('DELETE FROM moment_cards WHERE moment_id = ?', momentId)
+    return
+  }
+  if (previous && (previous.kind !== card.kind || previous.payload !== JSON.stringify(card.data))) {
+    /* 问题、选项或活动内容改过后，旧票和旧报名已不再对应新卡片。 */
+    await q.run('DELETE FROM moment_card_votes WHERE moment_id = ?', momentId)
+    await q.run('DELETE FROM moment_card_rsvps WHERE moment_id = ?', momentId)
+  }
+  await q.run(
+    `INSERT INTO moment_cards (moment_id, kind, payload) VALUES (?, ?, ?)
+     ON CONFLICT(moment_id) DO UPDATE SET kind = excluded.kind, payload = excluded.payload`,
+    momentId,
+    card.kind,
+    JSON.stringify(card.data)
+  )
+}
+
+async function cardOf(momentId, viewerId) {
+  const row = await q.get('SELECT kind, payload FROM moment_cards WHERE moment_id = ?', momentId)
+  if (!row) return null
+  let data = {}
+  try { data = JSON.parse(row.payload) } catch { return null }
+  if (row.kind === 'poll') {
+    const counts = await q.all(
+      'SELECT option_idx AS optionIdx, COUNT(*) AS count FROM moment_card_votes WHERE moment_id = ? GROUP BY option_idx',
+      momentId
+    )
+    const mine = await q.all('SELECT option_idx AS optionIdx FROM moment_card_votes WHERE moment_id = ? AND user_id = ?', momentId, viewerId)
+    const options = Array.isArray(data.options) ? data.options : []
+    const voteCounts = Array(options.length).fill(0)
+    for (const count of counts) {
+      const index = Number(count.optionIdx)
+      if (index >= 0 && index < voteCounts.length) voteCounts[index] = Number(count.count) || 0
+    }
+    return {
+      kind: 'poll',
+      data: data.question && Array.isArray(data.options) ? data : { question: '', options: [] },
+      counts: voteCounts,
+      myOptions: mine.map((r) => Number(r.optionIdx)),
+      totalVotes: Number((await q.get('SELECT COUNT(DISTINCT user_id) AS n FROM moment_card_votes WHERE moment_id = ?', momentId))?.n) || 0,
+    }
+  }
+  if (row.kind === 'activity') {
+    const counts = await q.all('SELECT status, COUNT(*) AS count FROM moment_card_rsvps WHERE moment_id = ? GROUP BY status', momentId)
+    const mine = await q.get('SELECT status FROM moment_card_rsvps WHERE moment_id = ? AND user_id = ?', momentId, viewerId)
+    return { kind: 'activity', data, going: Number(counts.find((r) => r.status === 'going')?.count) || 0, interested: Number(counts.find((r) => r.status === 'interested')?.count) || 0, myStatus: mine?.status || null }
+  }
+  return { kind: 'link', data }
+}
+
+export async function voteMomentCard(momentId, userId, optionIndexes) {
+  const card = await cardOf(momentId, userId)
+  if (!card || card.kind !== 'poll') throw Object.assign(new Error('投票卡片不存在'), { status: 404 })
+  const indexes = [...new Set((Array.isArray(optionIndexes) ? optionIndexes : []).map(Number))]
+  if (!indexes.length || indexes.some((i) => !Number.isInteger(i) || i < 0 || i >= card.data.options.length)) {
+    throw invalidCard('请选择有效选项')
+  }
+  if (!card.data.multi && indexes.length > 1) throw invalidCard('该投票只能选择一个选项')
+  await tx(async () => {
+    const existing = await q.get('SELECT 1 AS found FROM moment_card_voters WHERE moment_id = ? AND user_id = ?', momentId, userId)
+    if (existing) throw Object.assign(new Error('你已经投过票，不能修改或撤销'), { status: 409 })
+    const marker = await q.run(
+      'INSERT OR IGNORE INTO moment_card_voters (moment_id, user_id, created_at) VALUES (?, ?, ?)',
+      momentId,
+      userId,
+      Date.now()
+    )
+    if (marker.changes !== 1) throw Object.assign(new Error('你已经投过票，不能修改或撤销'), { status: 409 })
+    for (const optionIdx of indexes) {
+      await q.run('INSERT INTO moment_card_votes (moment_id, user_id, option_idx, created_at) VALUES (?, ?, ?, ?)', momentId, userId, optionIdx, Date.now())
+    }
+  })
+  return cardOf(momentId, userId)
+}
+
+export async function respondToMomentActivity(momentId, userId, status) {
+  if (!['going', 'interested', null].includes(status)) throw invalidCard('活动状态无效')
+  const card = await cardOf(momentId, userId)
+  if (!card || card.kind !== 'activity') throw Object.assign(new Error('活动卡片不存在'), { status: 404 })
+  if (status !== null && Number(card.data?.startsAt) <= Date.now()) {
+    throw Object.assign(new Error('活动已经开始，不能再报名'), { status: 400 })
+  }
+  if (status === null) await q.run('DELETE FROM moment_card_rsvps WHERE moment_id = ? AND user_id = ?', momentId, userId)
+  else await q.run(
+    `INSERT INTO moment_card_rsvps (moment_id, user_id, status, created_at) VALUES (?, ?, ?, ?)
+     ON CONFLICT(moment_id, user_id) DO UPDATE SET status = excluded.status, created_at = excluded.created_at`,
+    momentId, userId, status, Date.now()
+  )
+  return cardOf(momentId, userId)
+}
+
+async function shape(row, viewerId) {
+  const media = await mediaOf(row.id)
   return {
     id: row.id,
     kind: row.kind,
@@ -155,7 +303,8 @@ function shape(row, viewerId) {
           }
         : null,
     media,
-    author: authorOf(row.userId),
+    card: await cardOf(row.id, viewerId),
+    author: await authorOf(row.userId),
     mine: row.userId === viewerId,
     liked: !!row.liked,
     likeCount: Number(row.likeCount) || 0,
@@ -182,10 +331,18 @@ const SELECT_COLS = `
  *   mine    —— 只看自己发的
  *   hot     —— 我能看到的，按热度（赞 + 评论加权）排，时间次之
  */
-export function listMoments({ viewerId, scope = 'friends', beforeId = null, limit = 20 } = {}) {
+export async function listMoments({ viewerId, scope = 'friends', topic = '', beforeId = null, limit = 20 } = {}) {
   const cap = Math.min(Math.max(Number(limit) || 20, 1), 50)
   const where = [`(${VISIBLE_SQL})`]
+  /* ⚠️ 这里是**命名参数**（`@viewer`，PG 侧由 db/sql.js 翻成 `$n`）。
+     加新条件时记得往 params 里补键 —— 少一个键会在翻译层直接报错并指出名字，
+     不会像位置参数那样「少一个就整体错位」。 */
   const params = { viewer: viewerId, limit: cap }
+
+  if (topic) {
+    where.push('m.topic = @topic')
+    params.topic = String(topic).trim().slice(0, 40)
+  }
 
   if (scope === 'mine') where.push('m.user_id = @viewer')
   if (beforeId) {
@@ -200,7 +357,7 @@ export function listMoments({ viewerId, scope = 'friends', beforeId = null, limi
          m.created_at DESC`
       : 'm.created_at DESC, m.id DESC'
 
-  const rows = q.all(
+  const rows = await q.all(
     `SELECT ${SELECT_COLS}
      FROM moments m
      WHERE ${where.join(' AND ')}
@@ -210,17 +367,17 @@ export function listMoments({ viewerId, scope = 'friends', beforeId = null, limi
   )
 
   return {
-    moments: rows.map((r) => shape(r, viewerId)),
+    moments: await Promise.all(rows.map((r) => shape(r, viewerId))),
     hasMore: rows.length === cap,
   }
 }
 
-export function getMoment(momentId, viewerId) {
-  const row = q.get(
+export async function getMoment(momentId, viewerId) {
+  const row = await q.get(
     `SELECT ${SELECT_COLS} FROM moments m WHERE m.id = @id`,
     { viewer: viewerId, id: momentId }
   )
-  return row ? shape(row, viewerId) : null
+  return row ? await shape(row, viewerId) : null
 }
 
 /* ================= 发布 / 编辑 / 删除 ================= */
@@ -304,7 +461,7 @@ function assertMedia(media) {
   })
 }
 
-export function createMoment({
+export async function createMoment({
   userId,
   content,
   topic,
@@ -314,11 +471,13 @@ export function createMoment({
   visibility = 'public',
   media = [],
   music = null,
+  card = null,
 }) {
   const text = cleanText(content, CONTENT_MAX)
+  const savedCard = validateCard(card)
   const hasMedia = Array.isArray(media) && media.length > 0
   const hasMusic = music && (music.title || music.artist)
-  if (!text && !hasMedia && !hasMusic) {
+  if (!text && !hasMedia && !hasMusic && !savedCard) {
     throw Object.assign(new Error('写点什么，或者至少配一张图'), { status: 400 })
   }
 
@@ -327,8 +486,8 @@ export function createMoment({
   const items = assertMedia(media)
   const geo = cleanGeoPair(locationLat, locationLng)
 
-  return tx(() => {
-    const id = insert(
+  return tx(async () => {
+    const id = await insert(
       `INSERT INTO moments (user_id, kind, content, topic, location, location_lat, location_lng, visibility,
                             music_title, music_artist, music_duration, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -346,7 +505,7 @@ export function createMoment({
       Date.now()
     )
     for (const it of items) {
-      insert(
+      await insert(
         `INSERT INTO moment_media (moment_id, kind, url, file_name, file_size, sort,
                                    width, height, duration)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -361,6 +520,7 @@ export function createMoment({
         it.duration
       )
     }
+    await storeCard(id, savedCard)
     return id
   })
 }
@@ -369,8 +529,8 @@ export function createMoment({
  * 改一条动态。只改传进来的字段（局部更新不能把别的冲成 null），
  * 但**媒体是整体替换** —— 单独做「增删某一张」的接口会让前后端都为顺序和 id 打架。
  */
-export function updateMoment(momentId, userId, patch = {}) {
-  const m = q.get('SELECT id, user_id AS userId FROM moments WHERE id = ?', momentId)
+export async function updateMoment(momentId, userId, patch = {}) {
+  const m = await q.get('SELECT id, user_id AS userId FROM moments WHERE id = ?', momentId)
   if (!m) throw Object.assign(new Error('动态不存在'), { status: 404 })
   if (m.userId !== userId) {
     throw Object.assign(new Error('只能编辑自己发布的动态'), { status: 403 })
@@ -418,18 +578,19 @@ export function updateMoment(momentId, userId, patch = {}) {
       mu ? cleanText(mu.duration, 20) : null
     )
   }
+  const savedCard = patch.card !== undefined ? validateCard(patch.card, { allowPastActivity: true }) : undefined
 
-  return tx(() => {
+  return tx(async () => {
     if (sets.length) {
       sets.push('edited_at = ?')
       args.push(Date.now())
-      q.run(`UPDATE moments SET ${sets.join(', ')} WHERE id = ?`, ...args, momentId)
+      await q.run(`UPDATE moments SET ${sets.join(', ')} WHERE id = ?`, ...args, momentId)
     }
     if (patch.media !== undefined) {
       const items = assertMedia(patch.media)
-      q.run('DELETE FROM moment_media WHERE moment_id = ?', momentId)
+      await q.run('DELETE FROM moment_media WHERE moment_id = ?', momentId)
       for (const it of items) {
-        insert(
+        await insert(
           `INSERT INTO moment_media (moment_id, kind, url, file_name, file_size, sort,
                                      width, height, duration)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -449,70 +610,75 @@ export function updateMoment(momentId, userId, patch = {}) {
         ? items.some((i) => i.kind === 'video')
           ? 'video'
           : 'image'
-        : q.get('SELECT music_title AS t FROM moments WHERE id = ?', momentId).t
+        : (await q.get('SELECT music_title AS t FROM moments WHERE id = ?', momentId)).t
           ? 'music'
           : 'text'
-      q.run('UPDATE moments SET kind = ?, edited_at = ? WHERE id = ?', kind, Date.now(), momentId)
+      await q.run('UPDATE moments SET kind = ?, edited_at = ? WHERE id = ?', kind, Date.now(), momentId)
+    }
+    if (savedCard !== undefined) {
+      await storeCard(momentId, savedCard)
+      if (!sets.length && patch.media === undefined) {
+        await q.run('UPDATE moments SET edited_at = ? WHERE id = ?', Date.now(), momentId)
+      }
     }
     return true
   })
 }
 
 /** 删自己的动态。媒体 / 点赞 / 评论靠表上的 ON DELETE CASCADE 一起清掉 */
-export function deleteMoment(momentId, userId) {
-  const m = q.get('SELECT id, user_id AS userId FROM moments WHERE id = ?', momentId)
+export async function deleteMoment(momentId, userId) {
+  const m = await q.get('SELECT id, user_id AS userId FROM moments WHERE id = ?', momentId)
   if (!m) throw Object.assign(new Error('动态不存在'), { status: 404 })
   if (m.userId !== userId) {
     throw Object.assign(new Error('只能删除自己发布的动态'), { status: 403 })
   }
-  q.run('DELETE FROM moments WHERE id = ?', momentId)
+  await q.run('DELETE FROM moments WHERE id = ?', momentId)
   return true
 }
 
 /* ================= 点赞 ================= */
 
-export function toggleLike(momentId, userId) {
-  const m = q.get('SELECT id FROM moments WHERE id = ?', momentId)
+export async function toggleLike(momentId, userId) {
+  const m = await q.get('SELECT id FROM moments WHERE id = ?', momentId)
   if (!m) throw Object.assign(new Error('动态不存在'), { status: 404 })
 
-  const had = q.get(
+  const had = await q.get(
     'SELECT 1 FROM moment_likes WHERE moment_id = ? AND user_id = ?',
     momentId,
     userId
   )
   if (had) {
-    q.run('DELETE FROM moment_likes WHERE moment_id = ? AND user_id = ?', momentId, userId)
+    await q.run('DELETE FROM moment_likes WHERE moment_id = ? AND user_id = ?', momentId, userId)
   } else {
-    q.run(
+    await q.run(
       'INSERT INTO moment_likes (moment_id, user_id, created_at) VALUES (?, ?, ?)',
       momentId,
       userId,
       Date.now()
     )
   }
-  const likeCount = q
-    .get('SELECT COUNT(*) AS n FROM moment_likes WHERE moment_id = ?', momentId).n
+  const likeCount = (await q.get('SELECT COUNT(*) AS n FROM moment_likes WHERE moment_id = ?', momentId)).n
   return { liked: !had, likeCount }
 }
 
 /** 谁赞了这条（详情页的赞列表） */
-export function likedBy(momentId, limit = 20) {
-  return q
-    .all(
+export async function likedBy(momentId, limit = 20) {
+  return (
+    await q.all(
       `SELECT u.id, u.username, u.nickname, u.avatar, u.bio, l.created_at AS createdAt
        FROM moment_likes l JOIN users u ON u.id = l.user_id
        WHERE l.moment_id = ? ORDER BY l.created_at DESC LIMIT ?`,
       momentId,
       limit
     )
-    .map((r) => ({ user: publicUser(r), createdAt: Number(r.createdAt) }))
+  ).map((r) => ({ user: publicUser(r), createdAt: Number(r.createdAt) }))
 }
 
 /* ================= 评论 ================= */
 
-export function listComments(momentId, limit = 100) {
-  return q
-    .all(
+export async function listComments(momentId, limit = 100) {
+  return (
+    await q.all(
       `SELECT c.id, c.parent_id AS parentId, c.content, c.created_at AS createdAt,
               c.user_id AS userId,
               u.username, u.nickname, u.avatar, u.bio,
@@ -526,32 +692,32 @@ export function listComments(momentId, limit = 100) {
       momentId,
       limit
     )
-    .map((r) => ({
-      id: r.id,
-      parentId: r.parentId ? Number(r.parentId) : null,
-      content: r.content,
-      createdAt: Number(r.createdAt),
-      author: publicUser({
-        id: r.userId,
-        username: r.username,
-        nickname: r.nickname,
-        avatar: r.avatar,
-        bio: r.bio,
-      }),
-      replyTo: r.replyId ? { id: r.replyId, nickname: r.replyNickname } : null,
-    }))
+  ).map((r) => ({
+    id: r.id,
+    parentId: r.parentId ? Number(r.parentId) : null,
+    content: r.content,
+    createdAt: Number(r.createdAt),
+    author: publicUser({
+      id: r.userId,
+      username: r.username,
+      nickname: r.nickname,
+      avatar: r.avatar,
+      bio: r.bio,
+    }),
+    replyTo: r.replyId ? { id: r.replyId, nickname: r.replyNickname } : null,
+  }))
 }
 
-export function addComment({ momentId, userId, content, parentId = null }) {
+export async function addComment({ momentId, userId, content, parentId = null }) {
   const text = cleanText(content, COMMENT_MAX)
   if (!text) throw Object.assign(new Error('评论不能为空'), { status: 400 })
 
-  const m = q.get('SELECT id FROM moments WHERE id = ?', momentId)
+  const m = await q.get('SELECT id FROM moments WHERE id = ?', momentId)
   if (!m) throw Object.assign(new Error('动态不存在'), { status: 404 })
 
   let parent = null
   if (parentId) {
-    parent = q.get(
+    parent = await q.get(
       'SELECT id, user_id AS userId FROM moment_comments WHERE id = ? AND moment_id = ?',
       Number(parentId),
       momentId
@@ -559,7 +725,7 @@ export function addComment({ momentId, userId, content, parentId = null }) {
     if (!parent) throw Object.assign(new Error('要回复的评论不存在'), { status: 404 })
   }
 
-  const id = insert(
+  const id = await insert(
     `INSERT INTO moment_comments (moment_id, user_id, parent_id, reply_to_user_id, content, created_at)
      VALUES (?, ?, ?, ?, ?, ?)`,
     momentId,
@@ -569,8 +735,7 @@ export function addComment({ momentId, userId, content, parentId = null }) {
     text,
     Date.now()
   )
-  const count = q
-    .get('SELECT COUNT(*) AS n FROM moment_comments WHERE moment_id = ?', momentId).n
+  const count = (await q.get('SELECT COUNT(*) AS n FROM moment_comments WHERE moment_id = ?', momentId)).n
   return { id, commentCount: count }
 }
 
@@ -580,8 +745,8 @@ export function addComment({ momentId, userId, content, parentId = null }) {
  * 否则接口形如 `DELETE /moments/:id/comments/:commentId` 时，
  * `:id` 只是个摆设，拿别的动态 id 也能删掉自己那条评论。
  */
-export function deleteComment(commentId, userId, momentId = null) {
-  const c = q.get(
+export async function deleteComment(commentId, userId, momentId = null) {
+  const c = await q.get(
     `SELECT c.id, c.user_id AS userId, c.moment_id AS momentId, m.user_id AS momentOwner
      FROM moment_comments c JOIN moments m ON m.id = c.moment_id
      WHERE c.id = ?`,
@@ -594,11 +759,11 @@ export function deleteComment(commentId, userId, momentId = null) {
   if (c.userId !== userId && c.momentOwner !== userId) {
     throw Object.assign(new Error('只能删除自己的评论，或自己动态下的评论'), { status: 403 })
   }
-  q.run('DELETE FROM moment_comments WHERE id = ?', commentId)
+  await q.run('DELETE FROM moment_comments WHERE id = ?', commentId)
   return true
 }
 
 /** 我的动态数（个人空间要用） */
-export function momentCount(userId) {
-  return q.get('SELECT COUNT(*) AS n FROM moments WHERE user_id = ?', userId).n
+export async function momentCount(userId) {
+  return (await q.get('SELECT COUNT(*) AS n FROM moments WHERE user_id = ?', userId)).n
 }

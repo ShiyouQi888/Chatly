@@ -1,0 +1,59 @@
+# Chatly 的线上组件：PostgreSQL + Redis
+#
+# 用法：
+#   docker compose up -d          起
+#   docker compose ps             看健康状态
+#   docker compose down           停（**数据保留在命名卷里**）
+#   docker compose down -v        停并删数据（谨慎）
+#
+# ⚠️ 端口刻意不用默认值：
+#   · 本机 5432 上已经有一个 **真的 PostgreSQL Windows 服务** 在跑；
+#   · 同一个开发机上还有别的项目（adp-pg 用 55432、adp-redis 用 6379）。
+#   直接占 5432/6379 会和它们打架，而且症状是「连上了但库不对」这种最难查的错。
+#   所以：PG → 55433，Redis → 6380。
+#
+# 本地开发**默认不用这两个容器** —— 不设 DB_DRIVER 就是 SQLite（见 .env.example）。
+# 容器只在你要验证「线上那套」或者真的部署时用。
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: chatly-pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: chatly
+      POSTGRES_PASSWORD: chatly_dev_pw
+      POSTGRES_DB: chatly
+      # 让排序/比较稳定，别跟着宿主机的 locale 跑
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "55433:5432"
+    volumes:
+      - chatly-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # 健康检查用 pg_isready，不是「容器起来了就算好」——
+      # 容器 Running 但 PG 还在 initdb 的那几秒里连它是会失败的。
+      test: ["CMD-SHELL", "pg_isready -U chatly -d chatly"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    container_name: chatly-redis
+    restart: unless-stopped
+    # appendonly：在线状态丢了不要紧（有 TTL 会自愈），但调试时想回看就靠它
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6380:6379"
+    volumes:
+      - chatly-redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  chatly-pgdata:
+  chatly-redisdata:

@@ -22,6 +22,12 @@ export const LIMITS = {
 export const GENDERS = ['male', 'female', 'other']
 
 /**
+ * 中国大陆手机号。搜人时也用它判断「这串数字是不是在按手机号找」——
+ * 两边共用同一个正则，否则会出现「填得进手机号、却搜不到自己」这种对不上的情况。
+ */
+export const PHONE_RE = /^1[3-9]\d{9}$/
+
+/**
  * 头像只接受两类取值：
  *   preset:<n>      前端内置的预设插画头像（库里只存编号，避免把 SVG 塞进数据库）
  *   /uploads/<file> 本地上传的真实图片
@@ -31,6 +37,14 @@ export function isValidAvatarValue(v) {
   if (typeof v !== 'string') return false
   if (/^preset:\d{1,2}$/.test(v)) return true
   return /^\/uploads\/[A-Za-z0-9._-]+$/.test(v)
+}
+
+/**
+ * 封面只接受**本地上传的图片**（不允许 preset —— 那是头像的预设插画，
+ * 不是横幅）。校验的是地址形态：外链一律挡掉，理由和头像一样（SSRF / 追踪像素）。
+ */
+export function isCoverUrlValue(v) {
+  return typeof v === 'string' && /^\/uploads\/[A-Za-z0-9._-]+\.(png|jpe?g|gif|webp)$/i.test(v)
 }
 
 /** 把用户提交的 patch 收敛成可写库的字段集合，返回 { fields, errors } */
@@ -76,6 +90,15 @@ export function sanitizeProfile(patch = {}) {
     else out.region = v
   }
 
+  /* ---------- 手机号 ----------
+     注册时通过短信验证码验证的手机号可作为登录身份；资料编辑不更换已验证身份，
+     避免绕过验证码把账号绑定到未经验证的号码。 */
+  if (patch.phone !== undefined) {
+    const v = patch.phone === null || patch.phone === '' ? null : String(patch.phone).replace(/[\s-]/g, '')
+    if (v !== null && !PHONE_RE.test(v)) errors.push('手机号格式应为 11 位中国大陆号码')
+    else out.phone = v
+  }
+
   if (patch.tags !== undefined) {
     const raw = Array.isArray(patch.tags) ? patch.tags : []
     const tags = []
@@ -103,6 +126,15 @@ export function sanitizeProfile(patch = {}) {
     else out.avatar = v
   }
 
+  /* ---------- 个人主页封面（「我」页顶部大图） ----------
+     和头像同一套规矩：只收本服务托管的图片地址，写入前确认文件还在。 */
+  if (patch.profileCover !== undefined) {
+    const v = patch.profileCover === null || patch.profileCover === '' ? null : String(patch.profileCover)
+    if (v !== null && !isCoverUrlValue(v)) errors.push('背景图取值非法（只支持本地上传的图片）')
+    else if (v !== null && !uploadExists(v)) errors.push('这张背景图已经不在了，请重新上传')
+    else out.profile_cover = v
+  }
+
   /* ---------- 位置 ----------
      ⚠️ 这四个字段是**服务端替用户存下来的「行政区划中心点」**，不是实时位置。
      允许客户端写，是因为只有客户端拿得到浏览器定位；但必须卡死形态：
@@ -126,6 +158,7 @@ export function sanitizeProfile(patch = {}) {
     const bothEmpty = empty(patch.cityLat) && empty(patch.cityLng)
     const pair = parseGeoPair(patch.cityLat, patch.cityLng)
     if (!bothEmpty && !pair) errors.push('城市坐标必须成对给出，且在合法经纬度范围内')
+    else if (pair && patch.cityPublic !== true) errors.push('请先明确开启「参与附近」再保存城市中心点')
     else {
       /* 存到 4 位小数就够了（≈11 m）。库里不需要比这更细 ——
          反正它代表的是行政区划中心点，多存几位只会让人误以为这是「精确位置」。
@@ -135,14 +168,20 @@ export function sanitizeProfile(patch = {}) {
     }
   }
 
-  if (patch.cityPublic !== undefined) {
+  if (patch.cityPublic !== undefined && typeof patch.cityPublic !== 'boolean') {
+    errors.push('附近分享设置必须是布尔值')
+  } else if (patch.cityPublic !== undefined) {
     out.city_public = patch.cityPublic ? 1 : 0
+    if (!patch.cityPublic) {
+      out.city_lat = null
+      out.city_lng = null
+    }
   }
 
   return { fields: Object.keys(out).length ? out : null, errors }
 }
 
-export function readProfile(userId) {
+export async function readProfile(userId) {
   return q.get(`SELECT ${USER_COLS} FROM users WHERE id = ?`, userId)
 }
 
@@ -151,30 +190,37 @@ export function readProfile(userId) {
  * 扫一扫 / 手输 ID 只能拿到 username，得先换成 id 才能复用资料与关注那套逻辑。
  * 查不到返回 null —— 调用方据此回 404，不要拿 0 当兜底（0 会匹配到别的判断分支）。
  */
-export function userIdByUsername(username) {
-  const row = q.get('SELECT id FROM users WHERE username = ?', String(username || '').trim())
+export async function userIdByUsername(username) {
+  const row = await q.get('SELECT id FROM users WHERE username = ?', String(username || '').trim())
   return row ? Number(row.id) : null
 }
 
-/** 写库并回读，返回 publicUser 形状 */
-export function updateProfile(userId, fields) {
+/**
+ * 写库并**回读原始行**（不再是 publicUser 形状）。
+ *
+ * 为什么改：`users` 现在有「只对自己可见」的字段（phone）。回传 publicUser 的话，
+ * 路由想给「我」看手机号也拿不回来；回传 raw row 则由调用方显式选择
+ * `selfUser(row)`（给我）还是 `publicUser(row)`（推给同会话的人）。
+ * 调用点只有 routes/auth.js 的两处，都已经是显式塑形。
+ */
+export async function updateProfile(userId, fields) {
   const keys = Object.keys(fields)
   if (keys.length) {
-    q.run(
+    await q.run(
       `UPDATE users SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`,
       ...keys.map((k) => fields[k]),
       userId
     )
   }
-  return publicUser(readProfile(userId))
+  return readProfile(userId)
 }
 
 /* ================= 他人资料 ================= */
 
 /** 共同群聊数：两人都在的 group 会话有几个 */
-export function sharedGroupCount(aId, bId) {
+export async function sharedGroupCount(aId, bId) {
   if (Number(aId) === Number(bId)) return 0
-  const row = q.get(
+  const row = await q.get(
     `SELECT COUNT(*) AS n
        FROM conversations c
        JOIN conversation_members m1 ON m1.conversation_id = c.id AND m1.user_id = ?
@@ -190,11 +236,11 @@ export function sharedGroupCount(aId, bId) {
  * 查看者视角的他人资料。
  * 生日只给「月-日」+ 年龄，不给完整年份 —— 资料页展示生日不需要暴露出生年。
  */
-export function profileForViewer(viewerId, targetId) {
-  const row = readProfile(targetId)
+export async function profileForViewer(viewerId, targetId) {
+  const row = await readProfile(targetId)
   if (!row) return null
   const user = publicUser(row)
-  const sharedGroups = sharedGroupCount(viewerId, targetId)
+  const sharedGroups = await sharedGroupCount(viewerId, targetId)
 
   let birthday = null
   let age = null
@@ -213,11 +259,11 @@ export function profileForViewer(viewerId, targetId) {
 }
 
 /** 我参与的、也包含目标用户的私聊会话 id（资料页「发消息」直接跳过去） */
-export function privateConversationWith(aId, bId) {
+export async function privateConversationWith(aId, bId) {
   // 自己跟自己没有「私聊会话」。不加这个判断的话，下面两个 join 会匹配到
   // 同一行成员记录，把我自己随便一个私聊返回出去。
   if (Number(aId) === Number(bId)) return null
-  const row = q.get(
+  const row = await q.get(
     `SELECT c.id AS id
        FROM conversations c
        JOIN conversation_members m1 ON m1.conversation_id = c.id AND m1.user_id = ?
@@ -234,9 +280,9 @@ export function privateConversationWith(aId, bId) {
  * 和我有共同会话的所有人 —— 资料变更后要把新昵称 / 新头像推给他们。
  * 没有共同会话的人看不到我，也就没必要通知。
  */
-export function peersOf(userId) {
-  return q
-    .all(
+export async function peersOf(userId) {
+  return (
+    await q.all(
       `SELECT DISTINCT m2.user_id AS id
          FROM conversation_members m1
          JOIN conversation_members m2 ON m2.conversation_id = m1.conversation_id
@@ -244,5 +290,5 @@ export function peersOf(userId) {
       userId,
       userId
     )
-    .map((r) => Number(r.id))
+  ).map((r) => Number(r.id))
 }

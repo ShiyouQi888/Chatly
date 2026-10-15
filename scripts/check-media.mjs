@@ -49,7 +49,7 @@ const ok = (cond, label, extra = '') => {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 /* ================= 1. 后端：造一条图片消息和一条视频消息 ================= */
-const msgBaseline = maxMessageId()
+const msgBaseline = await maxMessageId()
 
 const me = await (
   await fetch(`${API}/auth/login`, {
@@ -111,7 +111,9 @@ const target = await waitAppTarget(port, APP_HOST)
 /* 顺手收控制台：查看器是新 UI，最容易出的是 React 的非法 DOM 嵌套警告
    （比如把带 controls 的 <video> 塞进 <button> 里，那是 interactive content 套 interactive content）。 */
 const consoleIssues = []
+const downloads = []
 const cdp = await connectCdp(target.webSocketDebuggerUrl, (e) => {
+  if (e.method === 'Browser.downloadWillBegin' || e.method === 'Browser.downloadProgress') downloads.push(e.params)
   if (e.method === 'Runtime.consoleAPICalled' && ['error', 'warning'].includes(e.params.type)) {
     const text = (e.params.args || []).map((a) => a.value ?? a.description ?? '').join(' ')
     consoleIssues.push(`${e.params.type}: ${text}`.slice(0, 200))
@@ -206,7 +208,7 @@ window.__mediaInfo = () => {
   if (!el) return null
   return {
     tag: v ? 'video' : 'img',
-    src: el.getAttribute('src') || '',
+    src: el.getAttribute('src') ? new URL(el.getAttribute('src'), location.href).pathname : '',
     controls: v ? v.hasAttribute('controls') : null,
     duration: v ? v.duration : null,
     videoWidth: v ? v.videoWidth : null,
@@ -228,7 +230,12 @@ window.__playing = () => {
 
 try {
   /* ---- 登录并进入会话 ---- */
+  await cdp.send('Page.navigate', { url: APP })
+  await waitFor(`location.origin === ${JSON.stringify(APP_HOST)}`)
   await js(HELPERS)
+  /* The fixed test profile can contain a revoked token from earlier suites. */
+  await js(`localStorage.removeItem('chatly.token')`)
+  await cdp.send('Page.reload')
   const booted = await waitFor(
     `!!document.querySelector('.lg-demo-list button') || !!document.querySelector('.chat-list .chat-row')`
   )
@@ -237,11 +244,12 @@ try {
     await js(
       `(() => { const b=[...document.querySelectorAll('.lg-demo-list button')].find(x=>x.textContent.includes('陈墨')); if(b) b.click(); return !!b })()`
     )
-    await waitFor(`!!document.querySelector('.tabbar')`, 15000)
+    await waitFor(`!!document.querySelector('.tabbar') && !!document.querySelector('.chat-list .chat-row')`, 15000)
   }
   await js(HELPERS)
-  await js(`window.__openChat(${JSON.stringify(PEER)})`)
-  await waitFor(`!!document.querySelector('.room-scroll')`, 15000)
+  const peerReady = await waitFor(`[...document.querySelectorAll('.chat-list .chat-row')].some(x=>((x.querySelector('.cr-name')||{}).textContent||'').includes(${JSON.stringify(PEER)}))`, 15000)
+  if (!peerReady || !(await js(`window.__openChat(${JSON.stringify(PEER)})`))) throw new Error(`会话「${PEER}」未加载或无法打开`)
+  if (!(await waitFor(`!!document.querySelector('.room-scroll')`, 15000))) throw new Error('聊天室未打开')
   await sleep(900)
   await js(HELPERS)
 
@@ -261,15 +269,17 @@ try {
   ok(info && info.tag === 'img' && info.w > 0, '查看层里渲染的是图片', JSON.stringify(info))
   await shoot(cdp, `${OUT}/01-image-viewer.png`)
 
-  /* 保存：真的要有文件落盘 */
-  await js(`window.__click('.media-viewer .mv-btn[aria-label="保存到本地"]')`)
+  /* 保存需要真实用户手势：部分 Chromium 版本会拒绝脚本 click() 触发 download。 */
+  const saveBox = await js(`(() => { const r=document.querySelector('.media-viewer .mv-btn[aria-label="保存到本地"]').getBoundingClientRect(); return {x:r.x+r.width/2,y:r.y+r.height/2} })()`)
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: saveBox.x, y: saveBox.y, id: 1 }] })
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
   let file = null
   for (let i = 0; i < 40 && !file; i++) {
     await sleep(250)
     const got = fs.readdirSync(DL_DIR).filter((f) => !f.endsWith('.crdownload'))
     if (got.length) file = got[0]
   }
-  ok(!!file, '★ 点保存后文件真的落到了磁盘', file || `（${DL_DIR} 里什么都没有）`)
+  ok(!!file, '★ 点保存后文件真的落到了磁盘', file || `（${DL_DIR} 里什么都没有；下载事件 ${JSON.stringify(downloads)}）`)
   if (file) {
     const size = fs.statSync(path.join(DL_DIR, file)).size
     ok(size > 0, '保存下来的文件非空', `${file} ${size} 字节`)
@@ -340,7 +350,7 @@ try {
     '★ 查看器用的是自建控制条（播放 / 进度 / 时间 / 静音 / 全屏）',
     JSON.stringify(bars)
   )
-  ok(vi && vi.src.endsWith('.mp4'), 'video 的 src 指向上传的 mp4', vi?.src)
+  ok(vi && /^\/api\/v1\/files\/private\/.+\.mp4$/.test(vi.src), 'video 的 src 指向成员校验的私有 mp4', vi?.src)
   /* duration > 0 说明元数据解出来了 —— 文件是真能解码的，不是挂了个坏链接 */
   ok(vi && vi.duration > 0, '★ 视频元数据可读（文件可解码）', `duration=${vi?.duration}`)
   ok(vi && vi.videoWidth > 0, '视频有真实画面尺寸', `${vi?.videoWidth}px 宽`)
@@ -410,11 +420,11 @@ try {
     await cdp.close()
   } catch {}
   proc.kill()
-  const gone = purgeMessagesAfter(msgBaseline)
+  const gone = await purgeMessagesAfter(msgBaseline)
   if (gone) console.log(`已清理自检发出的 ${gone} 条消息`)
   /* ⚠️ 顺序不能反：先删消息，再收文件。
      反过来会把「刚上传、消息还指着」的文件当成孤儿挪走，
      那条消息就变成破图了。 */
-  purgeOrphanUploads()
+  await purgeOrphanUploads()
   process.exit(failures ? 1 : 0)
 }

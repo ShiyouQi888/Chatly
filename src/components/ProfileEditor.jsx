@@ -36,6 +36,7 @@ export default function ProfileEditor({ open, onClose, onSaved, showToast }) {
   const [bio, setBio] = useState('')
   const [gender, setGender] = useState(null)
   const [birthday, setBirthday] = useState('')
+  const [phone, setPhone] = useState('')
   const [region, setRegion] = useState('')
   const [tags, setTags] = useState([])
   const [tagInput, setTagInput] = useState('')
@@ -64,6 +65,9 @@ export default function ProfileEditor({ open, onClose, onSaved, showToast }) {
     setBio(user.bio || '')
     setGender(user.gender || null)
     setBirthday(user.birthday || '')
+    /* `user` 里有没有 phone 取决于服务端的塑形：`/auth/me` 走的是 selfUser（含手机号），
+       而别人看到的资料走 publicUser（**不含**）。所以这里 `?? ''` 兜底而不是当成错误。 */
+    setPhone(user.phone || '')
     setRegion(user.region || '')
     setTags(Array.isArray(user.tags) ? user.tags : [])
     setTagInput('')
@@ -132,6 +136,10 @@ export default function ProfileEditor({ open, onClose, onSaved, showToast }) {
    * ⚠️ 失败后**不清空手输内容** —— 定位是加速手段，不是必经之路。
    */
   const useCurrentLocation = async () => {
+    if (!cityPublic) {
+      setLocNote('附近分享默认关闭。先勾选下方授权，再手动定位；不勾选时不会请求设备位置。')
+      return
+    }
     setLocating(true)
     setLocNote('')
     try {
@@ -149,15 +157,15 @@ export default function ProfileEditor({ open, onClose, onSaved, showToast }) {
       if (res.city && Number.isFinite(res.city.lat) && Number.isFinite(res.city.lng)) {
         setCity(res.city.name || label || null)
         setCityGeo({ lat: res.city.lat, lng: res.city.lng })
-        setLocNote(`已定位到「${res.city.name || label}」，可勾选参与「附近」`)
+        setLocNote(`已定位到「${res.city.name || label}」。保存后只保留城市中心点，不保留实时坐标。`)
       } else {
         setLocNote(`已定位到「${label || '当前位置'}」，但没有拿到行政区划中心点`)
       }
-      setLocating(false)
     } catch (e) {
       /* getMyLocation 失败给的是 GeolocationPositionError；locate 失败给的是接口错误 */
       const isGeoErr = typeof e?.code === 'number' || e?.name === 'NotSupportedError'
       setLocNote(isGeoErr ? geoReason(e) : `位置服务出错：${e.message}`)
+    } finally {
       setLocating(false)
     }
   }
@@ -168,6 +176,7 @@ export default function ProfileEditor({ open, onClose, onSaved, showToast }) {
     bio.trim() !== (user?.bio || '') ||
     (gender || null) !== (user?.gender || null) ||
     (birthday || '') !== (user?.birthday || '') ||
+    phone.trim() !== (user?.phone || '') ||
     region.trim() !== (user?.region || '') ||
     (city || null) !== (user?.city || null) ||
     (cityGeo?.lat ?? null) !== (user?.cityLat ?? null) ||
@@ -181,6 +190,10 @@ export default function ProfileEditor({ open, onClose, onSaved, showToast }) {
       showToast('昵称不能为空')
       return
     }
+    if (cityPublic && !cityGeo) {
+      showToast('请先手动定位城市，或关闭附近分享')
+      return
+    }
     setSaving(true)
     try {
       const fields = {
@@ -188,14 +201,14 @@ export default function ProfileEditor({ open, onClose, onSaved, showToast }) {
         bio: bio.trim(),
         gender: gender || null,
         birthday: birthday || null,
+        phone: phone.trim() || null,
         region: region.trim(),
         tags,
-        /* 位置：三个字段一起提交。
-           ⚠️ 没开「参与附近」时**照样把坐标存下来**（只是 cityPublic=0），
-           这样用户以后想开就不用重新定位；而对外一个字节都不会露出去（后端 publicUser 做的闸门）。 */
+        /* 位置只在用户明确开启「参与附近」时提交城市中心点；关闭后清空，
+           不保留未授权的位置数据。浏览器定位仍只由用户点按钮触发。 */
         city,
-        cityLat: cityGeo?.lat ?? null,
-        cityLng: cityGeo?.lng ?? null,
+        cityLat: cityPublic ? cityGeo?.lat ?? null : null,
+        cityLng: cityPublic ? cityGeo?.lng ?? null : null,
         cityPublic,
       }
       // 预设头像就是一个字符串，跟其它字段一起提交；旧的上传头像会由后端顺手删掉
@@ -304,6 +317,25 @@ export default function ProfileEditor({ open, onClose, onSaved, showToast }) {
         </div>
 
         <div className="pe-field is-block">
+          <label htmlFor="pe-phone">手机号</label>
+          <input
+            id="pe-phone"
+            type="tel"
+            inputMode="numeric"
+            value={phone}
+            maxLength={11}
+            placeholder="11 位手机号（选填）"
+            onChange={(e) => setPhone(e.target.value.replace(/[^\d]/g, ''))}
+          />
+          <p className="pe-note">
+            只用于「被别人按手机号搜到」和隐私设置里的「通过手机号添加」。
+            <br />
+            它<b>不能用来登录</b>，也不参与验证码校验 —— 本项目没有短信通道。
+            其他人看不到你的手机号。
+          </p>
+        </div>
+
+        <div className="pe-field is-block">
           <label htmlFor="pe-region">所在地区</label>
           <div className="pe-region-row">
             <input
@@ -317,31 +349,29 @@ export default function ProfileEditor({ open, onClose, onSaved, showToast }) {
               type="button"
               className="pe-locate"
               onClick={useCurrentLocation}
-              disabled={locating || !locateSupported}
+              disabled={locating || !locateSupported || !cityPublic}
               data-testid="use-location"
-              title={locateSupported ? '使用当前位置' : '这个浏览器不支持定位'}
+              title={!cityPublic ? '先明确授权参与附近后再定位' : locateSupported ? '使用当前位置解析城市中心点' : '这个浏览器不支持定位'}
             >
               <IconLocate size={15} sw={2.1} />
               {locating ? '定位中…' : '定位'}
             </button>
           </div>
           {locNote && <p className="pe-note pe-loc-note">{locNote}</p>}
-          {!!cityGeo && (
-            <label className="pe-switch">
-              <input
-                type="checkbox"
-                checked={cityPublic}
-                onChange={(e) => setCityPublic(e.target.checked)}
-                data-testid="city-public"
-              />
-              <span>
-                在「发现 · 附近」里显示我的城市距离
-                <em>
-                  只上传<b>行政区划中心点</b>（{city || '城市'}），不是你的实时位置；关掉就不对外显示
-                </em>
-              </span>
-            </label>
-          )}
+          <label className="pe-switch">
+            <input
+              type="checkbox"
+              checked={cityPublic}
+              onChange={(e) => setCityPublic(e.target.checked)}
+              data-testid="city-public"
+            />
+            <span>
+              授权城市级附近分享（默认关闭）
+              <em>
+                只有勾选后手动点击「定位」才会请求设备位置；服务端只保存行政区划中心点{city ? `（${city}）` : ''}。关闭后立即清除坐标。
+              </em>
+            </span>
+          </label>
         </div>
 
         <div className="pe-field is-block">

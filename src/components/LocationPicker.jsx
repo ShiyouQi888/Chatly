@@ -142,8 +142,13 @@ export default function LocationPicker({ open, onClose, onPick, title = '发送�
     onClose?.()
   }
 
-  const mapLat = sel?.lat ?? me?.lat
-  const mapLng = sel?.lng ?? me?.lng
+  /* 地图上的点：**选中了什么就画什么**。
+     ⚠️ 不能用 `sel?.lat ?? me?.lat` —— 手输的地点名 `lat` 是 null，
+     那个 `??` 会退回我的坐标，于是「一个没有坐标的地点」在地图上显示成我站的地方，
+     看起来像是给它定位成功了。选中但没有坐标时，就该什么都不画。 */
+  const mapTarget = sel ? { lat: sel.lat, lng: sel.lng } : me
+  const mapLat = mapTarget?.lat
+  const mapLng = mapTarget?.lng
 
   return (
     <div className="lp-root cover-tabbar" data-phase={phase}>

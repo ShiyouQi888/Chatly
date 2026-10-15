@@ -3,6 +3,7 @@ import { useApp } from '../store/AppContext.jsx'
 import { useAuth } from '../store/AuthContext.jsx'
 import { useChat } from '../store/ChatStore.jsx'
 import ChatTab from '../screens/ChatTab.jsx'
+import ContactsTab from '../screens/ContactsTab.jsx'
 import MomentTab from '../screens/MomentTab.jsx'
 import DiscoverTab from '../screens/DiscoverTab.jsx'
 import MeTab from '../screens/MeTab.jsx'
@@ -11,12 +12,14 @@ import NoticeCenter from '../screens/NoticeCenter.jsx'
 import SearchPanel from '../screens/SearchPanel.jsx'
 import ScanPage from '../screens/ScanPage.jsx'
 import LoginScreen from '../screens/LoginScreen.jsx'
-import { IconChat, IconMoment, IconCompass, IconUser } from './Icon.jsx'
+import AdminConsole from '../screens/AdminConsole.jsx'
+import { IconChat, IconContacts, IconMoment, IconCompass, IconUser } from './Icon.jsx'
 import { Badge, Toast } from './ui.jsx'
 import './phone.css'
 
 const TABS = [
   { key: 'chat', label: '聊天', icon: IconChat },
+  { key: 'contacts', label: '通讯录', icon: IconContacts },
   { key: 'moment', label: '动态', icon: IconMoment },
   { key: 'discover', label: '发现', icon: IconCompass },
   { key: 'me', label: '我', icon: IconUser },
@@ -35,7 +38,7 @@ function Boot({ text }) {
 }
 
 export default function Phone() {
-  const { tab, dispatch, toast, noticeUnread } = useApp()
+  const { tab, dispatch, toast } = useApp()
   const { user, ready, login } = useAuth()
   const { conversations } = useChat()
 
@@ -43,6 +46,11 @@ export default function Phone() {
   const [openNotice, setOpenNotice] = useState(false)
   const [openSearch, setOpenSearch] = useState(false)
   const [openScan, setOpenScan] = useState(false)
+  /* 通知中心里的「通知设置」按钮要打开的是**我页那一屏**，
+     但 MeTab 的 page 状态在它自己里面，Phone 管不着。
+     用这个信号传达：MeTab 挂载/更新时读到它就切过去并清空。 */
+  const [notifySettingsSignal, setNotifySettingsSignal] = useState(0)
+  const [statusComposeSignal, setStatusComposeSignal] = useState(0)
   /**
    * 「跳到聊天里某条消息」的请求：`{ conversationId, messageId, nonce }`。
    *
@@ -78,6 +86,10 @@ export default function Phone() {
     )
   }
 
+  if (window.location.pathname.replace(/\/+$/, '') === '/admin') {
+    return <AdminConsole />
+  }
+
   if (!user) {
     return (
       <div className="stage">
@@ -96,6 +108,11 @@ export default function Phone() {
     openNotice: () => setOpenNotice(true),
     openSearch: () => setOpenSearch(true),
     openScan: () => setOpenScan(true),
+    createStatus: () => {
+      setOpenChatId(null)
+      dispatch({ type: 'SET_TAB', tab: 'chat' })
+      setStatusComposeSignal((value) => value + 1)
+    },
     /**
      * 跨 Tab 跳转：切到聊天页 → 打开那个会话 → 滚到某条消息并高亮。
      * 收藏（在我页）的「在聊天中查看」用它。
@@ -107,6 +124,16 @@ export default function Phone() {
       setOpenChatId(Number(conversationId))
       setJumpTo({ conversationId: Number(conversationId), messageId: Number(messageId), nonce: Date.now() })
     },
+    /**
+     * 通知中心 → 「通知设置」：切到「我」页并打开那一屏。
+     * 关闭通知中心是必须的 —— `.notice` 是 z-index 82 的整屏覆盖层，
+     * 而 MeTab 的子页在它下面，不关掉的话点完按钮看起来什么都没发生。
+     */
+    openNotifySettings: () => {
+      setOpenNotice(false)
+      dispatch({ type: 'SET_TAB', tab: 'me' })
+      setNotifySettingsSignal((n) => n + 1)
+    },
   }
 
   const showTabBar = !openChat && !openNotice && !openSearch && !openScan
@@ -116,10 +143,11 @@ export default function Phone() {
       <div className="phone">
         <div className="phone-screen">
           <div className="screen-body">
-            {tab === 'chat' && <ChatTab nav={nav} />}
+            {tab === 'chat' && <ChatTab nav={nav} statusComposeSignal={statusComposeSignal} />}
+            {tab === 'contacts' && <ContactsTab nav={nav} />}
             {tab === 'moment' && <MomentTab nav={nav} />}
             {tab === 'discover' && <DiscoverTab nav={nav} />}
-            {tab === 'me' && <MeTab nav={nav} />}
+            {tab === 'me' && <MeTab nav={nav} notifySettingsSignal={notifySettingsSignal} />}
           </div>
 
           {/* 覆盖层：会话 / 通知中心 / 搜索 / 扫一扫 */}
@@ -137,7 +165,13 @@ export default function Phone() {
               onJumped={() => setJumpTo(null)}
             />
           )}
-          {openNotice && <NoticeCenter onBack={() => setOpenNotice(false)} nav={nav} />}
+          {openNotice && (
+            <NoticeCenter
+              onBack={() => setOpenNotice(false)}
+              nav={nav}
+              onOpenSettings={nav.openNotifySettings}
+            />
+          )}
           {openSearch && <SearchPanel onBack={() => setOpenSearch(false)} nav={nav} />}
           {openScan && <ScanPage onBack={() => setOpenScan(false)} nav={nav} />}
 

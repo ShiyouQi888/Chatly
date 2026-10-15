@@ -30,7 +30,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { db, q } from '../server/src/db.js'
+/* ⚠️ qSync 是 SQLite 专有的**同步**直连，只给自检脚本用（q 已 async）。 */
+import { db, qSync as q } from '../server/src/db.js'
 import { purgeDebris, purgeMessagesAfter, maxMessageId } from './lib/debris.mjs'
 import { freePort, waitAppTarget, connectCdp, launchChrome, shoot } from './lib/cdp.mjs'
 
@@ -78,8 +79,8 @@ const j = async (m, p, body, auth) => {
   return { status: r.status, data }
 }
 
-purgeDebris({ quiet: true })
-const msgBaseline = maxMessageId()
+await purgeDebris({ quiet: true })
+const msgBaseline = await maxMessageId()
 const messagesBefore = q.get('SELECT COUNT(*) n FROM messages').n
 
 const me = await login('chenmo')
@@ -379,8 +380,8 @@ try {
    收尾：按基线清理
    ============================================================ */
 console.log('\n─── 收尾 ───')
-purgeMessagesAfter(msgBaseline)
-purgeDebris({ quiet: true })
+await purgeMessagesAfter(msgBaseline)
+await purgeDebris({ quiet: true })
 try {
   db.prepare('DELETE FROM conversation_members WHERE conversation_id = ?').run(TMP)
   db.prepare('DELETE FROM conversations WHERE id = ?').run(TMP)

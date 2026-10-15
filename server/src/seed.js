@@ -6,7 +6,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { db, q, insert } from './db.js'
+import { q, insert, exec, close, info } from './db.js'
 import { hashPassword, parseTags } from './auth.js'
 import { ensurePrivate, createGroup, createMessage, updateGroup } from './chat.js'
 import { createMoment, addComment, toggleLike } from './moment.js'
@@ -16,18 +16,31 @@ import { addFavorite } from './favorite.js'
 const RESET = process.argv.includes('--reset')
 
 if (RESET) {
-  db.exec('DELETE FROM moment_comments')
-  db.exec('DELETE FROM moment_likes')
-  db.exec('DELETE FROM moment_media')
-  db.exec('DELETE FROM moments')
-  db.exec('DELETE FROM follows')
-  db.exec('DELETE FROM messages')
-  db.exec('DELETE FROM conversation_members')
-  db.exec('DELETE FROM conversations')
-  db.exec('DELETE FROM users')
-  db.exec(
-    "DELETE FROM sqlite_sequence WHERE name IN ('users','conversations','messages','moments','moment_media','moment_comments')"
-  )
+  /* 从子表往父表删。favorites / polls / watch_later / user_settings /
+     user_devices / feedbacks **不用单独列** —— 它们对 users / conversations /
+     messages 都是 ON DELETE CASCADE，删父表时会一起被带走（两种驱动都如此）。 */
+  for (const t of [
+    'moment_comments',
+    'moment_likes',
+    'moment_media',
+    'moments',
+    'follows',
+    'messages',
+    'conversation_members',
+    'conversations',
+    'users',
+  ]) {
+    await exec(`DELETE FROM ${t}`)
+  }
+  /* ⚠️ 自增序列的重置两家不一样：SQLite 靠内部的 `sqlite_sequence` 表，
+     PG 用 identity 序列（**没有**那张表，照抄会在 PG 上直接报错）。
+     PG 侧刻意不做重置 —— 演示库不要求 id 从 1 开始；硬要归零得先查出
+     每条 identity 序列的名字再 ALTER SEQUENCE RESTART，收益只是「id 好看」。 */
+  if (info().driver === 'sqlite') {
+    await exec(
+      "DELETE FROM sqlite_sequence WHERE name IN ('users','conversations','messages','moments','moment_media','moment_comments')"
+    )
+  }
   console.log('已清空数据')
 }
 
@@ -167,10 +180,10 @@ const interestGroups = [
  * 老库补资料：只填空字段，绝不覆盖用户自己改过的值。
  * 这样加资料字段时不用 reset —— reset 会把已有会话和消息一起清掉。
  */
-function backfillProfiles() {
+async function backfillProfiles() {
   let n = 0
   for (const u of users) {
-    const row = q.get('SELECT id, gender, birthday, region, tags FROM users WHERE username = ?', u.username)
+    const row = await q.get('SELECT id, gender, birthday, region, tags FROM users WHERE username = ?', u.username)
     if (!row) continue
     const sets = []
     const args = []
@@ -191,7 +204,7 @@ function backfillProfiles() {
       args.push(JSON.stringify(u.tags))
     }
     if (!sets.length) continue
-    q.run(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`, ...args, row.id)
+    await q.run(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`, ...args, row.id)
     n++
   }
   return n
@@ -203,12 +216,21 @@ function backfillProfiles() {
  * ⚠️ 不能为了加用户就让人跑 `npm run reset`：那会把已有会话和消息一起清掉，
  *    而用户在预览里手测过的内容也在里面。只补「库里没有的」，已有的一个字都不动。
  */
-function backfillUsers() {
+/**
+ * 演示手机号：按序号确定性生成 `135 0000 000N`。
+ * 为什么用这个段：它是**明显编造**的占位号（135-0000-xxxx），不会撞到真实用户；
+ * 同时形态又是合法的 11 位大陆号码，能真的走完「按手机号搜人」那条链路。
+ * ⚠️ 手机号不参与登录（登录仍走 username），只用于「隐私设置 → 通过手机号添加」。
+ */
+const demoPhone = (i) => `1350000${String(i + 1).padStart(4, '0')}`
+
+async function backfillUsers() {
   let n = 0
-  for (const u of users) {
-    if (q.get('SELECT 1 FROM users WHERE username = ?', u.username)) continue
-    insert(
-      'INSERT INTO users (username, password_hash, nickname, avatar, bio, gender, birthday, region, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+  for (let i = 0; i < users.length; i++) {
+    const u = users[i]
+    if (await q.get('SELECT 1 FROM users WHERE username = ?', u.username)) continue
+    await insert(
+      'INSERT INTO users (username, password_hash, nickname, avatar, bio, gender, birthday, region, tags, phone) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       u.username,
       hashPassword(DEMO_PASSWORD),
       u.nickname,
@@ -217,8 +239,25 @@ function backfillUsers() {
       u.gender,
       u.birthday,
       u.region,
-      JSON.stringify(u.tags)
+      JSON.stringify(u.tags),
+      demoPhone(i)
     )
+    n++
+  }
+  return n
+}
+
+/**
+ * 给**已经存在**的演示账号补手机号（老库升级路径）。
+ * 只补 phone 为空的那批 —— 用户自己在界面上改过的手机号不能被种子覆盖回去。
+ */
+async function backfillPhones() {
+  let n = 0
+  for (let i = 0; i < users.length; i++) {
+    const u = users[i]
+    const row = await q.get('SELECT id, phone FROM users WHERE username = ?', u.username)
+    if (!row || row.phone) continue
+    await q.run('UPDATE users SET phone = ? WHERE id = ?', demoPhone(i), row.id)
     n++
   }
   return n
@@ -228,60 +267,65 @@ function backfillUsers() {
  * 兴趣群（发现页「可加入的群」）。按 **title 判重** ——
  * 重复建一次就是两个同名群并排刷在发现页里，看的人只会以为是 bug。
  */
-function seedInterestGroups(idMap) {
+async function seedInterestGroups(idMap) {
   let n = 0
   for (const g of interestGroups) {
-    if (q.get('SELECT 1 FROM conversations WHERE title = ? AND type = ?', g.title, 'group')) continue
+    if (await q.get('SELECT 1 FROM conversations WHERE title = ? AND type = ?', g.title, 'group')) continue
     const ownerId = idMap[g.owner]
     if (!ownerId) continue
     const memberIds = g.members.map((m) => idMap[m]).filter(Boolean)
-    const cid = createGroup(g.title, memberIds, ownerId)
-    q.run('UPDATE conversations SET discoverable = 1 WHERE id = ?', cid)
+    const cid = await createGroup(g.title, memberIds, ownerId)
+    await q.run('UPDATE conversations SET discoverable = 1 WHERE id = ?', cid)
     n++
   }
   return n
 }
 
-const has = q.get('SELECT COUNT(*) AS n FROM users').n
+const has = (await q.get('SELECT COUNT(*) AS n FROM users')).n
 if (has > 0 && !RESET) {
-  const filled = backfillProfiles()
-  const added = backfillUsers()
+  const filled = await backfillProfiles()
+  const added = await backfillUsers()
+  const phones = await backfillPhones()
   console.log(
     `已有 ${has} 个用户，跳过重建；补齐了 ${filled} 条演示资料（只填空字段）` +
-      (added ? `，补建了 ${added} 个演示用户` : '')
+      (added ? `，补建了 ${added} 个演示用户` : '') +
+      (phones ? `，补了 ${phones} 个手机号` : '')
   )
 
   /* idMap 要在补建用户**之后**再算 —— 否则新用户不在表里，兴趣群的成员会少人 */
   const idMap = Object.fromEntries(
-    q.all('SELECT id, username FROM users').map((r) => [r.username, r.id])
+    (await q.all('SELECT id, username FROM users')).map((r) => [r.username, r.id])
   )
-  const groupsAdded = seedInterestGroups(idMap)
+  const groupsAdded = await seedInterestGroups(idMap)
 
   /* 老库补齐动态：只有一条都没有的时候才写。
      宁可少补也不要重复 —— 重复一次就是六条一模一样的动态刷在列表顶部。 */
-  if (q.get('SELECT COUNT(*) AS n FROM moments').n === 0) {
-    seedMoments(idMap)
+  if ((await q.get('SELECT COUNT(*) AS n FROM moments')).n === 0) {
+    await seedMoments(idMap)
     console.log('已为现有演示库补齐动态与关注关系')
   }
   if (groupsAdded) console.log(`已补建 ${groupsAdded} 个公开兴趣群（发现页可加入）`)
 
   /* 老库补一条演示投票：投票是「界面上没有内容就不知道长什么样」的功能。
      判据是「这个群还没有任何投票」，所以重复跑 seed 不会多出第二条。 */
-  const pollsAdded = seedPolls(idMap)
+  const pollsAdded = await seedPolls(idMap)
   if (pollsAdded) console.log(`已为演示群补齐 ${pollsAdded} 条群投票`)
 
   /* 老库补几条演示收藏 —— 同理：收藏列表空着就不知道它能长什么样 */
-  const favsAdded = seedFavorites(idMap)
+  const favsAdded = await seedFavorites(idMap)
   if (favsAdded) console.log(`已为演示账号补齐 ${favsAdded} 条收藏`)
 
   console.log('如需彻底重建：npm run reset')
+  /* 显式关连接再退出 —— PG 的池子不会自己 end，而 `process.exit()` 也不会等它，
+     留着会让「跑完 seed 但进程挂着」看起来像卡死（SQLite 侧 close 是空操作级的开销）。 */
+  await close()
   process.exit(0)
 }
 
 const ids = {}
-for (const u of users) {
-  ids[u.username] = insert(
-    'INSERT INTO users (username, password_hash, nickname, avatar, bio, gender, birthday, region, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+for (const [i, u] of users.entries()) {
+  ids[u.username] = await insert(
+    'INSERT INTO users (username, password_hash, nickname, avatar, bio, gender, birthday, region, tags, phone) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     u.username,
     hashPassword(DEMO_PASSWORD),
     u.nickname,
@@ -290,13 +334,14 @@ for (const u of users) {
     u.gender,
     u.birthday,
     u.region,
-    JSON.stringify(u.tags)
+    JSON.stringify(u.tags),
+    demoPhone(i)
   )
 }
 console.log(`已创建 ${users.length} 个用户（密码统一为 ${DEMO_PASSWORD}）`)
 
 /* ---------- 私聊 ---------- */
-const p1 = ensurePrivate(ids.chenmo, ids.linxiaoxia)
+const p1 = await ensurePrivate(ids.chenmo, ids.linxiaoxia)
 const scripts = [
   ['linxiaoxia', '在忙吗？'],
   ['chenmo', '刚忙完～'],
@@ -307,38 +352,38 @@ const scripts = [
   ['linxiaoxia', '期待～😊'],
 ]
 for (const [who, text] of scripts) {
-  createMessage({ conversationId: p1, senderId: ids[who], kind: 'text', content: text })
+  await createMessage({ conversationId: p1, senderId: ids[who], kind: 'text', content: text })
 }
 console.log(`私聊 #${p1}：${scripts.length} 条消息`)
 
-const p2 = ensurePrivate(ids.chenmo, ids.chenyu)
-createMessage({ conversationId: p2, senderId: ids.chenyu, kind: 'text', content: '晚上打游戏吗？' })
-createMessage({ conversationId: p2, senderId: ids.chenmo, kind: 'text', content: '看情况，先把手上的活干完' })
+const p2 = await ensurePrivate(ids.chenmo, ids.chenyu)
+await createMessage({ conversationId: p2, senderId: ids.chenyu, kind: 'text', content: '晚上打游戏吗？' })
+await createMessage({ conversationId: p2, senderId: ids.chenmo, kind: 'text', content: '看情况，先把手上的活干完' })
 console.log(`私聊 #${p2}：2 条消息`)
 
 /* ---------- 群聊 ---------- */
-const g1 = createGroup('设计部', [ids.linxiaoxia, ids.ajie, ids.xiaolu], ids.chenmo)
+const g1 = await createGroup('设计部', [ids.linxiaoxia, ids.ajie, ids.xiaolu], ids.chenmo)
 const groupScripts = [
   ['ajie', '新方案我已经发到群里了，大家看下'],
   ['xiaolu', '@全体成员 下午 4 点开个短会，10 分钟就够'],
   ['chenmo', '收到，我提前把配色稿整理好'],
 ]
 for (const [who, text] of groupScripts) {
-  createMessage({ conversationId: g1, senderId: ids[who], kind: 'text', content: text })
+  await createMessage({ conversationId: g1, senderId: ids[who], kind: 'text', content: text })
 }
 /* 给演示群各写一条公告：不然「群公告」这条能力在演示里永远只显示
    「还没有群公告」，界面上看不出它长什么样。 */
-updateGroup(g1, { announcement: '本周五 18:00 前提交配色稿；评审顺延到下周一上午。' })
+await updateGroup(g1, { announcement: '本周五 18:00 前提交配色稿；评审顺延到下周一上午。' })
 console.log(`群聊 #${g1}：${groupScripts.length} 条消息`)
 
-const g2 = createGroup('摸鱼小分队', [ids.ajie, ids.xiaolu, ids.chenyu], ids.chenmo)
-createMessage({ conversationId: g2, senderId: ids.ajie, kind: 'text', content: '哈哈哈哈太真实了' })
-createMessage({ conversationId: g2, senderId: ids.xiaolu, kind: 'text', content: '老板刚走过去，我马上切回工作了' })
-updateGroup(g2, { announcement: '群里只摸鱼，不谈工作 🐟\n周五下午茶 AA，想来的接龙。' })
+const g2 = await createGroup('摸鱼小分队', [ids.ajie, ids.xiaolu, ids.chenyu], ids.chenmo)
+await createMessage({ conversationId: g2, senderId: ids.ajie, kind: 'text', content: '哈哈哈哈太真实了' })
+await createMessage({ conversationId: g2, senderId: ids.xiaolu, kind: 'text', content: '老板刚走过去，我马上切回工作了' })
+await updateGroup(g2, { announcement: '群里只摸鱼，不谈工作 🐟\n周五下午茶 AA，想来的接龙。' })
 console.log(`群聊 #${g2}：2 条消息`)
 
 /* 发现页的「可加入的兴趣群」陈墨不在里面（不然发现页会把他已在的群过滤掉，演示里一条都看不到） */
-const ig = seedInterestGroups(ids)
+const ig = await seedInterestGroups(ids)
 if (ig) console.log(`公开兴趣群 ${ig} 个（发现页可加入）`)
 
 /* ---------- 消息收藏（PRD §9） ----------
@@ -348,10 +393,10 @@ if (ig) console.log(`公开兴趣群 ${ig} 个（发现页可加入）`)
 
    幂等判据是「这个人有没有收藏」。收藏走 favorite.js 的 addFavorite，
    而不是手写 INSERT —— 快照的字段抄写规则只有一处，种子跟着它走才不会漂。 */
-function seedFavorites(ids) {
+async function seedFavorites(ids) {
   const uid = ids.chenmo
   if (!uid) return 0
-  if (q.get('SELECT COUNT(*) AS n FROM favorites WHERE user_id = ?', uid).n > 0) return 0
+  if ((await q.get('SELECT COUNT(*) AS n FROM favorites WHERE user_id = ?', uid)).n > 0) return 0
 
   /* 挑几条真实的演示消息来收藏：按类型各找一条，找不到就跳过那一种。
      不硬写 message id —— 那些 id 随库的重建而变。
@@ -371,19 +416,21 @@ function seedFavorites(ids) {
       kindWhere
     )
 
-  const picks = [
-    /* 文字：私聊里林小夏那句「晚上一起去看电影吧～」 */
-    pickOne('text', "AND m.content LIKE '%看电影%'"),
-    /* 图片 / 位置 / 投票：各来一条，好把四种收藏卡片都摆在眼前 */
-    pickOne('image'),
-    pickOne('location'),
-    pickOne('poll'),
-  ].filter(Boolean)
+  const picks = (
+    await Promise.all([
+      /* 文字：私聊里林小夏那句「晚上一起去看电影吧～」 */
+      pickOne('text', "AND m.content LIKE '%看电影%'"),
+      /* 图片 / 位置 / 投票：各来一条，好把四种收藏卡片都摆在眼前 */
+      pickOne('image'),
+      pickOne('location'),
+      pickOne('poll'),
+    ])
+  ).filter(Boolean)
 
   let made = 0
   for (const row of picks) {
     try {
-      const out = addFavorite(uid, row.id)
+      const out = await addFavorite(uid, row.id)
       if (out.created) made++
     } catch (e) {
       /* 某一种形态找不到（老库的演示数据被改过）—— 跳过它，不中断整个 seed */
@@ -403,10 +450,10 @@ function seedFavorites(ids) {
    投票本身走 poll.js 的 createPoll + votePoll，而不是手写 INSERT ——
    种子手写 SQL 的话，业务逻辑改了（比如取消投票要清名册）种子不会跟着改，
    于是「新装库」和「点了按钮建的」两种数据形状就不一样了。 */
-function seedPolls(ids) {
-  const targets = q
-    .all(`SELECT id FROM conversations WHERE type = 'group' ORDER BY id LIMIT 2`)
-    .map((r) => r.id)
+async function seedPolls(ids) {
+  const targets = (
+    await q.all(`SELECT id FROM conversations WHERE type = 'group' ORDER BY id LIMIT 2`)
+  ).map((r) => r.id)
   let made = 0
   for (const cid of targets) {
     /* ⚠️ 判据是「有没有**被消息引用的**投票」，不是「有没有 polls 行」——
@@ -414,31 +461,35 @@ function seedPolls(ids) {
        就会让这里以为演示已就位，于是**聊天里一条投票都看不到，而库里躺着几条死投票**。
        这正是这个功能第一次做完时踩到的：8 条 polls、0 条 poll 消息。
        投票在界面上永远是「挂在某条消息上」的，所以「有没有消息引用」才是它的存在判据。 */
-    const has = q.get(
-      `SELECT COUNT(*) AS n FROM polls p
+    const has = (
+      await q.get(
+        `SELECT COUNT(*) AS n FROM polls p
        JOIN messages m ON m.poll_id = p.id AND m.revoked_at IS NULL
        WHERE p.conversation_id = ?`,
-      cid
+        cid
+      )
     ).n
     if (has > 0) continue
 
     const first = made === 0
-    const poll = createPoll({
-      conversationId: cid,
-      creatorId: ids.chenmo,
-      question: first ? '周六去哪？' : '下次团建想去哪？',
-      options: first ? ['海边', '看电影', '爬山', '吃火锅'] : ['露营', '密室逃脱', 'KTV'],
-      multi: !first,
-      /* 第二条做成匿名，好让「匿名投票」在演示里也有个样子可看 */
-      anonymous: !first,
-    }).poll
+    const poll = (
+      await createPoll({
+        conversationId: cid,
+        creatorId: ids.chenmo,
+        question: first ? '周六去哪？' : '下次团建想去哪？',
+        options: first ? ['海边', '看电影', '爬山', '吃火锅'] : ['露营', '密室逃脱', 'KTV'],
+        multi: !first,
+        /* 第二条做成匿名，好让「匿名投票」在演示里也有个样子可看 */
+        anonymous: !first,
+      })
+    ).poll
 
     /* ⚠️ 光建 polls 行是**看不见的** —— 投票在界面上永远挂在一条消息上。
        真实入口（POST /polls）也是「建投票 + 建 kind='poll' 的消息」两步，
        种子少写这一步的后果很隐蔽：库里躺着两条投票、聊天里一条都看不到
        （第一版就是这么错的，而且 seed 自己还报了「补齐 2 条群投票」）。
        content 放题目是路由那边同样的约定：会话列表预览要用。 */
-    createMessage({
+    await createMessage({
       conversationId: cid,
       senderId: ids.chenmo,
       kind: 'poll',
@@ -460,7 +511,7 @@ function seedPolls(ids) {
       const optionIds = picks.map((i) => poll.options[i]?.id).filter(Boolean)
       if (!optionIds.length) continue
       try {
-        votePoll(poll.id, uid, optionIds)
+        await votePoll(poll.id, uid, optionIds)
       } catch (e) {
         /* 某人不在群里（老库的群成员可能被用户改过）—— 跳过这条投票，不要因此中止整个 seed */
         console.warn(`[seed] 跳过一票：${e.message}`)
@@ -476,7 +527,7 @@ function seedPolls(ids) {
    库里已经有用户时（跑过一段时间、还有用户手测的数据），
    `node src/seed.js` 会走 backfill 分支，在这里把动态补进去，
    而不是让人去跑 `npm run reset` —— 那会把会话和消息一起清掉。 */
-function seedMoments(ids) {
+async function seedMoments(ids) {
 /* ---------- 关注关系 ----------
    动态的「仅好友可见」是按**互相关注**判的，没有这张表那它就是个假开关。
    所以种子里必须真的把关系建出来，而且要有单向关注 ——
@@ -493,11 +544,11 @@ const oneWay = [
   ['chenmo', 'xiatian'], // 反过来：陈墨关注夏天，夏天没回关
 ]
 for (const [a, b] of mutualPairs) {
-  q.run('INSERT OR IGNORE INTO follows (follower_id, followee_id) VALUES (?, ?)', ids[a], ids[b])
-  q.run('INSERT OR IGNORE INTO follows (follower_id, followee_id) VALUES (?, ?)', ids[b], ids[a])
+  await q.run('INSERT OR IGNORE INTO follows (follower_id, followee_id) VALUES (?, ?)', ids[a], ids[b])
+  await q.run('INSERT OR IGNORE INTO follows (follower_id, followee_id) VALUES (?, ?)', ids[b], ids[a])
 }
 for (const [a, b] of oneWay) {
-  q.run('INSERT OR IGNORE INTO follows (follower_id, followee_id) VALUES (?, ?)', ids[a], ids[b])
+  await q.run('INSERT OR IGNORE INTO follows (follower_id, followee_id) VALUES (?, ?)', ids[a], ids[b])
 }
 console.log(
   `关注关系：${mutualPairs.length} 对互关 + ${oneWay.length} 条单向`
@@ -725,7 +776,7 @@ for (const s of momentScripts) {
       ]
     }
   }
-  const id = createMoment({
+  const id = await createMoment({
     userId: ids[s.who],
     content: s.content,
     topic: s.topic,
@@ -735,10 +786,10 @@ for (const s of momentScripts) {
     music: s.music,
   })
   // created_at 要往后推，否则六条动态的时间戳全挤在同一秒，列表看起来像同时发的
-  q.run('UPDATE moments SET created_at = ? WHERE id = ?', Date.now() + s.at, id)
-  for (const u of s.likes || []) toggleLike(id, ids[u])
+  await q.run('UPDATE moments SET created_at = ? WHERE id = ?', Date.now() + s.at, id)
+  for (const u of s.likes || []) await toggleLike(id, ids[u])
   for (const [u, text] of s.comments || []) {
-    addComment({ momentId: id, userId: ids[u], content: text })
+    await addComment({ momentId: id, userId: ids[u], content: text })
   }
 }
 console.log(
@@ -746,14 +797,17 @@ console.log(
 )
 }
 
-seedMoments(ids)
+await seedMoments(ids)
 
-const seededPolls = seedPolls(ids)
+const seededPolls = await seedPolls(ids)
 console.log(`群投票 ${seededPolls} 条（在演示群里，带真实投票记录）`)
 
-const seededFavs = seedFavorites(ids)
+const seededFavs = await seedFavorites(ids)
 console.log(`消息收藏 ${seededFavs} 条（陈墨的，涵盖文字 / 图片 / 位置 / 投票）`)
 
 console.log('\n可用登录账号：')
 for (const u of users) console.log(`  ${u.username.padEnd(12)} 昵称 ${u.nickname}`)
 console.log(`\n密码：${DEMO_PASSWORD}\n`)
+
+/* 显式关连接：PG 的池子不会自己 end（见上面 backfill 分支里同样的说明） */
+await close()

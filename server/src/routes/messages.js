@@ -1,12 +1,17 @@
 /**
  * /api/v1/messages —— 发送消息、撤回、上传
+ *
+ * ⚠️ 所有 handler 都是 async（数据层异步化，见 routes/conversations.js 的说明）。
  */
 import { Router } from 'express'
 import { authRequired } from '../auth.js'
 import { createMessage, getMessage, revokeMessage, memberIds, canSpeak, assertReplyTo, forwardMessages } from '../chat.js'
 import { broadcastToUsers } from '../ws.js'
+import { notifyIncomingMessage } from '../notification.js'
 import { uploadAny as upload, isStaticAssetUrl } from '../upload.js'
 import { parseGeoPair } from '../../../shared/geo-math.mjs'
+import { q } from '../db.js'
+import { decryptMessageText } from '../message-crypto.js'
 
 const r = Router()
 r.use(authRequired)
@@ -15,28 +20,91 @@ r.use(authRequired)
 r.post('/upload', upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: '没有收到文件' })
   res.status(201).json({
-    url: `/uploads/${req.file.filename}`,
+    url: `/api/v1/files/private/${req.file.filename}`,
     fileName: req.file.originalname,
     fileSize: req.file.size,
     mimeType: req.file.mimetype,
   })
 })
 
-/* 允许的消息类型。和 db.js 里 messages.kind 的 CHECK 约束**必须一致** ——
+/* 允许的消息类型。和 messages.kind 的 CHECK 约束**必须一致** ——
    两边各写一份的话，DB 拒收而路由放行（或反过来）时报错信息会指向完全错误的地方。
    kind 是纯前端传来的，不在白名单里的一律按非法类型挡掉（否则会撞 CHECK 报 500）。 */
 const KINDS = ['text', 'image', 'file', 'video', 'location']
 /** 需要带文件的类型（text / location 不需要） */
 const FILE_KINDS = ['image', 'file', 'video']
 
+/* ---------- 搜索我有权访问的文字消息 ---------- */
+r.get('/search', async (req, res) => {
+  const term = String(req.query.q || '').trim().slice(0, 100)
+  if (term.length < 2) return res.json({ messages: [], hasMore: false, encryptedExcluded: false })
+
+  const beforeId = req.query.beforeId ? Number(req.query.beforeId) : Number.MAX_SAFE_INTEGER
+  const scanLimit = 5000
+  const rows = await q.all(
+    `SELECT m.id, m.conversation_id AS conversationId, m.sender_id AS senderId,
+            m.content, m.content_encrypted AS contentEncrypted, m.created_at AS createdAt,
+            c.type AS conversationType, c.title AS conversationTitle, u.nickname AS senderName
+       FROM messages m
+       JOIN conversation_members cm ON cm.conversation_id = m.conversation_id AND cm.user_id = ?
+       JOIN conversations c ON c.id = m.conversation_id
+       JOIN users u ON u.id = m.sender_id
+      WHERE m.kind = 'text' AND m.revoked_at IS NULL
+        AND (m.burn_at IS NULL OR m.burn_at > ?)
+        AND m.id < ?
+      ORDER BY m.id DESC
+      LIMIT ?`,
+    req.user.id, Date.now(), beforeId, scanLimit
+  )
+
+  const needle = term.toLocaleLowerCase()
+  const matches = []
+  const resultLimit = Math.min(Math.max(Number(req.query.limit) || 30, 1), 50)
+  let encryptedExcluded = false
+  let scanned = 0
+  for (const row of rows) {
+    scanned++
+    let text = row.content || ''
+    if (row.contentEncrypted) {
+      try {
+        text = decryptMessageText(text)
+      } catch {
+        encryptedExcluded = true
+        continue
+      }
+    }
+    if (!text.toLocaleLowerCase().includes(needle)) continue
+    matches.push({
+      id: Number(row.id),
+      conversationId: Number(row.conversationId),
+      conversationType: row.conversationType,
+      conversationTitle: row.conversationTitle,
+      senderId: Number(row.senderId),
+      senderName: row.senderName,
+      text,
+      createdAt: Number(row.createdAt),
+    })
+    if (matches.length >= resultLimit) break
+  }
+
+  const hasMore = scanned < rows.length || rows.length === scanLimit
+
+  res.json({
+    messages: matches,
+    hasMore,
+    nextBeforeId: hasMore ? rows[scanned - 1]?.id ?? null : null,
+    encryptedExcluded,
+  })
+})
+
 /* ---------- 发送消息 ---------- */
-r.post('/', (req, res) => {
+r.post('/', async (req, res) => {
   const { conversationId, kind = 'text', text, fileUrl, fileName, fileSize, replyToId } = req.body || {}
   const cid = Number(conversationId)
   /* 发言门控走 canSpeak（isMember + 禁言），不只查 isMember ——
      否则禁言只是前端的摆设，客户端直接发包就能在禁言群里说话。
      转发走同一个门（它本质也是在这个会话里发消息），见下 POST /forward。 */
-  const speak = canSpeak(cid, req.user.id)
+  const speak = await canSpeak(cid, req.user.id)
   if (!speak.ok || !cid) return res.status(speak.status || 403).json({ error: speak.error || '无权在该会话发言' })
 
   if (!KINDS.includes(kind)) {
@@ -75,12 +143,12 @@ r.post('/', (req, res) => {
      以前是直接落库零校验 —— 引用别的会话的消息会把那个会话的内容带进当前会话。 */
   let replyTo = null
   try {
-    replyTo = assertReplyTo(cid, replyToId)
+    replyTo = await assertReplyTo(cid, replyToId)
   } catch (e) {
     return res.status(e.status || 400).json({ error: e.message })
   }
 
-  const message = createMessage({
+  const message = await createMessage({
     conversationId: cid,
     senderId: req.user.id,
     kind,
@@ -93,19 +161,24 @@ r.post('/', (req, res) => {
   })
 
   // 发送者自身视为已读
-  broadcastToUsers(memberIds(cid), 'message.new', { message })
+  broadcastToUsers(await memberIds(cid), 'message.new', { message })
+
+  /* 「新消息」「@我」两个通知开关在这一条线上生效（私聊落 message、群里被 @ 落 mention）。
+     放在广播**之后**：通知是附属体验，不能因为它把消息送达延迟一拍。
+     它内部从不抛错，所以这里不需要包 try。 */
+  await notifyIncomingMessage({ conversationId: cid, senderId: req.user.id, message })
 
   res.status(201).json({ message })
 })
 
 /* ---------- 撤回 ---------- */
-r.delete('/:id', (req, res) => {
+r.delete('/:id', async (req, res) => {
   const id = Number(req.params.id)
-  const out = revokeMessage(id, req.user.id)
+  const out = await revokeMessage(id, req.user.id)
   if (!out.ok) return res.status(out.status).json({ error: out.error })
 
-  const m = getMessage(id)
-  broadcastToUsers(memberIds(m.conversationId), 'message.revoked', {
+  const m = await getMessage(id)
+  broadcastToUsers(await memberIds(m.conversationId), 'message.revoked', {
     conversationId: m.conversationId,
     messageId: id,
   })
@@ -123,7 +196,7 @@ r.delete('/:id', (req, res) => {
      目标会话发言权走 canSpeak —— 禁言群里转发同样是发言，不能绕过去；
      转发限制在 20 条 —— 转发是逐条 INSERT，无上限就是一条请求写爆库；
      转发目标不能是自己所在的「同一条」吗？可以 —— 转发给自己（备忘）是合理需求，不拦。 */
-r.post('/forward', (req, res) => {
+r.post('/forward', async (req, res) => {
   const targetConversationId = Number(req.body?.targetConversationId)
   const messageIds = req.body?.messageIds
   if (!targetConversationId) return res.status(400).json({ error: '缺少目标会话' })
@@ -132,12 +205,18 @@ r.post('/forward', (req, res) => {
   }
   if (messageIds.length > 20) return res.status(400).json({ error: '一次最多转发 20 条' })
 
-  const speak = canSpeak(targetConversationId, req.user.id)
+  const speak = await canSpeak(targetConversationId, req.user.id)
   if (!speak.ok) return res.status(speak.status || 403).json({ error: speak.error || '无权在目标会话发言' })
 
-  const out = forwardMessages(messageIds, targetConversationId, req.user.id)
+  const out = await forwardMessages(messageIds, targetConversationId, req.user.id)
+  const ids = await memberIds(targetConversationId)
   for (const m of out.forwarded) {
-    broadcastToUsers(memberIds(targetConversationId), 'message.new', { message: m })
+    broadcastToUsers(ids, 'message.new', { message: m })
+  }
+  /* 转发出去的消息**也是**目标会话里的新消息，所以走和正常发送同一条通知线 ——
+     不然「转发到私聊」对方收不到任何提醒，而那明明是一条真消息。 */
+  for (const m of out.forwarded) {
+    await notifyIncomingMessage({ conversationId: targetConversationId, senderId: req.user.id, message: m })
   }
   res.status(201).json(out)
 })

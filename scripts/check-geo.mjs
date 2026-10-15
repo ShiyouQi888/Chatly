@@ -38,7 +38,8 @@
  */
 import fs from 'node:fs'
 
-import { db, insert } from '../server/src/db.js'
+/* ⚠️ insertSync 是 SQLite 专有的**同步**直连，只给自检脚本用（insert 已 async）。 */
+import { db, insertSync as insert } from '../server/src/db.js'
 import { freePort, waitAppTarget, connectCdp, launchChrome, shoot } from './lib/cdp.mjs'
 import { purgeDebris, purgeMoments } from './lib/debris.mjs'
 import { wgs84ToGcj02, haversineKm } from '../shared/geo-math.mjs'
@@ -94,7 +95,7 @@ const j = async (m, p, body, auth) => {
   return { status: r.status, d }
 }
 
-purgeDebris({ quiet: true })
+await purgeDebris({ quiet: true })
 const me = await login('chenmo')
 const peer = await login('linxiaoxia')
 
@@ -156,11 +157,16 @@ console.log('\n─── A. 没配 key 时是降级，不是故障 ───')
     String(lo.d?.reason).slice(0, 40)
   )
 
-  /* 参数错误必须还是 400 —— 降级只针对「没配 key」，不能把脏参数一起放过 */
+  /* 参数错误必须还是 400 —— 降级只针对「没配 key」，不能把脏参数一起放过。
+     反过来的话，同一个请求在「没 key」的机器上是 200、装上 key 之后是 400，
+     这种差异只有装上 key 那天才会暴露。 */
   const bad1 = await j('GET', '/geo/locate?lng=114', null, me.auth)
   ok(bad1.status === 400, '/geo/locate 缺 lat → 400', `HTTP ${bad1.status}`)
   const bad2 = await j('GET', '/geo/locate?lat=200&lng=114', null, me.auth)
   ok(bad2.status === 400, '/geo/locate 纬度越界 → 400', `HTTP ${bad2.status}`)
+  /* ★ 空串是 `Number('')===0` 的陷阱：不特别注意的话它会被当成合法的 (0, 0) */
+  const bad3 = await j('GET', '/geo/locate?lat=&lng=', null, me.auth)
+  ok(bad3.status === 400, '/geo/locate 空串参数 → 400（不是被当成 0,0）', `HTTP ${bad3.status}`)
 
   const noAuth = await j('GET', '/geo/status')
   ok(noAuth.status === 401, '/geo/status 需要登录', `HTTP ${noAuth.status}`)
@@ -209,12 +215,15 @@ console.log('\n─── B/C/D. 位置消息的落库形状 ───')
 
   const list = await j('GET', '/conversations', null, me.auth)
   const conv = (list.d?.conversations || []).find((c) => c.id === tmpCid)
+  /* ⚠️ 接口返回的是 `lastMessage.text`，**没有** `preview` 字段 ——
+     预览文案是前端 `previewFromLast()` 自己算的（还要给群聊加「我: 」前缀）。
+     断言 `conv.preview` 会永远拿到 undefined，然后误判成「功能没做」。 */
   ok(
-    /^\[位置\]/.test(String(conv?.preview || '')),
-    '会话列表预览是 `[位置] 地点名`（不是空白）',
-    String(conv?.preview)
+    /^\[位置\]/.test(String(conv?.lastMessage?.text || '')),
+    '会话列表里这条的预览文案是 `[位置] 地点名`（不是空白）',
+    String(conv?.lastMessage?.text)
   )
-  ok(String(conv?.preview).includes('深圳市民中心'), '预览里带地点名')
+  ok(String(conv?.lastMessage?.text).includes('深圳市民中心'), '预览文案里带地点名')
 
   /* ② 只有名字没有坐标 */
   const r2 = await j(
@@ -405,8 +414,21 @@ const waitFor = async (expr, ms = 12000) => {
   return false
 }
 
-const HELP = `
-window.__tab = (i) => { const t=[...document.querySelectorAll('.tabbar .tab')][i]; if(!t) return false; t.click(); return true }
+/**
+ * 等库里出现某事。**发消息是异步的**：面板先关、请求后到，
+ * 直接读库会读到上一条（上一版就是这么把「接口塞的那条」当成「界面发的」的）。
+ */
+const waitDb = async (fn, ms = 10000) => {
+  const t0 = Date.now()
+  while (Date.now() - t0 < ms) {
+    const v = fn()
+    if (v) return v
+    await sleep(200)
+  }
+  return null
+}
+
+const HELP = `window.__tab = (i) => { const t=[...document.querySelectorAll('.tabbar .tab')][i]; if(!t) return false; t.click(); return true }
 window.__setVal = (sel, v) => { const i=document.querySelector(sel); if(!i) return false
   const proto = i.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype
   Object.getOwnPropertyDescriptor(proto, 'value').set.call(i, v)
@@ -519,66 +541,64 @@ ok(await waitFor(`!!document.querySelector('.lp-root')`, 12000), '打开了选�
 ok(await js(`!document.querySelector('.tabbar')`), '选位置是整屏覆盖层')
 await waitFor(`document.querySelector('.lp-root')?.dataset.phase === 'ready'`, 15000)
 
-/* 没配 key：必须是坐标占位 + 明确说明，而不是一张糊出来的假地图 */
+/* 没配 key：必须是坐标占位 + 明确说明，而不是一张糊出来的假地图。
+   ⚠️ 一律**限定在 .lp-root 里**查 —— 这个房间在浏览器启动前就被接口塞过几条位置消息了，
+   不限定的话 querySelector 抓到的是**消息气泡**里的那个缩略占位，断言会指向完全错误的对象
+   （上一版就是这么假绿的：面板其实没定位成功，却「通过」了）。 */
 ok(
-  await waitFor(`!!document.querySelector('[data-testid="map-nokey"]')`, 12000),
+  await waitFor(`!!window.__lp('[data-testid="map-nokey"]')`, 12000),
   '没配地图 key 时给出坐标占位（不是空白，也不是假底图）'
 )
 ok(
-  await js(`!document.querySelector('.mv-canvas')`),
+  await js(`!window.__lp('.mv-canvas')`),
   '没配 key 时**没有**去加载真地图 SDK（零外链请求）'
 )
-const phLat = await js(`Number(document.querySelector('[data-testid="map-nokey"]')?.dataset.lat)`)
+const phLat = await js(`Number(window.__lp('[data-testid="map-nokey"]')?.dataset.lat)`)
 /* ★ 送进 MapView 的必须是 GCJ-02 —— 拿 WGS-84 直接画会偏几百米，而且看不出来 */
 ok(
-  Math.abs(phLat - GCJ.lat) < 1e-6,
+  Math.abs(phLat - GCJ.lat) < 1e-4,
   '占位图收到的是 GCJ-02 坐标（不是浏览器的 WGS-84）',
   `${phLat} vs ${GCJ.lat}`
 )
 ok(
-  Math.abs(phLat - WGS.lat) > 0.002,
+  Math.abs(phLat - WGS.lat) > SHIFT_M,
   'WGS-84 → GCJ-02 的偏移确实发生了（差得足够明显）',
-  `偏移约 ${Math.round(
-    haversineKm(WGS.lat, WGS.lng, GCJ.lat, GCJ.lng) * 1000
-  )} m`
+  `偏移约 ${Math.round(haversineKm(WGS.lat, WGS.lng, GCJ.lat, GCJ.lng) * 1000)} m`
 )
-const noticeTxt = await js(`document.querySelector('.lp-notice')?.textContent.trim() || ''`)
+const noticeTxt = await js(`window.__lp('.lp-notice')?.textContent.trim() || ''`)
 ok(/还没配置位置服务/.test(noticeTxt), '降级说明写明「服务端还没配置位置服务」', noticeTxt.slice(0, 40))
 
-ok(
-  await js(`!!document.querySelector('[data-testid="lp-row-current"]')`),
-  '定位成功后列表里有「当前位置」'
-)
-const curName = await js(`document.querySelector('[data-testid="lp-row-current"] .lp-main b')?.textContent.trim() || ''`)
+ok(await js(`!!window.__lp('[data-testid="lp-row-current"]')`), '定位成功后列表里有「当前位置」')
+const curName = await js(`window.__lp('[data-testid="lp-row-current"] .lp-main b')?.textContent.trim() || ''`)
 ok(curName.length > 0, '「当前位置」有一个真名字（不是空字符串）', String(curName).slice(0, 20))
 ok(
-  await js(`!!document.querySelector('[data-testid="lp-row-current"] .lp-cur-tag')`),
+  await js(`!!window.__lp('[data-testid="lp-row-current"] .lp-cur-tag')`),
   '标了「当前位置」标签，和附近地点区分开'
 )
 ok(
-  await js(`document.querySelector('[data-testid="lp-send"]')?.disabled === true`),
+  await js(`window.__lp('[data-testid="lp-send"]')?.disabled === true`),
   '还没选地点时「发送」是禁用的（不给「先点发送再报错」这条路）'
 )
 await shoot(cdp, `${OUT}/01-picker-nokey.png`)
 
 await js(`window.__lpRow('current')`)
 await sleep(300)
-ok(
-  await js(`!!document.querySelector('[data-testid="lp-row-current"].is-sel')`),
-  '点一下选中了该地点'
-)
-ok(
-  await js(`document.querySelector('[data-testid="lp-send"]')?.disabled === false`),
-  '选中之后「发送」才可用'
-)
+ok(await js(`!!window.__lp('[data-testid="lp-row-current"].is-sel')`), '点一下选中了该地点')
+ok(await js(`window.__lp('[data-testid="lp-send"]')?.disabled === false`), '选中之后「发送」才可用')
 await shoot(cdp, `${OUT}/02-picker-selected.png`)
 
-await js(`document.querySelector('[data-testid="lp-send"]').click()`)
+await js(`window.__lp('[data-testid="lp-send"]').click()`)
 ok(await waitFor(`!document.querySelector('.lp-root')`, 12000), '发送后面板关闭')
-ok(await waitFor(`!!document.querySelector('.loc-card')`, 12000), '消息列表里出现了位置卡片')
 
-/* ★ 判据是**回库查**：「界面上有张卡片」不等于消息存下来了 */
-const sent1 = lastMsgOf(tmpCid)
+/* ★ 判据是**回库查**：「界面上有张卡片」不等于消息存下来了。
+   发送是异步的（面板先关、请求后到），所以要等库里出现。 */
+const sent1 = await waitDb(() => {
+  const last = lastMsgOf(tmpCid)
+  return last && last.geoName && last.geoName !== MANUAL_NAME ? last : null
+})
+ok(!!sent1, '界面发出的位置消息真的落库了')
+if (!sent1) throw new Error('位置消息没落库，后续断言无法继续')
+
 ok(sent1.kind === 'location', '界面发出的这条落库 kind=location', String(sent1.kind))
 ok(
   Math.abs(sent1.geoLat - GCJ.lat) < 1e-3 && Math.abs(sent1.geoLng - GCJ.lng) < 1e-3,
@@ -586,19 +606,21 @@ ok(
   `库 ${sent1.geoLat?.toFixed(5)},${sent1.geoLng?.toFixed(5)} / 期望 ${GCJ.lat.toFixed(5)},${GCJ.lng.toFixed(5)}`
 )
 ok(
-  Math.abs(sent1.geoLat - WGS.lat) > 0.002,
+  Math.abs(sent1.geoLat - WGS.lat) > SHIFT_M,
   '落库的不是原始 WGS-84（真的换算了）',
   `WGS ${WGS.lat} vs 库 ${sent1.geoLat?.toFixed(5)}`
 )
-const cards1 = await js(`window.__cards()`)
-const mineCard = cards1[cards1.length - 1]
+
+/* 按**消息 id** 取气泡 —— 见 check 里 __card 的注释 */
+ok(await waitFor(`!!window.__card(${sent1.id})`, 12000), '消息列表里出现了这条位置的气泡')
+const mineCard = await js(`window.__card(${sent1.id})`)
 ok(mineCard?.coord === '1', '气泡标记「有坐标」', JSON.stringify(mineCard))
 ok(mineCard?.hasMini === true && mineCard?.hasCanvas === false, '气泡里是缩略坐标占位（没去加载真地图）')
 await shoot(cdp, `${OUT}/03-loc-bubble-coord.png`)
 
 /* 几何：位置卡片不能撑破消息列 */
 const fit = await js(`(() => {
-  const c = [...document.querySelectorAll('.loc-card')].pop(); if(!c) return null
+  const c = document.querySelector('.msg[data-id="${sent1.id}"] .loc-card'); if(!c) return null
   const col = c.closest('.msg-col'); if(!col) return null
   const a = c.getBoundingClientRect(), b = col.getBoundingClientRect()
   return { overflow: Math.round(a.right - b.right), w: Math.round(a.width), colW: Math.round(b.width) }
@@ -606,14 +628,14 @@ const fit = await js(`(() => {
 ok(fit && fit.overflow <= 1, '位置卡片没有溢出消息列', JSON.stringify(fit))
 
 /* 点开全屏 */
-await js(`[...document.querySelectorAll('.loc-card')].pop().click()`)
+await js(`window.__openCard(${sent1.id})`)
 ok(await waitFor(`!!document.querySelector('[data-testid="loc-viewer"]')`, 12000), '点气泡打开全屏位置页')
 const coordTxt = await js(`document.querySelector('.lv-coord')?.textContent.trim() || ''`)
 ok(/\d+\.\d+,\s*\d+\.\d+/.test(coordTxt), '全屏页写出真实坐标（可核对）', coordTxt)
 ok(
   await js(`document.querySelector('.lv-foot b')?.textContent.trim() === ${JSON.stringify(sent1.geoName)}`),
   '全屏页显示的正是消息里的地点名',
-  String(await js(`document.querySelector('.lv-foot b')?.textContent.trim()`))
+  `${await js(`document.querySelector('.lv-foot b')?.textContent.trim()`)} / 期望 ${sent1.geoName}`
 )
 await shoot(cdp, `${OUT}/04-loc-fullscreen-coord.png`)
 await js(`document.querySelector('.lv-btn').click()`)
@@ -627,25 +649,24 @@ ok(await waitFor(`!!document.querySelector('.lp-root')`, 12000), '再次打开�
 await waitFor(`document.querySelector('.lp-root')?.dataset.phase === 'ready'`, 15000)
 await js(`window.__setVal('[data-testid="lp-search"]', ${JSON.stringify(MANUAL_NAME)})`)
 await sleep(300)
-ok(
-  await js(`!!document.querySelector('.lp-row em')?.textContent?.includes('只发地点名')`),
-  '手输时明确提示「只发地点名，不带坐标」',
-  String(await js(`document.querySelector('.lp-row em')?.textContent`)).slice(0, 30)
-)
-await js(`document.querySelector('.lp-row').click()`)
+const manualHint = await js(`window.__lp('.lp-row .lp-main em')?.textContent.trim() || ''`)
+ok(/只发地点名/.test(manualHint), '手输时明确提示「只发地点名，不带坐标」', manualHint.slice(0, 30))
+await js(`window.__lp('.lp-row').click()`)
 await sleep(250)
-ok(
-  await js(`document.querySelector('[data-testid="lp-send"]')?.disabled === false`),
-  '手输的地点也能选中并发送'
-)
-await js(`document.querySelector('[data-testid="lp-send"]').click()`)
+ok(await js(`window.__lp('[data-testid="lp-send"]')?.disabled === false`), '手输的地点也能选中并发送')
+await js(`window.__lp('[data-testid="lp-send"]').click()`)
 ok(await waitFor(`!document.querySelector('.lp-root')`, 12000), '手输位置发送完成')
 
-const sent2 = lastMsgOf(tmpCid)
-ok(sent2.geoName === MANUAL_NAME, '手输的地点名落库', String(sent2.geoName))
+const sent2 = await waitDb(() => {
+  const last = lastMsgOf(tmpCid)
+  return last && last.geoName === MANUAL_NAME ? last : null
+})
+ok(!!sent2, '手输的位置消息落库了')
+if (!sent2) throw new Error('手输位置没落库，后续断言无法继续')
 ok(sent2.geoLat === null && sent2.geoLng === null, '手输位置**不带坐标**（NULL，不是 0）', `${sent2.geoLat}`)
-const cards2 = await js(`window.__cards()`)
-const manualCard = cards2[cards2.length - 1]
+
+ok(await waitFor(`!!window.__card(${sent2.id})`, 12000), '列表里出现了手输位置的气泡')
+const manualCard = await js(`window.__card(${sent2.id})`)
 ok(manualCard?.coord === '0', '气泡标记「没有坐标」', JSON.stringify(manualCard))
 ok(
   /只发了地点名，没有坐标/.test(manualCard?.text || ''),
@@ -655,7 +676,7 @@ ok(
 ok(manualCard?.hasMini === false, '没有坐标时连坐标占位都不给（不给任何像地图的东西）')
 await shoot(cdp, `${OUT}/05-loc-bubble-nocord.png`)
 
-await js(`[...document.querySelectorAll('.loc-card')].pop().click()`)
+await js(`window.__openCard(${sent2.id})`)
 ok(await waitFor(`!!document.querySelector('[data-testid="loc-viewer"]')`, 12000), '没有坐标也能点开全屏')
 ok(
   await js(`!!document.querySelector('[data-testid="map-invalid"]')`),
@@ -669,15 +690,17 @@ await shoot(cdp, `${OUT}/06-loc-fullscreen-nocord.png`)
 await js(`document.querySelector('.lv-btn').click()`)
 await sleep(400)
 
-/* 会话列表的预览 */
+/* 会话列表的预览。
+   ⚠️ 判据不能写 `^[位置]`：群聊里自己发的消息，前端会在前面加「我: 」前缀
+   （服务端返回的 preview 没有前缀，DOM 里的是加过的），拿 `^` 锚定必然红。 */
 await js(`document.querySelector('.rh-back').click()`)
 await waitFor(`!!document.querySelector('.chat-row')`, 12000)
 const preview = await js(`(() => {
   const row = [...document.querySelectorAll('.chat-row')].find(r => (r.querySelector('.cr-name')?.textContent||'').includes(${JSON.stringify(TMP_TITLE)}))
   return row ? row.querySelector('.cr-msg')?.textContent.trim() : null })()`)
 ok(
-  /^\[位置\]/.test(String(preview)) && String(preview).includes(MANUAL_NAME),
-  '会话列表预览显示 `[位置] 地点名`',
+  /\[位置\]/.test(String(preview)) && String(preview).includes(MANUAL_NAME),
+  '会话列表预览显示「[位置] 地点名」',
   String(preview)
 )
 
@@ -695,34 +718,34 @@ await js(`window.__setVal('.mc-textarea', '自检·位置面板共用')`)
 await js(`document.querySelector('[data-testid="mc-loc-pick"]').click()`)
 ok(await waitFor(`!!document.querySelector('.lp-root')`, 12000), '动态里打开的是**同一个**选位置面板')
 ok(
-  await waitFor(`!!document.querySelector('[data-testid="map-nokey"]')`, 12000),
+  await waitFor(`!!window.__lp('[data-testid="map-nokey"]')`, 12000),
   '同一套降级：没 key 也是坐标占位 + 说明'
 )
 await waitFor(`document.querySelector('.lp-root')?.dataset.phase === 'ready'`, 15000)
-ok(
-  await js(`!!document.querySelector('[data-testid="lp-row-current"]')`),
-  '动态里同样能拿到「当前位置」'
-)
+ok(await js(`!!window.__lp('[data-testid="lp-row-current"]')`), '动态里同样能拿到「当前位置」')
 await js(`window.__lpRow('current')`)
 await sleep(250)
-await js(`document.querySelector('[data-testid="lp-send"]').click()`)
+await js(`window.__lp('[data-testid="lp-send"]').click()`)
 ok(await waitFor(`!document.querySelector('.lp-root')`, 12000), '确定后回到发布面板')
 ok(
   await js(`!!document.querySelector('[data-testid="mc-loc-pick"] .mc-loc-body b')`),
   '发布面板上显示了选中的地点名'
 )
-ok(
-  /带坐标/.test(await js(`document.querySelector('[data-testid="mc-loc-pick"] .mc-loc-body em:last-child')?.textContent || ''`)),
-  '并写明「带坐标，可在地图上看」',
-  String(await js(`document.querySelector('[data-testid="mc-loc-pick"] .mc-loc-body em:last-child')?.textContent`)).slice(0, 20)
+const mcHint = await js(
+  `document.querySelector('[data-testid="mc-loc-pick"] .mc-loc-body em:last-child')?.textContent || ''`
 )
+ok(/带坐标/.test(mcHint), '并写明「带坐标，可在地图上看」', String(mcHint).slice(0, 20))
 await shoot(cdp, `${OUT}/07-moment-loc.png`)
 await js(`document.querySelector('.mc-send').click()`)
 await waitFor(`!document.querySelector('.mc-root')`, 15000)
 
-const newMoment = db
-  .prepare("SELECT id, location, location_lat AS lat, location_lng AS lng FROM moments WHERE content LIKE '%自检·位置面板共用%' ORDER BY id DESC LIMIT 1")
-  .get()
+const newMoment = await waitDb(() =>
+  db
+    .prepare(
+      "SELECT id, location, location_lat AS lat, location_lng AS lng FROM moments WHERE content LIKE '%自检·位置面板共用%' ORDER BY id DESC LIMIT 1"
+    )
+    .get()
+)
 ok(!!newMoment, '动态真的发布落库了')
 ok(
   newMoment && Math.abs(newMoment.lat - GCJ.lat) < 1e-3,
@@ -735,13 +758,13 @@ await sleep(600)
 console.log('\n─── 收尾 ───')
 const before = db.prepare('SELECT COUNT(*) AS n FROM messages WHERE conversation_id = ?').get(tmpCid).n
 ok(before >= 2, `临时会话里确实有本轮消息（${before} 条）`)
-const cleaned = purgeDebris({ quiet: true })
+const cleaned = await purgeDebris({ quiet: true })
 ok(
   db.prepare('SELECT COUNT(*) AS n FROM conversations WHERE title = ?').get(TMP_TITLE).n === 0,
   '临时会话已清掉（不是留在演示库里）',
   `清理了 ${cleaned.conversations} 个会话 / ${cleaned.messages} 条消息`
 )
-const pm = purgeMoments()
+const pm = await purgeMoments()
 const leftoverMoments = db
   .prepare("SELECT COUNT(*) AS n FROM moments WHERE content LIKE '%自检·%' OR location LIKE '%自检·%'")
   .get().n

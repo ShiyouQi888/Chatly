@@ -3,8 +3,9 @@
 > 连接更有趣的人 —— 移动端聊天通讯 App
 
 基于《移动端聊天通讯软件功能书》（47 节 PRD）实现。覆盖 **聊天 / 动态 / 发现 / 我** 四大板块，
-其中**聊天 / 动态 / 发现 / 位置 / 群投票 / 消息收藏 / 引用回复 / 消息转发**已接通独立后端（REST + WebSocket + SQLite + JWT），
-通知 / 在线状态等仍为原型数据。
+其中**聊天 / 动态 / 发现 / 位置 / 群文件 / 群公告与通知 / 群投票 / 消息收藏 / 引用回复 / 消息转发 / 隐私门控 / 在线状态**已接通独立后端
+（REST + WebSocket + JWT，数据层**双驱动**：本地 SQLite / 线上 PostgreSQL；在线状态可选接入 Redis），
+通知中心、状态和稍后看也已接入后端。项目仍是功能原型，通话和正式生产运维保障尚未完成；具体边界见下方功能状态。
 
 > 每一页都遵守同一条底线：**界面上的每个数字、每句话、每次点击都要能追到库里的一行数据**。
 > 追不到的，就标「未接入」并禁用 —— 不做一个点了弹 toast 假装成功的假按钮。
@@ -14,10 +15,13 @@
 ## 目录
 
 - [快速开始](#快速开始)
+- [运营管理后台](#运营管理后台)
 - [功能概览](#功能概览)
 - [技术选型](#技术选型)
 - [目录结构](#目录结构)
 - [后端](#后端)
+  - [数据库：本地 SQLite / 线上 PostgreSQL](#数据库本地-sqlite--线上-postgresql)
+  - [在线状态与跨实例广播（Redis，可选）](#在线状态与跨实例广播redis可选)
 - [布局形态](#布局形态)
 - [聊天](#聊天)
   - [群聊管理](#群聊管理)
@@ -35,6 +39,7 @@
 - [表情面板](#表情面板)
 - [设计规范](#设计规范)
 - [验证与自检](#验证与自检)
+- [部署与运维](docs/OPERATIONS.md)
 - [说明](#说明)
 
 ---
@@ -79,23 +84,41 @@ npm run build && npm run preview
 > 前端端口固定 `127.0.0.1:5198`（`strictPort`），后端固定 `127.0.0.1:3002`。
 > Vite 已把 `/api`、`/uploads`、`/ws` 代理到后端，前端代码里不需要写后端地址。
 
+## 运营管理后台
+
+后台地址为 <http://127.0.0.1:5198/admin>。先在 `server/.env` 配置允许访问后台的用户 ID 或账号名（逗号分隔）：
+
+```dotenv
+ADMIN_USER_IDS=1,8
+# 也可以直接写账号名，例如：ADMIN_USER_IDS=chenmo
+```
+
+用户 ID 可在 SQLite 数据库中通过 `SELECT id, username FROM users;` 查询。更改配置后重启后端。后台 API 会在服务端逐次校验管理员名单；群主或群管理员权限不会自动获得运营后台权限。
+
+当前后台提供 7/30 日用户增长、消息活跃和动态趋势；用户状态筛选、资料查看和 CSV 导出；动态与评论审核；反馈工单流转；可搜索、分页、导出的管理员审计记录；超级管理员可分配内容审核、客服运营和数据分析角色。停用账号会撤销其所有登录设备。后台不开放手机号、精确位置或私聊正文读取。集中日志、历史监控告警和自动备份/恢复仍需接入独立运维与备份服务，健康页会明确显示当前能力边界。
+
 ---
 
 ## 功能概览
 
 | 板块 | 功能 | 后端接入 |
 | --- | --- | :---: |
-| **聊天** | 私聊 / 群聊 / 文字 / 图片 / 文件 / 位置 / 表情 / 视频消息 / 已读回执 / 撤回 / 引用回复 / 消息转发 / 群投票 / 消息收藏 / 稍后看 / 长按手势 / 禁言锁定 | ✅ |
+| **聊天** | 私聊 / 群聊 / 文字 / 语音消息 / 图片 / 文件 / 位置 / 表情 / 视频消息 / 已读回执 / 撤回 / 引用回复 / 消息转发 / 全文搜索 / 群投票 / 群文件 / 群公告及成员提醒 / 消息收藏 / 稍后看 / 长按手势 / 禁言锁定 | ✅ |
+| **通讯录** | 互关联系人列表 / 姓名与账号搜索 / 联系人菜单 / 查看资料 / 发消息 / 单个或批量删除 / 群聊列表与创建 | ✅ |
 | **群管理** | 群资料 / 群公告 / 成员管理 / 权限三档 / 全员禁言 / 仅管理员发言 | ✅ |
 | **动态** | 图文 / 视频 / 发布 / 编辑 / 点赞 / 评论 / 可见范围（公开 / 仅好友 / 仅自己） | ✅ |
-| **发现** | 推荐用户 / 附近（按地区） / 公开群 / 关注 / 标签筛选 | ✅ |
+| **发现** | 推荐用户 / 附近 / 公开群 / 活动报名 / 热门话题榜 / 关注 / 标签筛选 | ✅ |
 | **我** | 资料编辑 / 头像裁剪 / 我的动态 / 我的收藏 / 二维码 / 扫一扫 / 关于我们 / 帮助与反馈 / 通用设置 / 主题外观 / 稍后看 / 最近文件 / 消息通知 / 隐私设置 / 账号与安全 | ✅ |
 | **扫一扫** | 摄像头扫码 / 相册选图 / 手输 ID / 加好友 / 发消息 | ✅ |
 | **表情** | 386 彩色 SVG + 30 动画 GIF / 9 分组 / 搜索 / 大表情直发 | ✅ |
 | **二维码** | 零依赖编解码 / 我的二维码 / 扫一扫 | ✅ |
 
-**尚未接入**（界面上明确标注为「未接入 / 即将上线」，不做假按钮）：
-语音与视频通话、语音消息、群文件、群公告置顶推送、群主转让、通讯录 / 好友列表。
+**部分实现或尚未接入**：
+
+- 未接入：语音与视频通话、群主转让。
+- 部分实现：全文消息搜索最多扫描最近 5,000 条文字消息，图片 / 文件内容不可检索；语音消息录制受浏览器麦克风能力限制；消息加密是服务端存储加密，不是端到端加密。
+- 动态视频可上传、列表预览并在动态详情中播放；视频通话与实时媒体服务未接入。
+- 群文件、群公告发布/推送和通知中心已接入，不再属于占位功能。
 
 ---
 
@@ -110,7 +133,9 @@ npm run build && npm run preview
 | 图像      | 头像由 data-URI SVG 生成；聊天图片走真实上传                                                      |
 | 样式      | 每屏独立 CSS + `tokens.css` 设计令牌                                                       |
 | 状态      | `useReducer` + Context（Auth / App / Chat / Favorite 四层）                                       |
-| 后端      | Express 5 + `ws` + `node:sqlite` + `jsonwebtoken` + `multer`                       |
+| 后端      | Express 5 + `ws` + `jsonwebtoken` + `multer`                                         |
+| 数据库     | **双驱动**：本地 `node:sqlite`（零依赖）/ 线上 PostgreSQL（`pg`，靠 `DB_DRIVER` 切换）           |
+| 在线状态    | 进程内内存表；配 `REDIS_URL` 后升级为 **Redis 跨实例**（可选、连不上自动降级）                        |
 
 ---
 
@@ -137,13 +162,13 @@ src/
 │   └── ForwardSheet.jsx   转发目标选择器（整屏层：会话列表 + 搜索 + 确认发送）
 ├── screens/
 │   ├── LoginScreen.jsx    登录 / 注册（含演示账号一键登录）
-│   ├── ChatTab.jsx        聊天首页（状态 Stories + 真实会话列表 + 建群/私聊）
+│   ├── ChatTab.jsx        聊天首页（真实状态 + 会话列表 + 建群/私聊）
 │   ├── ChatRoom.jsx       私聊 / 群聊（真实收发 + 已读回执到人 + 撤回 + 引用回复 + 转发 + 长按菜单 + 禁言锁定）
 │   ├── UserProfile.jsx    他人资料页（整屏覆盖层，从聊天顶部头像 / 会话设置进入）
 │   ├── GroupSettings.jsx  群设置页（整屏覆盖层：群头像 / 群名 / 公告 / 成员管理 / 群开关 / 群投票列表 / 退出）
 │   ├── MomentTab.jsx      动态内容流（朋友 / 我的 / 热门 + 点赞 + 管理入口）
 │   ├── MomentDetail.jsx   动态详情（整屏覆盖层：正文 / 点赞的人 / 评论树 / 回复）
-│   ├── DiscoverTab.jsx    发现（推荐 / 附近 / 群组 / 用户，全部读真实数据）
+│   ├── DiscoverTab.jsx    发现（推荐 / 附近 / 活动 / 话题 / 群组 / 用户）
 │   ├── MeTab.jsx          我（个人空间 + 设置子页 + 收藏 + 退出登录）
 │   ├── MyQrPage.jsx       我的二维码（子页：码 + 头像昵称 + 保存卡片图 + 复制 ID）
 │   ├── ScanPage.jsx       扫一扫（整屏层：摄像头 / 相册 / 手动 ID + 四种结果卡）
@@ -154,13 +179,13 @@ src/
 │   └── qrPayload.js       chatly:// 负载的生成与解析（群码 / 动态码留了扩展位）
 ├── store/
 │   ├── AuthContext.jsx    用户 / token / 登录登出
-│   ├── AppContext.jsx     原型数据（通知 / 状态）+ Tab 切换
+│   ├── AppContext.jsx     Tab / Toast 等全局 UI 状态
 │   ├── ChatStore.jsx      真实会话与消息（REST + WS）+ 投票详情缓存
 │   ├── MomentStore.jsx    真实动态（列表 / 发布 / 编辑 / 删除 / 点赞 / 评论）
-│   ├── DiscoverStore.jsx  发现页数据（推荐 / 附近 / 标签 / 可加入群 / 热门，关注乐观更新）
+│   ├── DiscoverStore.jsx  发现页数据（推荐 / 附近 / 活动 / 话题 / 标签 / 群组 / 热门）
 │   └── FavoriteStore.jsx  消息收藏（列表 / 收藏 / 取消 / 批量 + 「这条收藏了没」的 Set）
 ├── data/
-│   ├── mock.js            原型演示数据
+│   ├── themes.js          主题配置
 │   ├── emoji.js           表情清单（码点 / 分组 / 中文名 / 大表情精选）—— 由脚本生成，勿手改
 │   └── emoji-anim.js      动画大表情地址表（30 条 .gif）—— 由脚本生成，勿手改
 └── styles/                tokens.css + global.css（含整屏层补底的 .cover-tabbar）
@@ -168,6 +193,9 @@ src/
 public/emoji/              386 个彩色 SVG（Microsoft Fluent Emoji，MIT）+ LICENSE.txt
 public/emoji-anim/         30 个动画大表情 GIF（fluentui-emoji-animated，MIT）+ LICENSE.txt
 scripts/
+├── verify.mjs               统一快速 / 完整回归入口
+├── check-core-flows.mjs     登录 / 公告 / 搜索 / 上传 / 权限核心链路
+├── check-parse.mjs          JSX / import 解析与路径检查
 ├── check-reply-forward.mjs   引用回复 + 消息转发专项自检（45 项断言）
 ├── check-longpress.mjs       长按手势专项自检（14 项断言）
 ├── check-poll.mjs            群投票专项自检（129 项断言）
@@ -180,6 +208,9 @@ scripts/
 ├── check-profile.mjs         用户资料与头像专项自检
 ├── check-readreceipt.mjs     已读回执专项自检
 ├── check-media.mjs           图片 / 视频查看器专项自检
+├── check-privacy.mjs         隐私门控专项自检（添加好友三开关 + 在线状态可见 + 手机号不泄露）
+├── check-presence.mjs        在线状态专项自检（本地推送 / Redis 跨实例 / 无 Redis 降级）
+├── check-driver.mjs          ★ 数据层跨驱动契约自检（同一套用例 SQLite 与 PG 都要过）
 ├── check-emoji.mjs           表情面板专项自检
 ├── check-scroll.mjs          长会话可滚动性自检
 ├── check-align.mjs           布局回归自检
@@ -211,7 +242,7 @@ server/
 │   ├── ws.js              WebSocket 网关（在线表 + 心跳 + 推送）
 │   ├── index.js           Express 入口
 │   ├── seed.js            演示数据（含只补空字段的资料回填 + 投票 / 收藏种子）
-│   └── routes/            auth / conversations / messages / users / moments / discover / geo / polls / favorites
+│   └── routes/            auth / conversations / messages / users / moments / discover / geo / polls / favorites / files / notifications / statuses
 ├── test/e2e.mjs           后端端到端测试
 ── data/                  SQLite 库（运行时生成，不入库）
 └── uploads/               上传文件（运行时生成，不入库）
@@ -221,21 +252,25 @@ server/
 
 ## 后端
 
-独立进程，**零外部数据库依赖**（用 Node 内置 `node:sqlite`，需 Node ≥ 22.5）。
+独立进程。数据层是**门面 + 双驱动**：`server/src/db.js` 是门面，`server/src/db/` 下是
+`sqlite.js`（`node:sqlite`，本地开发与全部自检的默认值，零外部依赖）与 `postgres.js`（线上）。
+靠 `DB_DRIVER` 切换，业务代码只认门面导出的 `q` / `tx`，**看不到驱动差异**。
 
 | 能力 | 实现                                                                                                                 |
 | -- | ------------------------------------------------------------------------------------------------------------------ |
 | 认证 | JWT（7 天），REST 用 `Authorization: Bearer`，WebSocket 用 `?token=`                                                      |
 | 密码 | `node:crypto` scrypt（`scrypt$salt$hash`），不引 bcrypt                                                                 |
 | 实时 | `ws` —— `hello` / `message.new` / `message.revoked` / `conversation.read` / `typing` / `presence` / `user.updated` / `conversation.updated` / `poll.updated` |
-| 存储 | SQLite（WAL），17 张表：`users` / `conversations` / `conversation_members` / `messages` / `moments` / `moment_media` / `moment_likes` / `moment_comments` / `follows` / `polls` / `poll_options` / `poll_votes` / `poll_replies` / `favorites` |
-| 资料 | 扩展字段 `gender` / `birthday` / `region` / `tags`，用幂等 `ALTER TABLE` 迁移（SQLite 没有 `ADD COLUMN IF NOT EXISTS`）          |
+| 存储 | 双驱动：SQLite（WAL）/ PostgreSQL。17 张表：`users` / `conversations` / `conversation_members` / `messages` / `moments` / `moment_media` / `moment_likes` / `moment_comments` / `follows` / `polls` / `poll_options` / `poll_votes` / `poll_replies` / `favorites` |
+| 在线状态 | 进程内内存表；配了 `REDIS_URL` 则升级为 **Redis**（按用户的 ZSET，见下）——**可选、可降级** |
+| 资料 | 扩展字段 `gender` / `birthday` / `region` / `tags` / `phone`，用幂等迁移（SQLite 没有 `ADD COLUMN IF NOT EXISTS`）          |
 | 上传 | multer → `server/uploads/`；附件 20MB、头像 5MB；扩展名与 MIME 双重校验                                                           |
 
 发消息走 REST（便于落库并拿到消息 id），WebSocket 只负责下行推送与 `typing` 上行。
 
-> `users` 表结构变更一律走 `db.js` 里的 `addColumnIfMissing()`，不要让人去跑 `npm run reset` ——
-> reset 会连会话和消息一起清掉。`seed.js` 的 `backfillProfiles()` 只补空字段，老库直接启动即可。
+> `users` 表结构变更一律走驱动的 `addColumnIfMissing()`（PG 侧是 schema 里的 `ALTER TABLE … ADD COLUMN IF NOT EXISTS` +
+> `BACKFILL_COLUMNS`），不要让人去跑 `npm run reset` —— reset 会连会话和消息一起清掉。
+> `seed.js` 的 `backfillProfiles()` / `backfillPhones()` 只补空字段，老库直接启动即可。
 
 ```bash
 cd server
@@ -243,6 +278,53 @@ npm run dev      # node --watch src/index.js
 npm run reset    # 清空并重建演示数据
 node test/e2e.mjs   # 后端端到端测试（70 项断言）
 ```
+
+### 数据库：本地 SQLite / 线上 PostgreSQL
+
+一次只用一种，由 `DB_DRIVER` 决定（默认 `sqlite`）。**两种驱动跑同一套自检**，
+`DB_DRIVER=postgres node scripts/check-privacy.mjs` 能原样再跑一遍 —— 这就是「双驱动不是两套代码」的证据。
+
+| 环境变量 | 默认 | 说明 |
+| --- | --- | --- |
+| `DB_DRIVER` | `sqlite` | `sqlite` 或 `postgres` |
+| `DATABASE_URL` | — | 仅 PG 需要，如 `postgres://chatly:chatly_dev_pw@127.0.0.1:55433/chatly` |
+| `PG_POOL_MAX` | `10` | 连接池上限（进程数 × 这个值别超过 PG 的 `max_connections`） |
+| `DB_PATH` | `./data/chatly.db` | 仅 SQLite |
+
+本机没有 PostgreSQL / Redis 时，仓库根的 `docker-compose.yml` 一条命令起两个容器：
+
+```bash
+docker compose up -d          # postgres:16-alpine → 55433:5432，redis:7-alpine → 6380:6379
+docker compose ps             # 等 healthcheck 变 healthy
+```
+
+> 端口**故意错开**：本机 5432 / 6379 常有真的服务在跑，容器映射到 55433 / 6380，互不打架。
+> 两个容器都有 healthcheck（`pg_isready` / `redis-cli ping`），业务进程不用自己轮询等待。
+
+### 在线状态与跨实例广播（Redis，可选）
+
+**不配 `REDIS_URL` 也能完整运行** —— 在线状态退回「单进程内存表」，广播退回「进程内直发」。
+配了之后：
+
+- **在线表用「按用户的 ZSET」**，member = 实例 id，score = 该实例的过期时刻。
+  为什么不直接 `SET presence:<uid> 1 EX 45`：一个用户可能同时连着实例 A 和 B，
+  A 断开时直接 `DEL` 会把 B 上活着的连接**误判下线**。判在线 = 有没有 `score > now` 的成员；
+  断开只 `ZREM` 自己那一条；陈旧成员在**读取时**顺带 `ZREMRANGEBYSCORE` 清掉。
+- **广播走 pub/sub**（`chatly:events`），事件带 `origin`（实例 id），订阅端跳过自己发的 ——
+  本地投递由 `broadcastToUsers` 立即完成，不走回环，否则会重复推送。
+- **心跳**按 `PRESENCE_TTL / 3` 自动续期（默认 TTL 45s → 每 15s 一次），
+  进程被 `kill -9` 收不到 `close` 时靠 TTL 自己过期。
+
+| 状态 | 含义 | 行为 |
+| --- | --- | --- |
+| `on` | 连上了 | 在线状态与广播跨实例生效 |
+| `degraded` | 配了但连不上 | 退回单进程，**一条警告**，不刷屏、不阻塞启动 |
+| `off` | 没配 | 单进程内存模式（本地开发 / 自检就是这样） |
+
+`/health` 会回报当前状态：`{"redis":{"state":"on","configured":true,"url":"…","ttlSec":45,"instanceId":"…"}}`。
+
+> 与数据层的失败策略**相反**：数据库连不上要「早失败」（启动即报错），
+> Redis 连不上要「晚降级」（照常启动，只是退回单进程）—— 前者错了整站没数据，后者错了只是广播范围小一点。
 
 ---
 
@@ -263,12 +345,14 @@ node test/e2e.mjs   # 后端端到端测试（70 项断言）
 
 **真实可用：**
 
-- 登录 / 注册 / JWT 会话保持（刷新不丢登录态）
+- 登录 / 注册 / JWT 会话保持（刷新不丢登录态）；用户名密码登录兼容旧账号，新账号可独立选择手机号短信验证码注册或邮箱验证码注册，手机号与邮箱均可用于密码登录
 - 会话列表：真实未读计数、最后一条消息预览、在线状态、置顶、免打扰
 - 私聊与群聊：建群选人、发起私聊
 - **群聊管理与群公告**：群头像 / 群名 / 群公告、邀请与移出成员、设 / 撤管理员、
   全员禁言与仅管理员发言、退出群聊，权限按群主 / 管理员 / 成员三档收敛
 - 文字消息：发送（乐观更新）、实时收发、撤回（2 分钟内、仅本人）
+- 语音消息：点击麦克风录制（最长 2 分钟），停止后上传并作为会话成员可访问的消息播放；需要 HTTPS 或 localhost 麦克风权限
+- 全文搜索：检索用户可访问的最近 5,000 条文字消息，结果可跳转至原会话消息
 - **引用回复**：长按菜单「回复」→ 输入区上方出现引用条 → 发送带 `replyToId` 的消息 → 气泡上显示引用块 → 点引用块跳到被引用的消息并高亮
 - **消息转发**：长按菜单「转发」或多选「转发」→ 整屏目标选择器 → 搜索 / 选择 → 逐条重发到目标会话
 - **长按手势**：长按消息 480ms 弹出操作菜单（回复 / 复制 / 收藏 / 转发 / 翻译 / 多选 / 撤回），支持振动反馈
@@ -284,10 +368,10 @@ node test/e2e.mjs   # 后端端到端测试（70 项断言）
 - 历史消息：上翻分页加载
 - 会话设置（置顶 / 免打扰）、删除会话
 
-**尚未接入**（界面上明确标注为「未接入 / 即将上线」，不做假按钮）：
-语音与视频通话、语音消息、群文件、群公告置顶推送、群主转让、通讯录 / 好友列表。
+**尚未接入：** 语音与视频通话、群主转让。
 
-**仍为原型数据：** 状态 Stories、聊天记录全文检索、稍后看、最近文件。
+**部分实现：** 全文搜索扫描最近 5,000 条文字消息，不检索图片 / 文件内容；语音录制取决于浏览器的 MediaRecorder 和麦克风权限。消息加密是服务端存储加密，不是端到端加密。
+群文件、公告推送、稍后看、最近文件和通知中心均使用服务端数据。
 
 ---
 
@@ -608,6 +692,19 @@ const speakGate = useMemo(() => {
 
 ---
 
+## 24 小时状态
+
+聊天页状态栏读取真实数据。每人同时保留一条状态，发布新状态会替换旧状态；状态仅对互相关注的好友可见，24 小时后过期。浏览状态会记录查看人，发布者可以查看浏览列表。
+
+```
+GET    /api/v1/statuses             当前用户与好友的有效状态
+POST   /api/v1/statuses             发布状态（content、mood）
+POST   /api/v1/statuses/:id/view    记录查看
+DELETE /api/v1/statuses/:id         删除自己的状态
+```
+
+状态目前为文字和心情图标，不包含图片或视频。
+
 ## 动态
 
 动态（PRD §16「轻量内容流」）的数据全部来自后端，五个表：
@@ -654,17 +751,22 @@ POST   /api/v1/users/:id/follow  ·  DELETE 同路径   关注 / 取关
 
 ```
 GET    /api/v1/discover/recommend?tag=&limit=&offset=   推荐用户（带理由 / 排序）
-GET    /api/v1/discover/nearby?limit=                   附近的人（按资料地区，无公里数）
+GET    /api/v1/discover/nearby?limit=                   附近的人（默认按地区；双方授权后按城市中心点估算）
 GET    /api/v1/discover/tags                            兴趣标签聚合
 GET    /api/v1/discover/groups                          可加入的公开兴趣群
 POST   /api/v1/discover/groups/:id/join                 加入公开群
+GET    /api/v1/discover/activities                      当前用户有权查看的未开始活动
+GET    /api/v1/discover/topics                          近 30 天公开动态话题榜（合并近 7 天去重浏览）
+POST   /api/v1/discover/topics/:topic/view              记录用户打开话题（每人每话题去重）
+GET    /api/v1/discover/topics/:topic/moments           查看该话题下有权访问的动态
 ```
 
 ### 三条硬规矩
 
 1. **推荐理由必须可解释。** 只能由「共同群聊 / 共同兴趣标签 / 同城」算出来，算不出就给 `null`。
-2. **距离不编公里数。** 库里没有经纬度。附近的人按资料里的**地区**匹配。
-3. **没有数据源的板块不做。** 活动、热门话题榜、精准定位附近都没有对应的表 —— 前端渲染成禁用项并写明原因。
+2. **附近分享默认关闭。** 发现页不主动定位；用户需在资料页明确授权并手动点击定位。服务端只保存城市中心点，关闭授权会清除坐标。
+3. **距离不冒充实时距离。** 只有双方都授权时才显示城市中心点间的估算；否则按资料地区匹配，不显示公里数。
+4. **话题榜有边界。** 榜单只统计近 30 天公开动态；打开话题按用户去重计入近 7 天浏览热度；详情只返回当前用户有权限查看的动态。
 
 ---
 
@@ -675,14 +777,37 @@ POST   /api/v1/discover/groups/:id/join                 加入公开群
 - **收藏**：读真实后端，五种消息形态（文字 / 图片 / 文件 / 位置 / 投票）各画各的卡片
 - **稍后看**：长按菜单标记消息，与收藏的区别是引用而非快照（消息撤回后条目消失）
 - **最近文件**：扫描所有会话中的文件消息，按类型筛选（文档 / 图片 / 视频 / 压缩包 / 其他）
-- **消息通知**：通知类型 / 提醒方式 / 免打扰时段，全部持久化到后端
-- **隐私设置**：好友可见范围 / 动态可见性 / 消息加密 / 阅后即焚，全部持久化到后端
-- **主题外观**：5 套主题（极光 / 薄荷 / 蜜桃 / 琥珀 / 石墨），CSS 变量持久化到 localStorage
-- **通用设置**：字体大小（4 档）/ 语言 / 聊天设置 / 缓存管理
-- **帮助与反馈**：常见问题分组 / 反馈提交（类型 / 内容 / 截图 / 联系方式）
-- **关于我们**：应用信息 / 版本历史 / 开源许可 / 致谢
-- **账号与安全**：登录方式 / 安全设置（生物识别 / 二次验证）/ 设备管理
+- 设置列表七行（账号与安全 / 隐私设置 / 通用设置 / 主题外观 / 消息通知 / 帮助与反馈 / 关于我们）——
+  **逐项标注真实生效范围**，见下面的「设置列表七行：哪些是真的」
 - 编辑资料：**真实读写后端** —— 昵称、个性签名、性别、生日、所在地区、兴趣标签，以及头像
+
+> ⚠️ 这一页曾经有一批「不会报错、也不会有反应」的缺陷，读下面这张表之前先看这里：
+> `general` / `help` / `about` 三行**当时根本没有渲染分支** —— 组件 import 了、
+> 列表里也写着 `setPage('general')`，但下面没有对应的 `if`，`page` 变了却匹配不上任何分支，
+> 于是直接落到主页面的 `return`：**点了什么都不发生**。
+> 同时七个设置子页的根节点类名是 `.sub-page`，而 CSS 里只定义了 `.subpage`
+> —— 于是没有 `position:absolute; inset:0`、没有 flex 纵向排布、没有补底，
+> 标题栏不跟着固定、正文被底部导航栏压住。
+> 这两类问题都不报错，只能靠「点开之后页面必须真的离开主页面」+ 几何量去证。
+
+### 设置列表七行：哪些是真的
+
+| 入口 | 点开后 | 真的生效的东西 | 明确不做的东西 |
+| --- | --- | --- | --- |
+| 账号与安全 | ✅ | 退出登录（真调 `logout()`）、设备列表 / 远程退出（真读写 `user_devices`） | 手机号 / 邮箱 / 改密码（没有这些字段）；生物识别、二次验证 —— 开关 `disabled` 并写明原因 |
+| 隐私设置 | ✅ | 动态默认可见范围、添加好友、在线状态、文字消息加密存储、已读回执、阅后即焚 | 截屏提醒未接入；消息加密是服务端存储加密，不是端到端加密 |
+| 通用设置 | ✅ | 字体大小（真写 `--font-scale`）、聊天列表左滑删除、回车键发送、自动下载图片 | 语言（只有中文） |
+| 主题外观 | ✅ | 5 套主题（真写 `--brand-*`）、**动效开关**（真挂 `.no-motion`，和 `prefers-reduced-motion` 同一套规则）、当前字体大小只读回显 | 聊天背景 / 气泡颜色 / 强调色 —— 标 `未接入` |
+| 消息通知 | ✅ | 通知中心 / 偏好设置 / WebSocket 在线提醒 | 系统运营通知尚无产生方；提醒方式受浏览器权限与当前页面状态限制 |
+| 帮助与反馈 | ✅ | FAQ（逐条对齐真实实现）、**反馈真的落库**到 `feedbacks` 表 + 截图真的上传到磁盘 | — |
+| 关于我们 | ✅ | 版本号 / 关于信息 | 纯静态页 |
+
+**「消息加密」是服务端存储加密**：开启后新文字消息使用 AES-256-GCM 加密存入数据库；
+服务端持有密钥并会解密消息，所以这不构成端到端加密。
+
+同类问题还有一处：通用设置里的标签原本写「发送键回车换行」，
+而 `chatly-enter-to-send` 为 `true` 时回车是**发送** —— 字面意思和实际行为正好相反，已改为「回车键发送」。
+
 
 ### 我页面功能详情
 
@@ -696,22 +821,34 @@ src/screens/AboutPage.jsx
 
 #### 帮助与反馈
 
-常见问题按分组展示（账号 / 聊天 / 动态 / 隐私），支持展开折叠。反馈表单支持类型选择、内容输入、截图上传、联系方式。
+常见问题按分组展示（账号 / 聊天 / 动态 / 隐私 / 安全），**单开手风琴**（展开一条会收起上一条）。
+FAQ 文案逐条对齐真实实现 —— 不再谎称「撤回仅支持 2 分钟内」（服务端**没有时间窗**）、
+不再谎称「开启后新会话将使用端到端加密」、不再教人「长按 → 转发」（转发是禁用态）、
+不再说发布按钮在右下角（实际在**右上角**）、不再教人换手机号（**没有这个字段**）。
+
+反馈表单：类型 / 描述（必填，按码点限 1000 字）/ 截图 / 联系方式。
 
 ```
-POST /api/v1/feedback              提交反馈（待实现）
-POST /api/v1/feedback/screenshot   上传截图（待实现）
+POST /api/v1/feedback/screenshot   上传截图（复用 uploadImage：扩展名 + MIME 双校验，5MB）
+POST /api/v1/feedback              提交反馈
 ```
+
+服务端落库规则：描述必填、`type` 走白名单且未知值回落 `other`、
+`screenshotUrl` **必须过 `isStaticAssetUrl`**（外链一律丢弃存 `NULL`，不让库里出现任意外链）。
+
+> ⚠️ `feedbacks.screenshot_url` 是那个文件**唯一**的引用者（提交时复制的地址，
+> 原上传记录不指向它），所以 `purgeOrphanUploads()` 必须扫这张表 ——
+> 漏了不是「少清一个文件」，而是**把还在用的截图当孤儿挪走**，反馈里的图集体变破图。
 
 #### 通用设置
 
 | 设置项 | 持久化方式 | 说明 |
 | --- | --- | --- |
-| 字体大小 | localStorage + CSS 变量 `--font-scale` | 小 / 标准 / 大 / 超大 |
+| 字体大小 | localStorage + CSS 变量 `--font-scale` | 小 / 标准 / 大 / 超大，**改的是全站根变量** |
 | 语言 | localStorage | 当前仅中文，其他语言「即将上线」 |
 | 聊天列表左滑删除 | localStorage | 开关 |
-| 发送键回车换行 | localStorage | 开关 |
-| 自动下载图片 | localStorage | 开关 |
+| **回车键发送** | localStorage `chatly-enter-to-send` | ⚠️ 旧标签写的是「发送键回车换行」，而它在 `true` 时回车是**发送** —— 语义正好相反，已改 |
+| 自动下载图片 | localStorage `chatly-auto-download` | `false` 时聊天里的图片显示为「点击加载图片」占位，**点一下才去请求**（真的没挂 `<img>`） |
 | 缓存大小 | 计算 localStorage 体积 | 清除缓存保留登录状态 |
 
 #### 主题外观
@@ -768,50 +905,66 @@ GET /api/v1/files?limit=20&beforeId=&type=all
 
 #### 消息通知
 
-所有设置持久化到后端 `user_settings` 表：
-
-| 设置项 | key | 默认值 |
-| --- | --- | --- |
-| 新消息 | `notify_message` | `true` |
-| @ 我 | `notify_mention` | `true` |
-| 点赞 | `notify_like` | `true` |
-| 评论 | `notify_comment` | `true` |
-| 新关注 | `notify_follow` | `true` |
-| 群通知 | `notify_group` | `true` |
-| 系统通知 | `notify_system` | `true` |
-| 声音 | `notify_sound` | `true` |
-| 震动 | `notify_vibrate` | `true` |
-| 免打扰 | `dnd_enabled` | `false` |
-| 免打扰开始 | `dnd_start` | `'23:00'` |
-| 免打扰结束 | `dnd_end` | `'08:00'` |
-
-```
-GET  /api/v1/settings              获取所有设置
-PUT  /api/v1/settings/:key         更新单个设置
-PUT  /api/v1/settings              批量更新
-```
+通知中心数据保存在 `notifications` 表，通过 REST 加载，并通过 WebSocket 接收新通知；
+通知偏好保存在 `user_settings`。点赞、评论、关注、@提及和群公告等通知已有产生方。
+系统运营通知暂时没有产生方；浏览器声音/震动受设备权限和页面状态限制。
 
 #### 隐私设置
 
-所有设置持久化到后端 `user_settings` 表：
+**隐私设置的有效项**包括动态默认可见范围、添加好友三开关、在线状态可见、文字消息加密、已读回执和阅后即焚。判据不是「开关拨得动、存得进、刷新还在」——
+那只能证明 `user_settings` 写进去了 —— 而是**站在另一个账号的视角**看行为有没有变。
 
-| 设置项 | key | 默认值 |
+| 设置项 | key | 默认值 | 状态 |
+| --- | --- | --- | --- |
+| 动态默认可见范围 | `moment_visibility` | `'public'` | ✅ **真的生效**：发布动态时被 `MomentComposer` 读走当初始可见范围 |
+| 通过手机号添加好友 | `add_friend_by_phone` | `true` | ✅ **真的生效**：关掉后手机号搜索直接查不到我 |
+| 通过二维码添加好友 | `add_friend_by_qr` | `true` | ✅ **真的生效**：关掉后扫码结果卡显示「无法加为好友」 |
+| 通过搜索添加好友 | `add_friend_by_search` | `true` | ✅ **真的生效**：关掉后按 ID / 昵称搜不到我 |
+| 在线状态可见 | `online_status_visible` | `true` | ✅ **真的生效**：关掉后别人看不到我在线（配 Redis presence） |
+| 文字消息加密存储 | `message_encryption` | `false` | ✅ 需配置 `MESSAGE_ENCRYPTION_KEY`；服务端 AES-256-GCM，不是端到端加密 |
+| 已读回执 | `read_receipts` | `true` | ✅ 关闭后不向会话成员披露该用户的已读游标 |
+| 阅后即焚 | `burn_after_read` | `false` | ✅ 读取文字消息 30 秒后全会话销毁 |
+| 截屏提醒 | `screenshot_notify` | `true` | `disabled` + 原因（浏览器拿不到截屏事件） |
+
+**六个闸门开关中有三项是「绑定渠道」的** —— 语义是「别人能不能通过这个渠道**找到我**」，
+不是「已经认识我的人能不能加我」。所以只有**明确声明渠道**的请求才会被拦：
+
+| 入口 | 渠道 | 命中闸门时 |
 | --- | --- | --- |
-| 通过手机号添加好友 | `add_friend_by_phone` | `true` |
-| 通过二维码添加好友 | `add_friend_by_qr` | `true` |
-| 通过搜索添加好友 | `add_friend_by_search` | `true` |
-| 动态可见范围 | `moment_visibility` | `'public'` |
-| 消息加密 | `message_encryption` | `true` |
-| 已读回执 | `read_receipts` | `true` |
-| 阅后即焚 | `burn_after_read` | `false` |
-| 截屏提醒 | `screenshot_notify` | `true` |
-| 在线状态可见 | `online_status_visible` | `true` |
+| `GET /users/search?q=` | 手机号形态 → `phone`，其余 → `search` | 命中的人**直接不返回**（搜不到） |
+| `GET /users/by-username/:username?from=qr\|search` | `?from=` | 资料**照常返回**，但 `addable.allowed=false` + 原因 |
+| `POST /users/:id/follow` 带 `body.source` | `source` | **403** + `code:'privacy_blocked'` |
+
+**不带渠道一律放行**：群成员列表点「关注」、发现页推荐里点「关注」都不带 source ——
+那些人本来就在你眼前（同一个群 / 公开推荐），不存在「被找到」的问题，拦下来只会让人困惑。
+这就是「**查得到 ≠ 加得上**」：命中闸门时资料照常返回（你知道这是谁），只是加不上。
+
+**在线状态可见**的语义是「所有对外出口都不再回答他在不在线」：
+`GET /users`、`GET /users/:id`、发现页里的人 `online` 恒为 `false`；
+WS 的 `presence` 上下线广播**直接不发**（不是发 `online:false` —— 「一直显示离线」和
+「对方关了在线状态」在界面上是一回事，没必要泄露前者）。而且只推给 `peersOf(userId)`
+（有共同会话的人），不再广播给所有在线连接。
+
+> ⚠️ 拨动「在线状态可见」要**立即同步**，且两个方向不一样：
+> 关掉 → 必须 `force` 纠正一次已披露的状态（不 force 会被自己的检查挡掉，于是「关了还显示在线」）；
+> 打开 → **不能**无条件宣布「在线」，要报**此刻真实的状态**（`isOnlineAnywhere`），
+> 否则会给朋友留一个假的在线圆点，比「没反应」更糟。
+
+**联系方式字段的塑形纪律**：`publicUser()` **故意不含 `phone` 和 `email`**，另有 `selfUser()` = publicUser + 仅本人可见的联系方式。
+分两个名字而不是加 `isSelf` 开关的理由：加开关时任何调用点传错参数就是一次**静默**泄露。
+出口只有登录响应与 `/auth/me`（含 PATCH 回包）；推给别人的 `user.updated` 用 `publicUser`。
+手机号和邮箱用于身份验证与登录，不会通过公开用户资料或他人资料查询返回。
+
+手机号与邮箱注册是两个独立流程，分别使用短信验证码和邮件验证码。服务端需配置 `AUTH_OTP_SECRET`、Twilio 短信参数与 Resend 邮件参数；未配置对应通道时，验证码接口会明确返回通道未配置，不会生成或展示演示验证码。注册接口：`POST /api/v1/auth/register/phone/code`、`POST /api/v1/auth/register/phone`、`POST /api/v1/auth/register/email/code`、`POST /api/v1/auth/register/email`。
+
+**消息加密是服务端存储加密**：启用后新文字消息以 AES-256-GCM 密文写入数据库，服务端解密后再发给会话成员。它不保护消息传输，也不是端到端加密。配置 `MESSAGE_ENCRYPTION_KEY` 后才能开启；丢失密钥会导致加密消息无法读取。
 
 #### 账号与安全
 
-- **登录方式**：手机号 / 邮箱 / 密码（当前为展示，修改功能待实现）
-- **安全设置**：生物识别 / 二次验证，持久化到 `user_settings` 表
+- **登录方式**：用户名、已验证手机号或邮箱 + 密码；安全设置资料中手机号和邮箱仅本人可见
+- **安全设置**：生物识别 / 二次验证 —— `disabled` + 原因（没有真实校验，开了也只是存个值）
 - **设备管理**：从 `user_devices` 表读取登录设备列表，支持远程退出
+- **退出登录**：调 `logout()` —— 原来是只弹一句 toast，现在真的退出
 
 ```
 GET    /api/v1/devices              获取设备列表
@@ -885,6 +1038,54 @@ PUT    /api/v1/devices/settings     更新安全设置
 
 ---
 
+## 位置服务
+
+四个落地场景：我页「所在地区」手动授权后解析城市中心点、动态发布选附近 POI、发现页「附近」城市中心点估算距离、聊天里发位置消息。发现页不会自动请求设备定位；未授权时不保留城市坐标。
+
+### 三套坐标系，别混用
+
+| 来源 | 坐标系 | 说明 |
+| --- | --- | --- |
+| `navigator.geolocation` | **WGS-84** | 浏览器给的原始值 |
+| 腾讯位置服务（逆地址解析 / POI 搜索） | **GCJ-02** | 国测局加密坐标 |
+
+直接拿 WGS-84 去问腾讯，结果会**偏 265~621 m** —— 不是「差不多」，是会指到隔壁街上。
+换算数学放在 `shared/geo-math.mjs`，**前后端共用同一份**（`src/lib/geo.js` 只是转出），
+避免两边各写一遍然后慢慢漂移。
+
+### 无 key 不是错误
+
+```
+TENCENT_MAP_KEY    →  只在服务端用（逆地址解析、POI 搜索都走后端）
+VITE_TMAP_KEY      →  前端地图渲染用，放 .env.local
+```
+
+没有 key 时接口**不报错、也不返回 500**，而是 `200 + { configured: false, reason }`。
+前端据此显示一块**自画的坐标网格**，并**直说「这不是地图」** ——
+画得像地图最糟：用户会以为那就是他所在的位置。
+
+### 隐私三道闸
+
+1. `cityPublic = 0` 时，`publicUser()` **连坐标字段都不返回**（不是返回空串，是根本不带这个 key）；
+2. 「我的位置」只写 **localStorage**，**不上传**；
+3. 库里只存**行政区划中心点**，不存用户的精确经纬度。
+
+### 距离必须有坐标支撑
+
+- 没有坐标 → **一个距离数字都不出**（不猜、不按城市名估算）；
+- 两点落在同一中心点 → 显示「**同城**」，**不显示「0 km」**（0 km 会被读成「就在隔壁」）；
+- 排序键**必须是同一量纲**，三层依次比：有无距离 → 距离 / `-rank` → `-共同群聊数`。
+
+### 其他几个坑
+
+- 地图 SDK **按需加载**，不在地图页就不加载；
+- SDK 单例初始化**失败要清空**，否则重试永远无效（拿着一个坏实例）；
+- **不传 `mapStyleId`**（自定义样式会让 SDK 报错）；
+- 容器**必须有固定高度**，否则地图高度塌成 0；
+- ⛔ 地图底图只允许腾讯 / 高德 / 百度 / 天地图。
+
+---
+
 ## 设计规范
 
 - **主色**：紫蓝渐变 `#9b8cfb → #7b5cf6 → #5b6ef5`
@@ -897,6 +1098,15 @@ PUT    /api/v1/devices/settings     更新安全设置
 ---
 
 ## 验证与自检
+
+统一回归入口要求后端已在 `3002` 启动；完整回归还需要前端在 `5198` 启动。建议先跑快速回归，再跑全量专项：
+
+```bash
+npm run verify:quick  # 解析、生产构建、登录/公告/上传/权限核心链路、后端 E2E
+npm run verify        # 快速回归 + 浏览器与 UI 专项
+```
+
+完整回归会启动浏览器并写入专用自检数据，脚本会清理自己的会话和临时上传。生产备份、恢复、部署边界见[部署与运维说明](docs/OPERATIONS.md)。
 
 ```bash
 # 后端接口 + WebSocket + 资料 / 头像上传 + 消息 fileUrl 白名单（70 项断言）
@@ -921,9 +1131,91 @@ node scripts/check-favorite.mjs
 # 长按手势专项（14 项断言）
 node scripts/check-longpress.mjs
 
+# 隐私门控专项（55 项断言）：添加好友三开关 / 扫码被拦 / 手机号不泄露 / 在线状态可见
+node scripts/check-privacy.mjs
+
+# 在线状态专项（25 项断言）：本地上下线推送 / 会话行圆点 / Redis 跨实例读写 / 无 Redis 降级
+node scripts/check-presence.mjs
+
+# ★ 数据层跨驱动契约（21 项断言）：主键类型 / camelCase 别名 / 占位符 / 事务 /
+#   命名参数 / LIKE 语义 / listMembers 与 listConversations 的出参形状
+#   跑两遍 —— SQLite 一遍、PG 一遍，两边都必须绿。
+node scripts/check-driver.mjs
+
+# 「我」页设置专项（143 项断言）：7 个入口 / 版面几何 / 真假开关 / 反馈落库
+node scripts/check-me.mjs
+
 # 全界面 console 报错 / 非法 DOM 嵌套自检
 node scripts/check-console.mjs
+
+# ⭐ 源码解析自检（~1 秒，不是浏览器自检）—— 改完 jsx 先跑这个
+node scripts/check-parse.mjs
 ```
+
+### 为什么单独有 `check-parse`
+
+一行写错的 JSX（例如在 `return (` 的括号里、元素**之前**放一个 `{/* 注释 */}`）
+是**致命**的：Babel 解析失败 → Vite 对该模块返回 500 → **整个应用白屏**。
+它的暴露路径特别绕：
+
+- `node --check` 查不出来（`.jsx` 根本不是合法 JS，会报另一个毫不相干的错）；
+- `vite build` 能查出来，但要几十秒；
+- 靠浏览器自检去撞，症状是「**所有选择器一律返回 null**」——
+  极容易被误读成「数据库空了 / 后端挂了 / 代理拦了」，实测就绕了一大圈
+  （查完数据、查完端口、查完 watcher 进程，最后才看到 Vite 页面上那个 500）。
+
+`check-parse.mjs` 用项目里已有的 esbuild（vite 的依赖，不新增依赖）把
+`src/` 与 `server/src/` 下每个文件 transform 一遍，顺便校验**相对 import 是否落在真实文件上**，
+1 秒内指出「哪个文件第几行语法错」。**改完 jsx 先跑它。**
+
+### 两种数据库跑同一套自检
+
+`check-driver` / `check-privacy` / `check-presence` 回库核对走的是**异步** `q`（不是 SQLite 专有的 `qSync`），
+所以同一套用例两种驱动都能跑。换库后重跑一遍，是「双驱动不是两套代码」的实证：
+
+```bash
+# 1) 起容器（见「后端 → 数据库」一节）
+docker compose up -d
+
+# 2) 灌演示数据（PG 库是空的；这一步是幂等的）
+cd server && DB_DRIVER=postgres \
+  DATABASE_URL=postgres://chatly:chatly_dev_pw@127.0.0.1:55433/chatly node src/seed.js && cd ..
+
+# 3) 让后端跑在 PG 上（改 server/.env 或临时覆盖环境变量都行）
+DB_DRIVER=postgres DATABASE_URL=postgres://chatly:chatly_dev_pw@127.0.0.1:55433/chatly \
+  node server/src/index.js
+
+# 4) 同一套用例原样再跑（**自检脚本自己也要带同一组环境变量** ——
+#    它回库核对用的是同一个门面，不带就变成「后端连 PG、自检连 SQLite」）
+DB_DRIVER=postgres DATABASE_URL=postgres://chatly:chatly_dev_pw@127.0.0.1:55433/chatly \
+  node scripts/check-driver.mjs
+DB_DRIVER=postgres DATABASE_URL=postgres://chatly:chatly_dev_pw@127.0.0.1:55433/chatly \
+  node scripts/check-privacy.mjs
+DB_DRIVER=postgres DATABASE_URL=postgres://chatly:chatly_dev_pw@127.0.0.1:55433/chatly \
+  node scripts/check-presence.mjs
+```
+
+> ⚠️ 忘了给自检带环境变量时的症状**极易误判**：断言报的是
+> 「回库确认 follows 里真的多了一行」这类**业务**错误，
+> 看着像后端没写库，其实是自检读错了数据库。见 `LESSONS.md`。
+>
+> ⚠️⚠️ **`server/uploads/` 是两种数据库共用的一个目录，孤儿文件回收是「全局动作」。**
+> `purgeOrphanUploads()` 只按**当前驱动**的引用表判断谁是孤儿 ——
+> 两个库同时在用时跑它，会把「只有另一个库引用」的文件当成孤儿挪进 `.tmp/orphan-uploads/`，
+> 那个库的界面立刻一片 404。**规矩：回收必须在和后端同一个驱动下跑；两个库同时活着时谁也别跑。**
+> 好在是「挪走」不是「删掉」，`mv .tmp/orphan-uploads/<file> server/uploads/` 即可恢复。
+
+### 哪些自检能在 PG 下跑
+
+| 类别 | 脚本 | 说明 |
+| --- | --- | --- |
+| **两种驱动都跑** | `check-driver` / `check-privacy` / `check-presence` + 全部纯浏览器脚本（`check-group` / `check-video` / `check-media` / `check-console` / `check-readreceipt` / `check-scroll` / `check-emoji` / `check-align` / `check-narrow` / `e2e-realtime` / `audit-ui`） | 回库核对走异步 `q`；纯浏览器脚本只走 HTTP + CDP |
+| **仅 SQLite** | `check-favorite` / `check-poll` / `check-me` / `check-moment` / `check-geo` / `check-discover` / `check-qr` / `check-reply-forward` / `check-longpress` | 用了 SQLite 专有的 `db` / `qSync` / `insertSync`（同步直连） |
+
+> `scripts/lib/debris.mjs`（自检残留清理）**已经是驱动无关的**（异步 `q` + `tx`）。
+> 它原先用 SQLite 裸句柄，后果不是「这个库不能用」，而是**任何 import 它的脚本都跑不了 PG** ——
+> 于是纯浏览器脚本被打上了「只能在 SQLite 下验」的隐形烙印，
+> 实测就因此漏掉一个「发现页 500」。共用工具库要按**最严格的调用方**来写。
 
 每个自检脚本都是**自包含**的：自己建临时群、自己发探针消息、自己清理残留。
 跑完数据库回到基线，不会污染下一个自检。

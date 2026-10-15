@@ -7,8 +7,8 @@
  * ## 四条硬规矩
  *
  * 1. **票数只有一个真相来源。** `poll_votes` 一张表，票数一律 COUNT 出来，
- *    绝不在 poll_options 上存一个 `count` 列 —— 投票 / 改票 / 取消投票三处都要记得
- *    加减一，漏一处就是一个永远对不上、而且界面上看不出来的数字。
+ *    绝不在 poll_options 上存一个 `count` 列 —— 每次统计都从原始投票记录聚合，
+ *    避免维护冗余计数导致界面票数漂移。
  *
  * 2. **只有群聊能投票。** PRD §14 是「群投票」。私聊两个人投票没有意义，
  *    界面上也照实禁用并写明，而不是让它能用却语义可疑。
@@ -52,7 +52,7 @@ export function isClosed(poll, now = Date.now()) {
  *          options:string[], multi?:boolean, anonymous?:boolean, deadline?:number|null}} input
  * @returns {{ok:true, poll:object} | never} 校验失败抛 status 错误
  */
-export function createPoll({
+export async function createPoll({
   conversationId,
   creatorId,
   question,
@@ -61,7 +61,7 @@ export function createPoll({
   anonymous = false,
   deadline = null,
 }) {
-  const conv = q.get('SELECT id, type FROM conversations WHERE id = ?', conversationId)
+  const conv = await q.get('SELECT id, type FROM conversations WHERE id = ?', conversationId)
   if (!conv) throw bad(404, '会话不存在')
   if (conv.type !== 'group') throw bad(400, '投票只能在群聊里发起')
 
@@ -93,8 +93,8 @@ export function createPoll({
     dl = Math.round(n)
   }
 
-  const pollId = tx(() => {
-    const id = insert(
+  const pollId = await tx(async () => {
+    const id = await insert(
       `INSERT INTO polls (conversation_id, creator_id, question, multi, anonymous, deadline, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       conversationId,
@@ -105,18 +105,22 @@ export function createPoll({
       dl,
       Date.now()
     )
-    list.forEach((text, i) => {
-      insert('INSERT INTO poll_options (poll_id, text, sort) VALUES (?, ?, ?)', id, text, i)
-    })
+    /* ⚠️ 原来是 `list.forEach(...)` —— async 化之后 forEach **不会等待**，
+         而且它的回调返回值被丢掉，插入失败也不会被事务感知到。
+         必须改成 for...of + await（或者 for 循环），否则就是「投票建好了、选项一条没进去」
+         这种最难查的中间态。 */
+    for (let i = 0; i < list.length; i++) {
+      await insert('INSERT INTO poll_options (poll_id, text, sort) VALUES (?, ?, ?)', id, list[i], i)
+    }
     return id
   })
 
-  return { ok: true, poll: viewPoll(pollId, creatorId) }
+  return { ok: true, poll: await viewPoll(pollId, creatorId) }
 }
 
 /* ================= 查询 ================= */
 
-function rawPoll(pollId) {
+async function rawPoll(pollId) {
   return q.get(
     `SELECT id, conversation_id AS conversationId, creator_id AS creatorId, question,
             multi, anonymous, deadline, closed_at AS closedAt, created_at AS createdAt
@@ -134,11 +138,11 @@ const asUser = (row) =>
  * 一次把选项票数、投票人、我的选择、发起人、附言人数都算好 —— 让前端拿到就能画。
  * 拆成多个接口的话，气泡渲染会变成「先画一次、票数回来再跳一下」。
  */
-export function viewPoll(pollId, viewerId = null) {
-  const p = rawPoll(pollId)
+export async function viewPoll(pollId, viewerId = null) {
+  const p = await rawPoll(pollId)
   if (!p) return null
 
-  const options = q.all(
+  const options = await q.all(
     `SELECT o.id, o.text,
             (SELECT COUNT(*) FROM poll_votes v WHERE v.option_id = o.id) AS votes
      FROM poll_options o WHERE o.poll_id = ? ORDER BY o.sort, o.id`,
@@ -146,16 +150,16 @@ export function viewPoll(pollId, viewerId = null) {
   )
 
   const myOptionIds = viewerId
-    ? q.all('SELECT option_id AS id FROM poll_votes WHERE poll_id = ? AND user_id = ?', pollId, viewerId).map((r) => r.id)
+    ? (await q.all('SELECT option_id AS id FROM poll_votes WHERE poll_id = ? AND user_id = ?', pollId, viewerId)).map((r) => r.id)
     : []
 
   const totalVotes = options.reduce((n, o) => n + o.votes, 0)
-  const voterCount = q.get('SELECT COUNT(DISTINCT user_id) AS n FROM poll_votes WHERE poll_id = ?', pollId).n
+  const voterCount = (await q.get('SELECT COUNT(DISTINCT user_id) AS n FROM poll_votes WHERE poll_id = ?', pollId)).n
   /* 附言表就是「投过票的人」（未投票不会写行）—— 省掉一次「投过票的人」查询 */
-  const joinedCount = q.get('SELECT COUNT(*) AS n FROM poll_replies WHERE poll_id = ?', pollId).n
+  const joinedCount = (await q.get('SELECT COUNT(*) AS n FROM poll_replies WHERE poll_id = ?', pollId)).n
 
   const closed = isClosed(p)
-  const creator = asUser(q.get('SELECT id, username, nickname, avatar FROM users WHERE id = ?', p.creatorId))
+  const creator = asUser(await q.get('SELECT id, username, nickname, avatar FROM users WHERE id = ?', p.creatorId))
 
   const out = {
     id: p.id,
@@ -192,7 +196,7 @@ export function viewPoll(pollId, viewerId = null) {
        前端可以直接复用 avatarOf()。这里刻意不走 publicUser()：
        那会顺带带出 bio / gender / birthday / region / tags 一大堆这个场景用不上的字段，
        而「有哪些人投过票」只需要一张脸和一个名字。附言时间目前界面没用，不返回。 */
-    out.voters = q.all(
+    out.voters = await q.all(
       `SELECT u.id, u.username, u.nickname, u.avatar
        FROM poll_replies r JOIN users u ON u.id = r.user_id
        WHERE r.poll_id = ?
@@ -214,14 +218,14 @@ export function viewPoll(pollId, viewerId = null) {
  * 前端拿 id 集合来这里批量换一次。**这条路径只按 pollId 查，不按会话过滤** ——
  * 调用方（路由）必须已经确认过这些 id 属于同一个他有权访问的会话。
  */
-export function viewPollsByIds(ids, viewerId = null) {
+export async function viewPollsByIds(ids, viewerId = null) {
   const seen = new Set()
   const out = []
   for (const raw of ids) {
     const id = Number(raw)
     if (!id || seen.has(id)) continue
     seen.add(id)
-    const p = viewPoll(id, viewerId)
+    const p = await viewPoll(id, viewerId)
     if (p) out.push(p)
   }
   return out
@@ -231,20 +235,20 @@ export function viewPollsByIds(ids, viewerId = null) {
  * pollId → conversationId 的映射，给路由做批量授权用。
  * 单独抽出来是为了**不为了鉴权去算整份投票详情**（选项 / 票数 / 投票人全是白算的）。
  */
-export function pollConversations(ids) {
+export async function pollConversations(ids) {
   const map = new Map()
   for (const raw of ids) {
     const id = Number(raw)
     if (!id || map.has(id)) continue
-    const row = q.get('SELECT conversation_id AS conversationId FROM polls WHERE id = ?', id)
+    const row = await q.get('SELECT conversation_id AS conversationId FROM polls WHERE id = ?', id)
     if (row) map.set(id, row.conversationId)
   }
   return map
 }
 
 /** 会话里的投票列表（群设置 → 群投票，也用来给「跳到那条消息」定位） */
-export function listPolls(conversationId, viewerId = null) {
-  const rows = q.all(
+export async function listPolls(conversationId, viewerId = null) {
+  const rows = await q.all(
     `SELECT p.id, m.id AS messageId
      FROM polls p
      JOIN messages m ON m.poll_id = p.id AND m.revoked_at IS NULL
@@ -252,33 +256,31 @@ export function listPolls(conversationId, viewerId = null) {
      ORDER BY p.id DESC`,
     conversationId
   )
-  return rows.map((r) => {
-    const poll = viewPoll(r.id, viewerId)
-    return poll ? { ...poll, messageId: r.messageId } : null
-  }).filter(Boolean)
+  return (
+    await Promise.all(
+      rows.map(async (r) => {
+        const poll = await viewPoll(r.id, viewerId)
+        return poll ? { ...poll, messageId: r.messageId } : null
+      })
+    )
+  ).filter(Boolean)
 }
 
 /* ================= 投票 ================= */
 
 /**
- * 投票 / 改票 / 取消投票。三件事共用一个入口是有意的 —— `optionIds` 就是**投票后的完整状态**：
- *   - 单选传 1 个 → 换选项
- *   - 多选传 N 个 → 整体覆盖
- *   - 传空数组 → 取消投票（改错了得能退出来；不给这条路，用户就只能一直错着）
- *
- * 幂等：同一份 `optionIds` 重复提交结果相同，不会重复计票。
+ * 一人只能提交一次投票，提交后不可改选或撤销。
  *
  * @returns {{ok:true, poll:object, changed:boolean}}
  */
-export function votePoll(pollId, userId, optionIds) {
-  const p = rawPoll(pollId)
+export async function votePoll(pollId, userId, optionIds) {
+  const p = await rawPoll(pollId)
   if (!p) throw bad(404, '投票不存在')
   if (isClosed(p)) throw bad(400, '投票已结束')
 
   const wanted = Array.from(new Set((Array.isArray(optionIds) ? optionIds : []).map(Number).filter(Boolean)))
-  const valid = q
-    .all('SELECT id FROM poll_options WHERE poll_id = ?', pollId)
-    .map((r) => r.id)
+  if (!wanted.length) throw bad(400, '至少选择一个选项，投票提交后不能撤销')
+  const valid = (await q.all('SELECT id FROM poll_options WHERE poll_id = ?', pollId)).map((r) => r.id)
   const validSet = new Set(valid)
 
   for (const id of wanted) {
@@ -286,17 +288,31 @@ export function votePoll(pollId, userId, optionIds) {
   }
   if (!p.multi && wanted.length > 1) throw bad(400, '这是单选投票，只能选一个')
 
-  const prev = q
-    .all('SELECT option_id AS id FROM poll_votes WHERE poll_id = ? AND user_id = ?', pollId, userId)
-    .map((r) => r.id)
-  const same = prev.length === wanted.length && prev.every((id) => wanted.includes(id))
-  if (same) return { ok: true, poll: viewPoll(pollId, userId), changed: false }
-
   const now = Date.now()
-  tx(() => {
-    q.run('DELETE FROM poll_votes WHERE poll_id = ? AND user_id = ?', pollId, userId)
+  /* 名册行同时作为「已投过」的永久标记。先在事务里尝试占位，唯一索引可挡住
+     并发重复提交；若已有记录，整笔事务回滚，旧票保持原样。 */
+  await tx(async () => {
+    const prev = await q.all(
+      'SELECT option_id AS id FROM poll_votes WHERE poll_id = ? AND user_id = ?',
+      pollId,
+      userId
+    )
+    if (prev.length) throw bad(409, '你已经投过票，不能修改或撤销')
+
+    const marker = await q.run(
+      `INSERT OR IGNORE INTO poll_replies (poll_id, user_id, content, created_at)
+       VALUES (?, ?, '', ?)`,
+      pollId,
+      userId,
+      now
+    )
+    if (marker.changes !== 1) throw bad(409, '你已经投过票，不能修改或撤销')
+
+    /* ⚠️ 写票和名册标记放在同一事务里，失败时两者一起回滚。
+     PG 那边靠 AsyncLocalStorage 把同一条连接传给下面每个 q.*（见 db/postgres.js），
+     所以这里必须用 await q.run / await insert，**不能**直接用 pool.query。 */
     for (const optionId of wanted) {
-      insert(
+      await insert(
         'INSERT INTO poll_votes (poll_id, user_id, option_id, created_at) VALUES (?, ?, ?, ?)',
         pollId,
         userId,
@@ -304,38 +320,17 @@ export function votePoll(pollId, userId, optionIds) {
         now
       )
     }
-    /* poll_replies 在这里只当「投过票的人」的花名册用（见文件头）。
-       取消投票（wanted 为空）就要把名册上这一行一起去掉 ——
-       留着的话，界面上会出现「0 人投票，但头像簇里有我」。
-       附言内容目前没有入口写入，所以直接删掉不会丢用户写过的字。 */
-    if (wanted.length) {
-      /* ⚠️ 这里必须是 `INSERT OR IGNORE`，**不能**写 `ON CONFLICT(poll_id,user_id) DO NOTHING`：
-         `uniq_poll_reply_user` 是个**部分索引**（带 WHERE user_id IS NOT NULL），
-         而 SQLite 的 UPSERT 冲突目标只认完整的主键 / 唯一索引，
-         拿部分索引当目标会直接报 "ON CONFLICT clause does not match any PRIMARY KEY or
-         UNIQUE constraint"。`INSERT OR IGNORE` 不问目标，任何唯一冲突都跳过，
-         语义正好就是这里要的「已经在名册上就别动」。 */
-      q.run(
-        `INSERT OR IGNORE INTO poll_replies (poll_id, user_id, content, created_at)
-         VALUES (?, ?, '', ?)`,
-        pollId,
-        userId,
-        now
-      )
-    } else {
-      q.run('DELETE FROM poll_replies WHERE poll_id = ? AND user_id = ?', pollId, userId)
-    }
   })
 
-  return { ok: true, poll: viewPoll(pollId, userId), changed: true }
+  return { ok: true, poll: await viewPoll(pollId, userId), changed: true }
 }
 
 /**
  * 发起人提前结束投票。PRD 没写，但这是「截止时间定错了」的唯一补救手段 ——
  * 没有它，一条把截止时间设成 30 天后的投票就只能挂在那里。
  */
-export function closePoll(pollId, userId) {
-  const p = rawPoll(pollId)
+export async function closePoll(pollId, userId) {
+  const p = await rawPoll(pollId)
   if (!p) throw bad(404, '投票不存在')
   if (p.creatorId !== userId) throw bad(403, '只有发起人可以结束投票')
   if (p.closedAt) throw bad(400, '投票已经结束了')
@@ -343,6 +338,6 @@ export function closePoll(pollId, userId) {
      那个字段的语义是「谁什么时候手动关的」，补上就分不清两种结束了。 */
   if (isClosed(p)) throw bad(400, '投票已结束')
 
-  q.run('UPDATE polls SET closed_at = ? WHERE id = ?', Date.now(), pollId)
-  return { ok: true, poll: viewPoll(pollId, userId) }
+  await q.run('UPDATE polls SET closed_at = ? WHERE id = ?', Date.now(), pollId)
+  return { ok: true, poll: await viewPoll(pollId, userId) }
 }

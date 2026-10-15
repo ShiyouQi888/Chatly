@@ -75,7 +75,7 @@ const byName = (n) => users.find((u) => u.nickname === n)
 const memberId = byName(MEMBER).id
 const inviteeId = byName(INVITEE).id
 
-purgeDebris({ quiet: true }) // 先清掉上一轮可能留下的同名群
+await purgeDebris({ quiet: true }) // 先清掉上一轮可能留下的同名群
 const created = await j('POST', '/conversations', { type: 'group', title: GNAME, memberIds: [memberId] }, owner.auth)
 const CID = created.d.conversationId
 console.log(`临时群 #${CID}「${GNAME}」：群主 ${OWNER} + 成员 ${MEMBER}\n`)
@@ -274,7 +274,7 @@ try {
   await A.js(`window.__clickText('.gs-link', '写公告')`)
   ok(await A.waitFor(`!!document.querySelector('.gs-input.is-area')`), '弹出公告编辑框')
   await A.js(`window.__setValue('.gs-input.is-area', ${JSON.stringify(ANN)})`)
-  await A.js(`window.__clickText('.gs-btn', '发布')`)
+  await A.js(`window.__clickText('.gs-btn', '发布并提醒成员')`)
   ok(await A.waitFor(`!document.querySelector('.gs-input.is-area')`, 6000), '发布后弹层关闭')
 
   g = await A.js(`window.__gs()`)
@@ -286,6 +286,7 @@ try {
   ok(await A.waitFor(`!document.querySelector('.gs-root')`), '返回聊天页')
   let bar = await A.js(`window.__annBar()`)
   ok(bar && bar.text.includes('周五晚上 7 点'), '聊天页顶部出现群公告条', (bar?.text || '').slice(0, 20))
+  ok(await A.waitFor(`[...document.querySelectorAll('.bubble')].some(x=>x.textContent.includes('周五晚上 7 点'))`), '群公告正文同步出现在聊天消息流')
   ok(bar && bar.more === '展开' && !bar.open, '公告条默认收起', bar?.more)
   const h0 = bar?.h || 0
 
@@ -444,8 +445,8 @@ try {
   await sleep(400)
   /* 临时群是真删 —— DELETE /conversations/:id 只是「退出」，
      会话行、消息、别人的成员记录全留着，跑几轮演示库就脏了。 */
-  purgeDebris()
-  purgeOrphanUploads({ quiet: true })
+  await purgeDebris()
+  await purgeOrphanUploads({ quiet: true })
 }
 
 console.log(failures ? `\n❌ ${failures} 条未通过` : '\n✅ 全部通过')

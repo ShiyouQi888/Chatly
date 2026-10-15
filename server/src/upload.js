@@ -19,12 +19,21 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export const UPLOAD_DIR = path.join(__dirname, '..', 'uploads')
 fs.mkdirSync(UPLOAD_DIR, { recursive: true })
+export const PRIVATE_UPLOAD_DIR = path.join(__dirname, '..', 'private-uploads')
+fs.mkdirSync(PRIVATE_UPLOAD_DIR, { recursive: true })
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
   filename: (_req, file, cb) => {
     const ext = path.extname(file.originalname || '').slice(0, 12)
     cb(null, `${Date.now()}-${crypto.randomBytes(5).toString('hex')}${ext}`)
+  },
+})
+const privateStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, PRIVATE_UPLOAD_DIR),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname || '').slice(0, 12)
+    cb(null, `${Date.now()}-${crypto.randomBytes(16).toString('hex')}${ext}`)
   },
 })
 
@@ -37,6 +46,8 @@ function badRequest(message) {
 
 export const ATTACHMENT_MAX = 20 * 1024 * 1024
 export const AVATAR_MAX = 5 * 1024 * 1024
+/** 个人主页封面：横幅比头像大得多，给 8MB */
+export const COVER_MAX = 8 * 1024 * 1024
 /** 动态配图：手机直出一张照片动辄 5MB+，给 12MB 留余量 */
 export const MOMENT_IMAGE_MAX = 12 * 1024 * 1024
 /** 动态视频：一条短视频几十 MB，20MB 的附件上限根本不够用 */
@@ -44,10 +55,10 @@ export const MOMENT_VIDEO_MAX = 80 * 1024 * 1024
 
 /** 通用附件（聊天里的图片 / 文件） */
 export const uploadAny = multer({
-  storage,
+  storage: privateStorage,
   limits: { fileSize: ATTACHMENT_MAX },
   fileFilter: (_req, file, cb) => {
-    const bad = /\.exe$|\.sh$|\.bat$|\.cmd$/i.test(file.originalname || '')
+    const bad = /\.(exe|sh|bat|cmd|html?|svg|xml|js|mjs|css)$/i.test(file.originalname || '')
     cb(bad ? badRequest('不支持的文件类型') : null, !bad)
   },
 })
@@ -61,6 +72,22 @@ export const uploadImage = multer({
     const mimeOk = /^image\/(png|jpe?g|gif|webp)$/i.test(file.mimetype || '')
     const ok = extOk && mimeOk
     cb(ok ? null : badRequest('头像只支持 PNG / JPG / GIF / WebP'), ok)
+  },
+})
+
+/**
+ * 个人主页封面（「我」页顶部那张大图）。
+ * 和头像同一套双校验（扩展名 + MIME），只是体积上限更高：
+ * 横幅照片手机直出就 5MB 上下，卡 5MB 会让人换了半天换不上。
+ */
+export const uploadCover = multer({
+  storage,
+  limits: { fileSize: COVER_MAX },
+  fileFilter: (_req, file, cb) => {
+    const extOk = /\.(png|jpe?g|gif|webp)$/i.test(file.originalname || '')
+    const mimeOk = /^image\/(png|jpe?g|gif|webp)$/i.test(file.mimetype || '')
+    const ok = extOk && mimeOk
+    cb(ok ? null : badRequest('背景图只支持 PNG / JPG / GIF / WebP'), ok)
   },
 })
 
@@ -199,14 +226,14 @@ export function uploadExists(urlPath) {
  */
 /** `/emoji-anim/` 是动画大表情（WebP 动画），和静态 SVG 的 `/emoji/` 是两个目录 ——
  *  `/emoji/` 的前缀匹配挡不住它（开头是 `/emoji-`），必须显式列出来。 */
-const ASSET_PREFIXES = ['/uploads/', '/emoji/', '/emoji-anim/']
+const ASSET_PREFIXES = ['/uploads/', '/emoji/', '/emoji-anim/', '/api/v1/files/private/']
 /* 视频格式单独列出来 —— 前端判断「这条消息是不是视频」用的是同一个清单。
    ⚠️ 两边必须同步：前端认 mp4 而这里不认，用户选完视频发出去会被 400 挡掉，
    而且报错是「文件地址不合法」，看起来像前端拼错了 URL，其实缺的是后端白名单。 */
 export const VIDEO_EXT = ['mp4', 'webm', 'mov', 'm4v', 'avi', 'mkv', 'ogv']
 
 const ASSET_EXT = new RegExp(
-  `\\.(png|jpe?g|gif|webp|svg|bmp|avif|pdf|txt|md|csv|json|zip|mp3|wav|docx?|xlsx?|pptx?|pages|numbers|key|${VIDEO_EXT.join('|')})$`,
+  `\\.(png|jpe?g|gif|webp|svg|bmp|avif|pdf|txt|md|csv|json|zip|mp3|m4a|ogg|opus|wav|docx?|xlsx?|pptx?|pages|numbers|key|${VIDEO_EXT.join('|')})$`,
   'i'
 )
 
@@ -214,7 +241,8 @@ export function isStaticAssetUrl(urlPath) {
   const s = String(urlPath || '')
   if (!ASSET_PREFIXES.some((p) => s.startsWith(p))) return false
 
-  const rest = s.slice(s.indexOf('/', 1) + 1) // 去掉前缀，留下文件名部分
+  const prefix = ASSET_PREFIXES.find((p) => s.startsWith(p))
+  const rest = s.slice(prefix.length) // 去掉前缀，留下文件名部分
   // 只允许单层：不含 / 或 \，不含 ..，不以 . 开头
   if (!rest || /[/\\]/.test(rest) || rest.includes('..') || rest.startsWith('.')) return false
   return ASSET_EXT.test(rest)

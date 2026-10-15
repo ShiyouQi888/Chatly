@@ -123,7 +123,7 @@ function restoreGraph(before) {
 }
 const graphBefore = await normalizeGraph()
 
-purgeMoments() // 清掉上一轮可能残留的自检动态
+await purgeMoments() // 清掉上一轮可能残留的自检动态
 const baselineCount = (await j('GET', '/moments?scope=mine', null, author.auth)).d.moments.length
 console.log(`自检开始：作者 ${AUTHOR}（现有 ${baselineCount} 条自己的动态）\n`)
 
@@ -658,8 +658,8 @@ try {
   A.proc.kill()
   B.proc.kill()
   restoreGraph(graphBefore)
-  const p = purgeMoments()
-  purgeOrphanUploads({ quiet: true })
+  const p = await purgeMoments()
+  await purgeOrphanUploads({ quiet: true })
   if (p.moments) console.log(`\n已清理临时动态 ${p.moments} 条（媒体 ${p.media} / 赞 ${p.likes} / 评论 ${p.comments}）`)
 
   const noise = /favicon|DevTools|ExperimentalWarning/i

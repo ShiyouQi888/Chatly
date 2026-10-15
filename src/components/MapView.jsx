@@ -164,7 +164,7 @@ export default function MapView({
     return (
       <div className="mv-empty" style={{ height }} data-testid="map-invalid">
         <IconLocate size={20} />
-        <p>这条记录没有坐标，显示不了位置</p>
+        <p>没有坐标，画不出地图</p>
       </div>
     )
   }

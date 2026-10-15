@@ -29,7 +29,13 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { db, q } from '../server/src/db.js'
+/* ⚠️ 这里刻意用 qSync（SQLite 专有的**同步**直连）而不是 q。
+ *    原因：本脚本是「造数据 → 打接口 → 回库核对」的写法，回库核对那一步是
+ *    `q.get(...).n` 这种同步取值；而 q 已改成 async（PG 驱动必须异步），
+ *    直接用会静默拿到 Promise（`Promise.n === undefined`），断言全红却指向别处。
+ *    别改成 await —— 脚本里 60 多处都要动，且脚本本来就绑 SQLite。 */
+import { db, qSync as q } from '../server/src/db.js'
+import { PRIVATE_UPLOAD_DIR } from '../server/src/upload.js'
 import { purgeDebris, purgeOrphanUploads, maxMessageId } from './lib/debris.mjs'
 import { freePort, waitAppTarget, connectCdp, launchChrome, shoot } from './lib/cdp.mjs'
 
@@ -38,8 +44,8 @@ const APP_HOST = 'http://127.0.0.1:5198'
 const APP = APP_HOST + '/'
 const OUT = 'D:/BS-chat-os/shots/favorite'
 const PASS = 'chatly123'
-const UPLOADS = 'D:/BS-chat-os/server/uploads'
 const ORPHANS = 'D:/BS-chat-os/.tmp/orphan-uploads'
+const PRIVATE_ORPHANS = path.join(ORPHANS, 'private')
 
 fs.mkdirSync(OUT, { recursive: true })
 
@@ -77,7 +83,7 @@ const login = async (u) => {
 }
 
 /* ================= 基线 ================= */
-purgeDebris({ quiet: true })
+await purgeDebris({ quiet: true })
 /**
  * ⚠️ 开跑前先把**上一次崩在半路**留下的自检收藏清掉。
  *
@@ -95,7 +101,7 @@ const staleFavs = db
 for (const id of staleFavs) db.prepare('DELETE FROM favorites WHERE id = ?').run(id)
 if (staleFavs.length) console.log(`（开跑前清掉 ${staleFavs.length} 条上次残留的自检收藏）`)
 
-const msgBaseline = maxMessageId()
+const msgBaseline = await maxMessageId()
 const favBaseline = q.get('SELECT COALESCE(MAX(id),0) v FROM favorites').v
 const favCountBefore = q.get('SELECT COUNT(*) n FROM favorites').n
 const msgCountBefore = q.get('SELECT COUNT(*) n FROM messages').n
@@ -213,8 +219,10 @@ const favStill = q.get('SELECT file_url AS f FROM favorites WHERE id = ?', favIm
 ok(favStill === fileUrl, '收藏里仍指着它')
 
 /* 跑一次孤儿回收 */
-const reclaim = purgeOrphanUploads({ quiet: true })
-const stillOnDisk = fs.existsSync(path.join(UPLOADS, path.basename(fileUrl)))
+const reclaim = await purgeOrphanUploads({ quiet: true })
+const privateFilePath = path.join(PRIVATE_UPLOAD_DIR, path.basename(fileUrl))
+const privateOrphanPath = path.join(PRIVATE_ORPHANS, path.basename(fileUrl))
+const stillOnDisk = fs.existsSync(privateFilePath)
 ok(
   stillOnDisk,
   '★ 回收**没有**把收藏引用的文件挪走（purgeOrphanUploads 认了 favorites.file_url）',
@@ -227,15 +235,15 @@ ok(
 
 /* 反例：把收藏删掉之后，它就该被回收了 —— 证明上一条不是因为「回收压根没生效」 */
 await req(`/favorites/${favImg.data.favorite.id}`, { method: 'DELETE', token: me.token })
-const reclaim2 = purgeOrphanUploads({ quiet: true })
+const reclaim2 = await purgeOrphanUploads({ quiet: true })
 ok(
-  !fs.existsSync(path.join(UPLOADS, path.basename(fileUrl))),
+  !fs.existsSync(privateFilePath),
   '★ 反例：取消收藏后同一个文件**确实被回收了**（证明回收本身有效）',
   `回收 ${reclaim2.moved} 个`
 )
 /* 从 orphan 里捞回来删掉，不给下次留垃圾 */
 try {
-  fs.rmSync(path.join(ORPHANS, path.basename(fileUrl)), { force: true })
+  fs.rmSync(privateOrphanPath, { force: true })
 } catch {}
 
 /* ============================================================
@@ -340,8 +348,14 @@ fs.mkdirSync(profileDir, { recursive: true })
 const proc = launchChrome({ url: APP, port, profileDir })
 
 const issues = []
+const failedResources = []
 const target = await waitAppTarget(port, APP_HOST)
 const cdp = await connectCdp(target.webSocketDebuggerUrl, (e) => {
+  if (e.method === 'Network.responseReceived' && e.params.response.status >= 400) {
+    const failedUrl = new URL(e.params.response.url)
+    failedUrl.search = ''
+    failedResources.push(`${e.params.response.status} ${failedUrl.toString()}`.slice(0, 240))
+  }
   if (e.method === 'Runtime.consoleAPICalled' && ['error', 'warning'].includes(e.params.type)) {
     issues.push(`${e.params.type}: ${(e.params.args || []).map((a) => a.value ?? a.description ?? '').join(' ')}`.slice(0, 200))
   }
@@ -355,6 +369,9 @@ const cdp = await connectCdp(target.webSocketDebuggerUrl, (e) => {
 await cdp.send('Page.enable')
 await cdp.send('Runtime.enable')
 await cdp.send('Log.enable')
+await cdp.send('Network.enable')
+await cdp.send('Network.setCacheDisabled', { cacheDisabled: true })
+await cdp.send('Network.clearBrowserCache')
 await cdp.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true })
 
 const js = async (expr) => {
@@ -418,7 +435,7 @@ window.__multiAct = (label) => {
   if (b.disabled) return 'disabled'
   b.click(); return 'ok' }
 /* 我页收藏子页 */
-window.__meTab = () => { const t=[...document.querySelectorAll('.tabbar .tab')][3]; if(!t) return false; t.click(); return true }
+window.__meTab = () => { const t=[...document.querySelectorAll('.tabbar .tab')][4]; if(!t) return false; t.click(); return true }
 window.__openFav = () => {
   const b = [...document.querySelectorAll('.quick-item')].find(x => x.textContent.trim() === '收藏')
   if (!b) return false
@@ -459,6 +476,12 @@ const tapMenu = async (label) => {
   await sleep(MENU_GUARD_MS)
   return js(`window.__tapMenu(${JSON.stringify(label)})`)
 }
+
+/* A persistent Chrome profile may hold a token removed by a previous suite. */
+await cdp.send('Page.navigate', { url: APP })
+await waitFor(`location.origin === ${JSON.stringify(APP_HOST)}`)
+await js(`localStorage.removeItem('chatly.token')`)
+await cdp.send('Page.reload')
 
 const booted = await waitFor(
   `(() => {
@@ -640,7 +663,7 @@ if (hasJump) {
 }
 
 /* ---- 控制台 ---- */
-const realIssues = issues.filter((t) => !/favicon|Download the React DevTools/i.test(t))
+const realIssues = [...issues, ...failedResources].filter((t) => !/favicon|Download the React DevTools/i.test(t))
 ok(realIssues.length === 0, '浏览器控制台无报错 / 无非法嵌套告警', realIssues.slice(0, 3).join(' | '))
 
 try {
@@ -654,9 +677,9 @@ console.log('\n─── 收尾 ───')
 const favRows = q.get('SELECT COUNT(*) n FROM favorites WHERE id > ?', favBaseline).n
 db.prepare('DELETE FROM favorites WHERE id > ?').run(favBaseline)
 q.run('DELETE FROM messages WHERE id > ?', msgBaseline)
-purgeDebris({ quiet: true })
+await purgeDebris({ quiet: true })
 /* ⚠️ 顺序：先清消息/收藏，再回收文件 —— 反过来的话刚发的图还被指着，扫不到 */
-const reclaimed = purgeOrphanUploads({ quiet: true })
+const reclaimed = await purgeOrphanUploads({ quiet: true })
 if (reclaimed.moved) console.log(`  回收 ${reclaimed.moved} 个无引用文件`)
 
 ok(

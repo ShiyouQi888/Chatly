@@ -11,14 +11,16 @@
  *   - 热门动态 —— 复用动态的接口（`scope=hot`），点开是同一个详情页
  *   - 兴趣标签 —— 从所有用户填过的标签**聚合**出来（不是写死那 10 个），点了真的筛选
  *   - 兴趣群 —— 真实群，加入真的写进 `conversation_members`
- *   - 附近活动 —— 库里没有活动这张表，**不做**，明确标未接入并禁用
+ *   - 活动和报名 —— 复用动态活动卡片与报名记录，展示有权限查看的未开始活动
+ *   - 热门话题 —— 只聚合公开动态，按内容量和去重后的打开行为排序
  *
  * ⚠️ 附近的人的**距离必须有坐标支撑**：
- *    双方都存了行政区划中心点、且对方开了公开开关 → 才给「约 X km」（依据写在界面上）；
+ *    双方都主动授权并保存了行政区划中心点 → 才给「约 X km」（依据写在界面上）；
  *    否则退回按资料里的地区文字匹配，显示「同城 / 同省 / 地区名」。
  *    **没有坐标时一个数都不出** —— 「附近 2.3 km」这种编出来的数字比不显示更糟。
  */
 import React, { useState } from 'react'
+import { api } from '../api/client.js'
 import { useApp } from '../store/AppContext.jsx'
 import { useAuth } from '../store/AuthContext.jsx'
 import { useChat } from '../store/ChatStore.jsx'
@@ -36,7 +38,6 @@ import {
   IconTag,
   IconCalendar,
   IconPlus,
-  IconLock,
 } from '../components/Icon.jsx'
 import UserProfile from './UserProfile.jsx'
 import MomentDetail from './MomentDetail.jsx'
@@ -45,6 +46,8 @@ import './discover-tab.css'
 const SECTIONS = [
   { key: 'recommend', label: '推荐' },
   { key: 'nearby', label: '附近' },
+  { key: 'activities', label: '活动' },
+  { key: 'topics', label: '话题' },
   { key: 'groups', label: '群组' },
   { key: 'users', label: '用户' },
 ]
@@ -88,7 +91,7 @@ function UserRow({ u, onFollow, onOpen }) {
 /* ===== 附近的人卡片 ===== */
 function NearbyCard({ p, onSay, onOpen, onFollow }) {
   return (
-    <div className="nb-card" data-id={p.id}>
+    <div className="nb-card" data-id={p.id} data-distance-basis={p.distanceBasis}>
       <div className="nb-top">
         <button type="button" className="rc-avatar" onClick={() => onOpen(p)} aria-label={`查看 ${p.nickname} 的主页`}>
           <Avatar src={p.src} name={p.nickname} size={52} radius={17} online={p.online} />
@@ -153,33 +156,33 @@ function GroupCard({ g, onJoin, busy }) {
   )
 }
 
-/* ===== 未接入：一律禁用并写明 ===== */
-function PendingBlock() {
-  const items = [
-    { icon: <IconCalendar size={16} />, label: '附近活动', why: '需要活动与报名表，后端暂无' },
-    { icon: <IconFire size={16} />, label: '热门话题榜', why: '需要话题聚合与浏览行为' },
-    { icon: <IconTarget size={16} />, label: '精准定位附近', why: '默认关闭，且不采集位置' },
-  ]
+function ActivityCard({ moment, onRsvp, busy }) {
+  const event = moment.card.data
+  const startsAt = new Date(event.startsAt)
+  const dateLabel = Number.isNaN(startsAt.getTime())
+    ? '时间待确认'
+    : new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit' }).format(startsAt)
   return (
-    <section className="disc-block">
-      <SectionTitle>
-        <span className="st-ic">
-          <IconLock size={15} /> 尚未接入
-        </span>
-      </SectionTitle>
-      <div className="dg-pending">
-        {items.map((it) => (
-          <div key={it.label} className="dg-pending-item">
-            <span className="dg-pending-ic">{it.icon}</span>
-            <span className="dg-pending-body">
-              <b>{it.label}</b>
-              <em>{it.why}</em>
-            </span>
-            <i className="dg-pending-tag">未接入</i>
-          </div>
-        ))}
+    <article className="da-card" data-id={moment.id}>
+      <div className="da-author">
+        <Avatar src={moment.src} name={moment.authorName} size={34} radius={11} />
+        <b>{moment.authorName}</b>
+      <span>活动</span>
       </div>
-    </section>
+      <h3>{event.title}</h3>
+      {event.description && <p className="da-description">{event.description}</p>}
+      <div className="da-meta"><IconCalendar size={14} /> {dateLabel}</div>
+      <div className="da-meta"><IconTarget size={14} /> {event.location || '地点待填写'}</div>
+      <div className="da-counts">{moment.card.going || 0} 人参加 · {moment.card.interested || 0} 人感兴趣</div>
+      <div className="da-actions">
+        <button type="button" className={moment.card.myStatus === 'interested' ? 'is-selected' : ''} disabled={busy} onClick={() => onRsvp(moment, moment.card.myStatus === 'interested' ? null : 'interested')}>
+          感兴趣
+        </button>
+        <button type="button" className={moment.card.myStatus === 'going' ? 'is-selected' : 'is-primary'} disabled={busy} onClick={() => onRsvp(moment, moment.card.myStatus === 'going' ? null : 'going')}>
+          {moment.card.myStatus === 'going' ? '已报名 · 取消' : '我要参加'}
+        </button>
+      </div>
+    </article>
   )
 }
 
@@ -196,6 +199,8 @@ export default function DiscoverTab({ nav }) {
     tags,
     groups,
     hot,
+    activities,
+    topics,
     loading,
     loadingMore,
     error,
@@ -211,6 +216,10 @@ export default function DiscoverTab({ nav }) {
   const [profileId, setProfileId] = useState(null)
   const [detail, setDetail] = useState(null)
   const [busyId, setBusyId] = useState(null)
+  const [eventBusyId, setEventBusyId] = useState(null)
+  const [topicBusy, setTopicBusy] = useState(false)
+  const [selectedTopic, setSelectedTopic] = useState('')
+  const [topicMoments, setTopicMoments] = useState([])
 
   const onFollow = async (u) => {
     try {
@@ -251,6 +260,37 @@ export default function DiscoverTab({ nav }) {
     setTagState(next)
     setTag(next)
     setSection('users')
+  }
+
+  const respondToActivity = async (moment, status) => {
+    setEventBusyId(moment.id)
+    try {
+      await api.respondMomentActivity(moment.id, status)
+      await refresh()
+      showToast(status === 'going' ? '报名成功' : status === 'interested' ? '已标记感兴趣' : '已取消报名')
+    } catch (e) {
+      showToast(e.message || '活动报名失败')
+    } finally {
+      setEventBusyId(null)
+    }
+  }
+
+  const openTopic = async (topic) => {
+    if (topicBusy) return
+    setSection('topics')
+    setTopicBusy(true)
+    setSelectedTopic(topic)
+    setTopicMoments([])
+    try {
+      await api.viewDiscoverTopic(topic)
+      const out = await api.discoverTopicMoments(topic)
+      setTopicMoments((out.moments || []).map((m) => shapeMoment(m, user?.id)))
+    } catch (e) {
+      setSelectedTopic('')
+      showToast(e.message || '话题加载失败')
+    } finally {
+      setTopicBusy(false)
+    }
   }
 
   const hotShaped = hot.map((m) => shapeMoment(m, user?.id))
@@ -344,7 +384,25 @@ export default function DiscoverTab({ nav }) {
               )}
             </section>
 
-            <PendingBlock />
+            <section className="disc-block">
+              <SectionTitle action="查看全部" onAction={() => setSection('topics')}>
+                <span className="st-ic"><IconFire size={15} /> 热门话题榜</span>
+              </SectionTitle>
+              <p className="disc-hint">按近 30 天公开动态数量与近 7 天独立浏览人数排序</p>
+              {!topics.length ? (
+                <Empty icon={<IconFire size={23} />} title="暂时没有热门话题" desc="公开动态添加话题后会出现在这里" />
+              ) : (
+                <div className="dt-list">
+                  {topics.slice(0, 5).map((item, i) => (
+                    <button key={item.topic} type="button" className="dt-row" onClick={() => openTopic(item.topic)}>
+                      <b className={i < 3 ? 'is-top' : ''}>{i + 1}</b>
+                      <span><strong>#{item.topic}</strong><em>{item.momentCount} 条动态 · {item.viewerCount} 人浏览</em></span>
+                      <i>查看</i>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
           </>
         )}
 
@@ -361,12 +419,12 @@ export default function DiscoverTab({ nav }) {
                 没坐标的退回按资料里的地区文字匹配。 */}
             {myGeo ? (
               <p className="disc-hint">
-                <IconEye size={13} /> 你已开启城市位置（{myGeo.city || myRegion}）。带「约 X km」的按<b>两地行政区划中心点</b>估算，
-                只到城市量级，不是谁的真实位置；其余人没开启，仍按资料地区匹配
+                <IconEye size={13} /> 你已主动开启城市级附近分享（{myGeo.city || myRegion}）。距离按<b>两地行政区划中心点</b>估算，
+                不使用实时位置；关闭后会清除保存的城市坐标
               </p>
             ) : (
               <p className="disc-hint">
-                <IconEye size={13} /> 未开启定位；按资料里填的地区匹配，只显示同城 / 同省，不显示公里数
+                <IconEye size={13} /> 附近分享默认关闭。发现页不会请求设备定位；当前只按资料地区匹配，不显示公里数。可在「我 → 编辑资料」主动定位并勾选参与附近
               </p>
             )}
             {nearby.length === 0 ? (
@@ -387,6 +445,49 @@ export default function DiscoverTab({ nav }) {
                   />
                 ))}
               </div>
+            )}
+          </section>
+        )}
+
+        {section === 'activities' && (
+          <section className="disc-block">
+            <SectionTitle action="刷新" onAction={refresh}>
+              <span className="st-ic"><IconCalendar size={15} /> 即将开始的活动</span>
+            </SectionTitle>
+            <p className="disc-hint">展示你有权查看且尚未开始的活动动态；发现页不读取设备位置。</p>
+            {!activities.length ? (
+              loading ? <p className="dg-muted">加载中…</p> : <Empty icon={<IconCalendar size={24} />} title="暂时没有即将开始的活动" desc="发布动态时添加活动卡片，其他人就能在这里报名" />
+            ) : (
+              <div className="da-list">
+                {activities.map((m) => <ActivityCard key={m.id} moment={shapeMoment(m, user?.id)} onRsvp={respondToActivity} busy={eventBusyId === m.id} />)}
+              </div>
+            )}
+          </section>
+        )}
+
+        {section === 'topics' && (
+          <section className="disc-block">
+            {selectedTopic ? (
+              <>
+                <SectionTitle action="返回榜单" onAction={() => setSelectedTopic('')}>
+                  <span className="st-ic"><IconFire size={15} /> #{selectedTopic}</span>
+                </SectionTitle>
+                {topicBusy ? <p className="dg-muted">加载话题动态…</p> : !topicMoments.length ? <Empty icon={<IconFire size={24} />} title="暂时没有可查看的动态" desc="该话题下没有你有权限查看的公开或好友动态" /> : (
+                  <div className="dt-moments">
+                    {topicMoments.map((m) => <button type="button" className="dt-moment" key={m.id} onClick={() => setDetail(m)}><b>{m.content || (m.media?.length ? '[媒体动态]' : '[活动动态]')}</b><em>{m.authorName} · {m.likeCount || 0} 赞 · {m.commentCount || 0} 评论</em></button>)}
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <SectionTitle action="刷新" onAction={refresh}><span className="st-ic"><IconFire size={15} /> 热门话题榜</span></SectionTitle>
+                <p className="disc-hint">榜单只统计公开动态；浏览人数按用户去重，近 7 天内打开话题会参与排序。</p>
+                {!topics.length ? <Empty icon={<IconFire size={24} />} title="暂时没有热门话题" desc="公开动态添加话题后会出现在这里" /> : (
+                  <div className="dt-list">
+                    {topics.map((item, i) => <button key={item.topic} type="button" className="dt-row" disabled={topicBusy} onClick={() => openTopic(item.topic)}><b className={i < 3 ? 'is-top' : ''}>{i + 1}</b><span><strong>#{item.topic}</strong><em>{item.momentCount} 条动态 · {item.viewerCount} 人浏览</em></span><i>{topicBusy ? '打开中' : '查看'}</i></button>)}
+                  </div>
+                )}
+              </>
             )}
           </section>
         )}

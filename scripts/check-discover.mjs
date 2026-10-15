@@ -11,8 +11,8 @@
  *      只弹一句 toast 的话这里会红。
  *   4. 标签筛选 → 结果集**真的变了**，且和服务端 `?tag=` 的结果**逐 id 相同**
  *      （前端自己 filter 会因分页漏人，所以筛选必须在服务端做）。
- *   5. 附近的人 → **没有公里数**。库里没有经纬度，「附近 2.3 km」只能是编的。
- *   6. 未接入的板块 → 必须是「禁用 + 写明原因」，而不是点了弹 toast。
+ *   5. 附近的人 → 只有双方主动授权城市分享后才允许展示行政区划中心点估算距离。
+ *   6. 活动 / 话题 → 接口有真实数据形状，发现页入口可打开，不留禁用占位。
  *
  * ⚠️ **前提要自己造，不能假设演示库是干净的**。
  *    发现页上就有「关注 / 加入」按钮，用户会在预览里随手点：他关注一圈、
@@ -47,6 +47,8 @@ const ok = (cond, label, extra = '') => {
   if (!cond) failures++
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+let featureMomentId = null
+let featureTopic = null
 
 /* ================= 后端 ================= */
 async function login(username) {
@@ -83,7 +85,7 @@ const dbIsMember = (cid, uid) =>
   !!db.prepare('SELECT 1 FROM conversation_members WHERE conversation_id = ? AND user_id = ?').get(cid, uid)
 
 const me = await login('chenmo')
-purgeDebris({ quiet: true })
+await purgeDebris({ quiet: true })
 const baseConvs = db.prepare('SELECT id, updated_at FROM conversations').all()
 
 /**
@@ -179,11 +181,13 @@ ok(
   '每个人都给了距离标签',
   JSON.stringify([...new Set(nb.users.map((u) => u.distanceLabel))])
 )
-ok(
-  !nb.users.some((u) => /\d/.test(String(u.distanceLabel || ''))),
-  '★ 距离标签里**没有一个数字**（没有定位数据，就不该出现公里数）',
-  JSON.stringify([...new Set(nb.users.map((u) => u.distanceLabel))])
-)
+if (!nb.myGeo) {
+  ok(!nb.users.some((u) => /\d/.test(String(u.distanceLabel || ''))), '未授权时距离标签不出现公里数')
+  const myLocation = db.prepare('SELECT city_public AS cityPublic, city_lat AS lat, city_lng AS lng FROM users WHERE id = ?').get(me.user.id)
+  if (!Number(myLocation.cityPublic)) ok(myLocation.lat == null && myLocation.lng == null, '关闭附近分享时数据库不保留城市坐标')
+} else {
+  ok(nb.users.every((u) => !/\d/.test(String(u.distanceLabel || '')) || u.distanceBasis === 'city-center'), '出现公里数时有城市中心点依据')
+}
 ok(
   nb.users.every((u) => [0, 1, 2].includes(u.near)),
   'near 只可能是 0 / 1 / 2（其它 / 同省 / 同城）',
@@ -210,6 +214,37 @@ ok(
   '每个标签的人数 = 库里真填了这个标签的人数',
   JSON.stringify(tagRes.tags.slice(0, 4).map((t) => `${t.tag}:${t.count}`))
 )
+
+featureTopic = `自检话题${Date.now()}`
+const featurePost = await j('POST', '/moments', {
+  content: '发现页活动与话题回归数据',
+  topic: featureTopic,
+  visibility: 'public',
+  card: { kind: 'activity', data: { title: '发现页自检活动', startsAt: Date.now() + 3 * 60 * 60 * 1000, location: '自检地点', description: '仅用于回归，结束后自动清理。' } },
+}, me.auth)
+featureMomentId = featurePost.d?.id || null
+ok(featurePost.status === 201 && featureMomentId, '活动动态可发布并返回真实记录')
+
+const activityRes = await j('GET', '/discover/activities?limit=30', null, me.auth)
+ok(activityRes.status === 200 && Array.isArray(activityRes.d.activities), '活动接口返回当前用户有权访问的活动数组')
+ok((activityRes.d.activities || []).some((m) => m.id === featureMomentId && m.card?.kind === 'activity' && m.card.data?.startsAt > Date.now()), '活动列表包含本人可见的未开始活动卡片')
+const rsvp = await j('POST', `/moments/${featureMomentId}/activity-rsvp`, { status: 'going' }, me.auth)
+ok(rsvp.status === 200 && rsvp.d.card?.myStatus === 'going', '活动报名状态写入并回读')
+const rsvpRow = db.prepare('SELECT status FROM moment_card_rsvps WHERE moment_id = ? AND user_id = ?').get(featureMomentId, me.user.id)
+ok(rsvpRow?.status === 'going', '报名记录真实写入 moment_card_rsvps')
+const cancelRsvp = await j('POST', `/moments/${featureMomentId}/activity-rsvp`, { status: null }, me.auth)
+ok(cancelRsvp.status === 200 && !db.prepare('SELECT 1 FROM moment_card_rsvps WHERE moment_id = ? AND user_id = ?').get(featureMomentId, me.user.id), '取消报名会删除本人报名记录')
+
+const topicRes = await j('GET', '/discover/topics', null, me.auth)
+ok(topicRes.status === 200 && Array.isArray(topicRes.d.topics), '热门话题接口返回真实聚合结果')
+const featureTopicRow = topicRes.d.topics?.find((t) => t.topic === featureTopic)
+ok(featureTopicRow?.momentCount === 1 && featureTopicRow.viewerCount === 0, '话题榜聚合公开动态且初始浏览人数为零', JSON.stringify(featureTopicRow))
+const viewedTopic = await j('POST', `/discover/topics/${encodeURIComponent(featureTopic)}/view`, {}, me.auth)
+ok(viewedTopic.status === 200, '打开话题成功记录浏览行为')
+const topicMoments = await j('GET', `/discover/topics/${encodeURIComponent(featureTopic)}/moments`, null, me.auth)
+ok(topicMoments.status === 200 && topicMoments.d.moments?.some((m) => m.id === featureMomentId), '话题详情只返回有权限查看的对应动态')
+const rankedAgain = await j('GET', '/discover/topics', null, me.auth)
+ok(rankedAgain.d.topics?.find((t) => t.topic === featureTopic)?.viewerCount === 1, '话题浏览人数按用户去重计数')
 ok(
   tagRes.tags.filter((t) => !t.mine).every((t, i, a) => i === 0 || a[i - 1].count >= t.count),
   '非我标签按人数降序'
@@ -344,7 +379,7 @@ const tapAt = async (sel, fx = 0.5, fy = 0.5) => {
 }
 
 const HELP = `
-window.__tab = (i) => { const t=[...document.querySelectorAll('.tabbar .tab')][i]; if(!t) return false; t.click(); return true }
+window.__tab = (label) => { const t=[...document.querySelectorAll('.tabbar .tab')].find(x=>x.textContent.includes(label)); if(!t) return false; t.click(); return true }
 /* 分段切换 */
 window.__seg = (label) => { const c=[...document.querySelectorAll('.disc-segs .chip')].find(x=>x.textContent.trim()===label); if(!c) return false; c.click(); return true }
 /* 标签云里点某个标签 */
@@ -366,6 +401,7 @@ window.__disc = () => ({
     id: +e.dataset.id,
     name: e.querySelector('.nb-meta b')?.textContent.trim() || null,
     dist: e.querySelector('.nb-dist')?.textContent.trim() || null,
+    basis: e.dataset.distanceBasis || null,
     same: !!e.querySelector('.nb-dist.is-same'),
     say: !!e.querySelector('.nb-btn--primary'),
   })),
@@ -379,12 +415,8 @@ window.__disc = () => ({
     by: e.querySelector('.hot-body em')?.textContent.trim() || null,
     heat: e.querySelector('.hot-heat')?.textContent.trim() || null,
   })),
-  pending: [...document.querySelectorAll('.dg-pending-item')].map(e=>({
-    label: e.querySelector('.dg-pending-body b')?.textContent.trim() || null,
-    why: e.querySelector('.dg-pending-body em')?.textContent.trim() || null,
-    tag: e.querySelector('.dg-pending-tag')?.textContent.trim() || null,
-    button: !!e.querySelector('button'),
-  })),
+  activityCards: [...document.querySelectorAll('.da-card')].map(e=>({id:+e.dataset.id, title:e.querySelector('h3')?.textContent.trim() || null, actions:e.querySelectorAll('.da-actions button').length})),
+  topicRows: [...document.querySelectorAll('.dt-row')].map(e=>e.querySelector('strong')?.textContent.trim() || null),
   filterChip: document.querySelector('.dg-filter .chip')?.textContent.trim() || null,
   hint: [...document.querySelectorAll('.disc-hint')].map(e=>e.textContent.trim()),
   room: !!document.querySelector('.room'),
@@ -406,7 +438,7 @@ try {
   }
   await sleep(700)
   await js(HELP)
-  await js(`window.__tab(2)`) // 发现
+  await js(`window.__tab('发现')`)
   ok(await waitFor(`!!document.querySelector('.disc-segs')`, 12000), '进入发现页')
   /* 「推荐」分段里渲染的是标签云 + 热门动态，`.rc-row` 只属于「用户」分段 ——
      在这里等 `.rc-row` 会一直等到超时（第一版就是这么误报的）。 */
@@ -424,7 +456,7 @@ try {
 
   /* ---------- 分段 ---------- */
   console.log('\n─── 分段与结构 ───')
-  ok(JSON.stringify(d.segs) === JSON.stringify(['推荐', '附近', '群组', '用户']), '四个分段齐全', JSON.stringify(d.segs))
+  ok(JSON.stringify(d.segs) === JSON.stringify(['推荐', '附近', '活动', '话题', '群组', '用户']), '六个分段齐全', JSON.stringify(d.segs))
   ok(d.activeSeg === '推荐', '默认停在「推荐」', String(d.activeSeg))
   ok(d.chips.length === tagRes.tags.length, '标签云渲染的标签数 = 后端聚合数', `${d.chips.length} / ${tagRes.tags.length}`)
   ok(
@@ -460,17 +492,22 @@ try {
   ok(await waitFor(`!document.querySelector('.md-root')`, 8000), '从详情页返回')
   await js(HELP)
 
-  /* ---------- 未接入：禁用 + 写明原因，不做假按钮 ---------- */
-  console.log('\n─── 未接入板块 ───')
+  /* ---------- 活动与话题入口 ---------- */
+  console.log('\n─── 活动与话题入口 ───')
   d = await js(`window.__disc()`)
-  ok(d.pending.length === 3, '列出 3 个未接入项', JSON.stringify(d.pending.map((p) => p.label)))
-  ok(d.pending.every((p) => p.tag === '未接入'), '每一项都标了「未接入」', JSON.stringify(d.pending.map((p) => p.tag)))
-  ok(
-    d.pending.every((p) => p.why && p.why.length >= 4),
-    '每一项都写明了**为什么**做不了',
-    JSON.stringify(d.pending.map((p) => p.why))
-  )
-  ok(d.pending.every((p) => p.button === false), '★ 未接入项里没有可点的 button（不是「点了弹 toast 假装成功」的假入口）')
+  ok(d.segs.includes('活动') && d.segs.includes('话题'), '发现页提供活动与话题入口', JSON.stringify(d.segs))
+  await js(`window.__seg('活动')`)
+  await sleep(250)
+  ok(await js(`!!document.querySelector('.da-list') || !!document.querySelector('.disc-block .empty') || !!document.querySelector('.dg-muted')`), '活动分段打开并显示列表或空态')
+  ok(await js(`!!document.querySelector('.da-card[data-id="${featureMomentId}"] .da-actions .is-primary')`), '活动卡片提供可用的「我要参加」按钮')
+  await tapAt(`.da-card[data-id="${featureMomentId}"] .da-actions .is-primary`)
+  await sleep(700)
+  ok(db.prepare('SELECT status FROM moment_card_rsvps WHERE moment_id = ? AND user_id = ?').get(featureMomentId, me.user.id)?.status === 'going', '界面报名按钮真实写入报名表')
+  await js(`window.__seg('话题')`)
+  await sleep(250)
+  ok(await js(`!!document.querySelector('.dt-list') || !!document.querySelector('.empty')`), '话题分段打开并显示榜单或空态')
+  await js(`(() => { const b=[...document.querySelectorAll('.dt-row')].find(x=>x.textContent.includes(${JSON.stringify(featureTopic)})); b?.click(); return !!b })()`)
+  ok(await waitFor(`!!document.querySelector('.dt-moments')`, 10000), '打开热门话题后显示对应动态')
 
   /* ---------- 用户分段：关注真的落库 ---------- */
   console.log('\n─── 关注：真的写进 follows ───')
@@ -549,11 +586,11 @@ try {
   await js(HELP)
   d = await js(`window.__disc()`)
   ok(d.nearby.length === nb.users.length, '附近卡片数 = 后端条数', `${d.nearby.length} / ${nb.users.length}`)
-  ok(
-    d.nearby.every((p) => p.dist && !/\d/.test(p.dist)),
-    '★ 卡片上的距离标签里**没有数字**（界面上不出现任何公里数）',
-    JSON.stringify(d.nearby.map((p) => p.dist))
-  )
+  if (!nb.myGeo) {
+    ok(d.nearby.every((p) => p.dist && !/\d/.test(p.dist)), '未授权时附近卡片不显示公里数', JSON.stringify(d.nearby.map((p) => p.dist)))
+  } else {
+    ok(d.nearby.every((p) => !/\d/.test(p.dist || '') || nb.users.find((u) => u.id === p.id)?.distanceBasis === 'city-center'), '公里数只在城市中心点依据下出现')
+  }
   ok(
     d.nearby.every((p) => ['同城', '同省'].includes(p.dist) || p.dist.length >= 2),
     '距离只可能是「同城 / 同省 / 地区名」',
@@ -568,11 +605,7 @@ try {
   if (sameCount > 0) {
     ok(d.nearby[0]?.same === true, '★ 排在第一的是同城的人（排序真的生效了）', `${d.nearby[0]?.name} / ${d.nearby[0]?.dist}`)
   }
-  ok(
-    d.hint.some((h) => /未开启定位/.test(h)),
-    '★ 页面上写明了「未开启定位」，把依据说清楚',
-    JSON.stringify(d.hint)
-  )
+  ok(d.hint.some((h) => /附近分享默认关闭|主动开启城市级附近分享/.test(h)), '页面说明附近分享授权和距离依据', JSON.stringify(d.hint))
   await shoot(cdp, `${OUT}/05-nearby.png`)
 
   /* ---------- 打招呼：真的进房间 ---------- */
@@ -617,7 +650,7 @@ try {
 
   /* ---------- 群组：加入真的进成员表 ---------- */
   console.log('\n─── 加入兴趣群 ───')
-  await js(`window.__tab(2)`)
+  await js(`window.__tab('发现')`)
   await waitFor(`!!document.querySelector('.disc-segs')`, 8000)
   await js(HELP)
   await js(`window.__seg('群组')`)
@@ -654,6 +687,11 @@ try {
 } finally {
   proc.kill()
 
+  if (featureMomentId) {
+    await j('DELETE', `/moments/${featureMomentId}`, null, me.auth).catch(() => {})
+    if (featureTopic) db.prepare('DELETE FROM moment_topic_views WHERE topic = ? AND user_id = ?').run(featureTopic, me.user.id)
+  }
+
   /* 兜底还原。只动这一轮自己碰过的东西 —— 不做全表还原，
      因为用户可能同时在预览里手测，一把梭会把他的改动一起冲掉。 */
   if (joinedGroupId && dbIsMember(joinedGroupId, me.user.id)) {
@@ -670,7 +708,7 @@ try {
     if (c.id === joinedGroupId) db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(c.updated_at, c.id)
   }
   /* 临时群、以及万一留下的自检会话，一起清掉（只认「自检·」前缀和无成员孤儿） */
-  purgeDebris({ quiet: true })
+  await purgeDebris({ quiet: true })
 
   const noise = /favicon|DevTools|ExperimentalWarning|Autoplay is only allowed/i
   const real = [...new Set(issues.filter((x) => !noise.test(x)))]

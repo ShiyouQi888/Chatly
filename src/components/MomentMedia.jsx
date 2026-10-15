@@ -11,6 +11,7 @@
  *   `VideoPlayer` 按真实宽高算。
  */
 import VideoPlayer from './VideoPlayer.jsx'
+import { mediaUrl } from '../api/client.js'
 import './moment-media.css'
 
 /** 和服务端 `upload.js` 的 VIDEO_EXT 同一份清单（老数据的 kind 可能是 image） */
@@ -37,7 +38,7 @@ export default function MomentMedia({ media, prefix = 'mgrid', onOpen }) {
         {items.filter(isVideoItem).map((it, i) => (
           <VideoPlayer
             key={(it.url || '') + i}
-            src={it.url}
+            src={mediaUrl(it.url)}
             /* 宽高时长是发布时读出来落库的：列表**在加载视频之前**就能按真实比例占位，
                不会先按 16:9 渲染再跳一下。没有的话组件自己兜 16:9。 */
             width={it.width}
@@ -63,7 +64,7 @@ export default function MomentMedia({ media, prefix = 'mgrid', onOpen }) {
           onClick={() => onOpen?.(it)}
           aria-label={`查看第 ${i + 1} 张`}
         >
-          <img src={it.url} alt={it.fileName || '配图'} loading="lazy" />
+          <img src={mediaUrl(it.url)} alt={it.fileName || '配图'} loading="lazy" />
         </button>
       ))}
     </div>

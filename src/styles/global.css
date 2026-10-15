@@ -154,8 +154,14 @@ img {
  * ⚠️ 选择器必须带 `.phone-screen`。写成单个 `.cover-tabbar` 是**不生效**的：
  *    各屏自己的 CSS 在 global.css 之后加载，双方同为单类选择器（优先级相同）时
  *    后出现的赢 —— `.mc-root { inset: 0 }` 里的 `bottom: 0` 会把这条盖掉。
- *    带上祖先选择器优先级变成 (0,2,0)，稳定压过单类规则。 */
-.phone-screen .cover-tabbar {
+ *    带上祖先选择器优先级变成 (0,2,0)，稳定压过单类规则。
+ *
+ * ⚠️ `.sub-page` 也要在这里列上：设置类子页（账号与安全 / 隐私 / 通用 / 主题 /
+ *    通知 / 帮助 / 关于）用的是这个类名，而且它们的 HTML 上**没有**
+ *    `cover-tabbar`（组件自带根节点，没法像 `.subpage` 那样由外层补），
+ *    只靠 me-tab.css 里的 `inset: 0` 会正好停在导航栏上沿、底部漏一条。 */
+.phone-screen .cover-tabbar,
+.phone-screen .sub-page {
   bottom: calc(-1 * (var(--tabbar-h) + env(safe-area-inset-bottom)));
 }
 
@@ -166,4 +172,15 @@ img {
     animation-duration: 0.001ms !important;
     transition-duration: 0.001ms !important;
   }
+}
+
+/* 「我 → 主题外观 → 动效开关」关掉时走同一套规则。
+ * ⚠️ 必须和上面那段媒体查询**保持逐字一致**：系统偏好和用户开关
+ *    表现不一致的话，「我关了动效但还有动画」就会变成一个查不出来的 bug。
+ *    带 `:root` 是为了压过各屏自己的 `animation` 简写。 */
+:root.no-motion *,
+:root.no-motion *::before,
+:root.no-motion *::after {
+  animation-duration: 0.001ms !important;
+  transition-duration: 0.001ms !important;
 }
