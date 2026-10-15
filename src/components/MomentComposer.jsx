@@ -51,6 +51,11 @@ function fmtBytes(n) {
   return `${Math.max(1, Math.round(b / 1024))} KB`
 }
 
+/** HTML maxLength counts UTF-16 code units; product limits count Unicode code points. */
+function limitCodePoints(value, max) {
+  return [...String(value)].slice(0, max).join('')
+}
+
 const SCOPES = [
   { v: 'public', label: '公开', desc: '所有人可见' },
   { v: 'friends', label: '仅好友', desc: '互相关注的人可见' },
@@ -288,9 +293,8 @@ export default function MomentComposer({ open, editing, defaultVisibility = 'pub
           className="mc-textarea"
           rows={5}
           value={content}
-          maxLength={CONTENT_MAX}
           placeholder="分享此刻的想法…"
-          onChange={(e) => setContent(e.target.value)}
+          onChange={(e) => setContent(limitCodePoints(e.target.value, CONTENT_MAX))}
         />
 
         {/* 媒体：真实上传的结果，不是本地预览 —— 发布失败不会留下孤儿文件 */}
@@ -389,9 +393,8 @@ export default function MomentComposer({ open, editing, defaultVisibility = 'pub
           </span>
           <input
             value={topic}
-            maxLength={TOPIC_MAX}
             placeholder="话题，例如：周末出逃"
-            onChange={(e) => setTopic(e.target.value)}
+            onChange={(e) => setTopic(limitCodePoints(e.target.value, TOPIC_MAX))}
           />
         </div>
 
@@ -467,11 +470,11 @@ export default function MomentComposer({ open, editing, defaultVisibility = 'pub
           </div>
           {card?.kind === 'poll' && (
             <div className="mc-card-editor">
-              <label className="mc-card-label">投票问题<input value={card.data.question} maxLength={120} placeholder="你更喜欢哪种？" onChange={(e) => updateCard('question', e.target.value)} /></label>
+              <label className="mc-card-label">投票问题<input value={card.data.question} placeholder="你更喜欢哪种？" onChange={(e) => updateCard('question', limitCodePoints(e.target.value, 120))} /></label>
               <div className="mc-card-options">
                 {card.data.options.map((option, index) => (
                   <div className="mc-card-option" key={index}>
-                    <input aria-label={`选项 ${index + 1}`} value={option} maxLength={60} placeholder={`选项 ${index + 1}`} onChange={(e) => updateCard('options', card.data.options.map((x, i) => i === index ? e.target.value : x))} />
+                    <input aria-label={`选项 ${index + 1}`} value={option} placeholder={`选项 ${index + 1}`} onChange={(e) => updateCard('options', card.data.options.map((x, i) => i === index ? limitCodePoints(e.target.value, 60) : x))} />
                     {card.data.options.length > 2 && <button type="button" onClick={() => updateCard('options', card.data.options.filter((_, i) => i !== index))} aria-label={`删除选项 ${index + 1}`}>移除</button>}
                   </div>
                 ))}
@@ -482,17 +485,17 @@ export default function MomentComposer({ open, editing, defaultVisibility = 'pub
           )}
           {card?.kind === 'activity' && (
             <div className="mc-card-editor">
-              <label className="mc-card-label">活动名称<input value={card.data.title} maxLength={100} placeholder="周末一起去徒步" onChange={(e) => updateCard('title', e.target.value)} /></label>
+              <label className="mc-card-label">活动名称<input value={card.data.title} placeholder="周末一起去徒步" onChange={(e) => updateCard('title', limitCodePoints(e.target.value, 100))} /></label>
               <label className="mc-card-label">开始时间<input type="datetime-local" value={card.data.startsAt} onChange={(e) => updateCard('startsAt', e.target.value)} /></label>
-              <label className="mc-card-label">活动地点<input value={card.data.location} maxLength={120} placeholder="填写集合地点（选填）" onChange={(e) => updateCard('location', e.target.value)} /></label>
-              <label className="mc-card-label">活动说明<textarea value={card.data.description} maxLength={500} placeholder="补充活动安排（选填）" onChange={(e) => updateCard('description', e.target.value)} /></label>
+              <label className="mc-card-label">活动地点<input value={card.data.location} placeholder="填写集合地点（选填）" onChange={(e) => updateCard('location', limitCodePoints(e.target.value, 120))} /></label>
+              <label className="mc-card-label">活动说明<textarea value={card.data.description} placeholder="补充活动安排（选填）" onChange={(e) => updateCard('description', limitCodePoints(e.target.value, 500))} /></label>
             </div>
           )}
           {card?.kind === 'link' && (
             <div className="mc-card-editor">
-              <label className="mc-card-label">链接地址<input type="url" value={card.data.url} maxLength={2048} placeholder="https://example.com" onChange={(e) => updateCard('url', e.target.value)} /></label>
-              <label className="mc-card-label">卡片标题<input value={card.data.title} maxLength={120} placeholder="给链接起个标题" onChange={(e) => updateCard('title', e.target.value)} /></label>
-              <label className="mc-card-label">链接简介<textarea value={card.data.description} maxLength={300} placeholder="简单介绍这个链接（选填）" onChange={(e) => updateCard('description', e.target.value)} /></label>
+              <label className="mc-card-label">链接地址<input type="url" value={card.data.url} placeholder="https://example.com" onChange={(e) => updateCard('url', limitCodePoints(e.target.value, 2048))} /></label>
+              <label className="mc-card-label">卡片标题<input value={card.data.title} placeholder="给链接起个标题" onChange={(e) => updateCard('title', limitCodePoints(e.target.value, 120))} /></label>
+              <label className="mc-card-label">链接简介<textarea value={card.data.description} placeholder="简单介绍这个链接（选填）" onChange={(e) => updateCard('description', limitCodePoints(e.target.value, 300))} /></label>
             </div>
           )}
         </div>

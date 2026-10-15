@@ -384,7 +384,8 @@ export async function getMoment(momentId, viewerId) {
 
 function cleanText(v, max) {
   if (v == null) return null
-  const s = String(v).trim().slice(0, max)
+  /* 按 Unicode 码点计数，与前端计数一致；String#slice 会把补充平面字符拆成代理项。 */
+  const s = [...String(v).trim()].slice(0, max).join('')
   return s || null
 }
 

@@ -1190,6 +1190,9 @@ export default function ChatRoom({ chat, onBack, jumpTo, onJumped }) {
   const pollGate = speakGate
 
   const createPoll = async (payload) => {
+    /* PollSheet 打开后禁言状态也可能通过 WS 更新；提交时再次读取同一个 gate，
+       避免弹层仍开着时沿用旧权限。服务端 canSpeak() 仍是最终防线。 */
+    if (!speakGate.ok) throw new Error(`${speakGate.reason}，暂不能发起投票`)
     const { poll } = await sendPollMessage({ conversationId: chat.id, ...payload })
     /* 发起后把详情层直接打开？**不开** —— 投票已经在聊天记录里了，
        再叠一个整屏层会挡住「我刚发出去的那条」。只把它滚进视野。 */

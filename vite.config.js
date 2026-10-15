@@ -1,5 +1,10 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const projectRoot = path.dirname(fileURLToPath(import.meta.url))
 
 /**
  * 表情素材的缓存头。
@@ -33,7 +38,8 @@ function emojiCacheHeaders() {
 }
 
 export default defineConfig({
-  plugins: [react(), emojiCacheHeaders()],
+  plugins: [react(), tailwindcss(), emojiCacheHeaders()],
+  resolve: { alias: { '@': path.resolve(projectRoot, 'src') } },
   server: {
     host: '127.0.0.1',
     strictPort: true,

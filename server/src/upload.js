@@ -154,8 +154,8 @@ const VIDEO_MAGIC = {
 export function looksLikeVideo(filePath) {
   const ext = String(path.extname(filePath || '')).slice(1).toLowerCase()
   const check = VIDEO_MAGIC[ext]
-  // 清单里没有的扩展名不该走到这里（fileFilter 已经拦过），放行比误杀好
-  if (!check) return true
+  // 未知扩展名没有可核对的签名，默认拒绝；不能把 fileFilter 的客户端元数据当作证明。
+  if (!check) return false
   let fh
   try {
     fh = fs.openSync(filePath, 'r')

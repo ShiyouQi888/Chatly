@@ -26,31 +26,63 @@ import './map-view.css'
  */
 
 let sdkPromise = null
+let sdkScript = null
+
+function isTMapReady(TMap) {
+  return ['Map', 'LatLng', 'MultiMarker', 'MarkerStyle'].every((key) => typeof TMap?.[key] === 'function')
+}
+
+function clearFailedSdk(promise) {
+  if (sdkPromise !== promise) return
+  sdkPromise = null
+  if (sdkScript) {
+    sdkScript.onload = null
+    sdkScript.onerror = null
+    sdkScript.remove()
+    sdkScript = null
+  }
+  /* 某些失败响应仍可能留下一个不完整的全局对象；让下一次重试重新下载 SDK。 */
+  if (typeof window !== 'undefined' && window.TMap && !isTMapReady(window.TMap)) {
+    try {
+      delete window.TMap
+    } catch {
+      window.TMap = undefined
+    }
+  }
+}
 
 function loadTMap() {
-  if (typeof window !== 'undefined' && window.TMap) return Promise.resolve(window.TMap)
+  if (typeof window !== 'undefined' && isTMapReady(window.TMap)) return Promise.resolve(window.TMap)
+  if (typeof window !== 'undefined' && window.TMap && !isTMapReady(window.TMap)) {
+    try {
+      delete window.TMap
+    } catch {
+      window.TMap = undefined
+    }
+  }
   if (sdkPromise) return sdkPromise
 
-  sdkPromise = new Promise((resolve, reject) => {
+  const pending = new Promise((resolve, reject) => {
     const key = import.meta.env.VITE_TMAP_KEY
     if (!key) {
       reject(new Error('未配置 VITE_TMAP_KEY'))
       return
     }
     const s = document.createElement('script')
+    sdkScript = s
+    s.dataset.chatlyTmapSdk = 'true'
     s.src = `https://map.qq.com/api/gljs?v=1.exp&key=${encodeURIComponent(key)}`
     s.async = true
-    s.onload = () => (window.TMap ? resolve(window.TMap) : reject(new Error('SDK 已加载但没有挂上 TMap')))
+    s.onload = () => (isTMapReady(window.TMap) ? resolve(window.TMap) : reject(new Error('SDK 已加载但接口不完整')))
     s.onerror = () => reject(new Error('地图 SDK 下载失败（离线或被网络拦截）'))
     document.head.appendChild(s)
   })
+  sdkPromise = pending
 
   /* 失败要把单例清掉，否则「重试」永远拿到同一个 rejected promise —— 点了没反应。
-     和扫一扫里 `setResult(null)` 触发不了重试是同一类坑。 */
-  sdkPromise.catch(() => {
-    sdkPromise = null
-  })
-  return sdkPromise
+     同时移除失败脚本和不完整全局对象，避免下次被浏览器/全局缓存复用坏实例。 */
+  pending.catch(() => clearFailedSdk(pending))
+  return pending
 }
 
 /** 自画的定位图钉（内联 data URI）。**不引用腾讯 demo 里的图片** —— 那些路径是官方演示专用的。 */

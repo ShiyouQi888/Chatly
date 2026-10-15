@@ -235,7 +235,7 @@ async function announcePresence(userId, onlineFlag, { force = false } = {}) {
  * 于是「一直显示在线」。
  */
 export function broadcastVisibilityToggle(userId, visible) {
-  void syncVisibility(userId, visible)
+  return syncVisibility(userId, visible)
 }
 
 async function syncVisibility(userId, visible) {

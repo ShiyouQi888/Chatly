@@ -69,7 +69,7 @@ router.put('/:key', authRequired, async (req, res) => {
 
   /* 需要立即改变他人可见状态的设置，在持久化后同步推送。 */
   if (key === 'online_status_visible') {
-    broadcastVisibilityToggle(userId, normalizePrivacyValue(key, value))
+    await broadcastVisibilityToggle(userId, normalizePrivacyValue(key, value))
   }
   if (key === 'read_receipts') await syncReadReceiptVisibility(userId, value !== false)
 
@@ -96,7 +96,7 @@ router.put('/', authRequired, async (req, res) => {
 
   // 同单键更新：批量里带了这一项就同步一次（放在事务**之后** —— 广播不该在事务里做）
   if (settings.online_status_visible !== undefined) {
-    broadcastVisibilityToggle(userId, normalizePrivacyValue('online_status_visible', settings.online_status_visible))
+    await broadcastVisibilityToggle(userId, normalizePrivacyValue('online_status_visible', settings.online_status_visible))
   }
   if (settings.read_receipts !== undefined) await syncReadReceiptVisibility(userId, settings.read_receipts !== false)
 
