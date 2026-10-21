@@ -3,7 +3,7 @@
  * 私聊消息正文不开放给后台，避免运营权限变成读取私人聊天的入口。
  */
 import { Router } from 'express'
-import { authRequired } from '../auth.js'
+import { authRequired, hashPassword, verifyPassword, selfUser, USER_COLS } from '../auth.js'
 import { q, tx, info, DB_DRIVER } from '../db.js'
 import { status as redisStatus } from '../redis.js'
 import { removeUpload } from '../upload.js'
@@ -35,11 +35,14 @@ function isConfiguredAdmin(account, user) {
 }
 
 r.use(async (req, res, next) => {
+  const configuredRoot = await q.get('SELECT user_id FROM admin_root WHERE singleton = 1')
   const adminAccount = configuredAdminAccount()
-  const isOwner = isConfiguredAdmin(adminAccount, req.user)
+  const isOwner = configuredRoot
+    ? String(configuredRoot.user_id) === String(req.user.id)
+    : isConfiguredAdmin(adminAccount, req.user)
   const staff = isOwner ? null : await q.get('SELECT role FROM admin_staff WHERE user_id = ?', req.user.id)
-  if (!adminAccount) {
-    return res.status(503).json({ error: '运营后台尚未配置固定管理员，请在服务端环境变量设置 ADMIN_ACCOUNT 并重启服务' })
+  if (!configuredRoot && !adminAccount) {
+    return res.status(503).json({ error: '尚未初始化固定管理员，请在服务端配置 ADMIN_USERNAME 和 ADMIN_PASSWORD 后重启服务' })
   }
   if (!isOwner && !staff) {
     return res.status(403).json({ error: `当前账号 @${req.user.username}（ID ${req.user.id}）没有运营后台权限。请将固定管理员账号配置为 ADMIN_ACCOUNT。` })
@@ -110,7 +113,7 @@ r.get('/overview', requirePermission('overview'), async (req, res) => {
       feedback24h: Number(recentFeedback?.n) || 0,
     },
     service: { uptimeSeconds: Math.round(process.uptime()), database: dbHealth, redis: redisStatus() },
-    operator: { role: req.adminRole, permissions: req.adminPermissions },
+    operator: { role: req.adminRole, permissions: req.adminPermissions, username: req.user.username },
     generatedAt: now,
   })
 })
@@ -225,7 +228,8 @@ r.patch('/users/:id/status', requirePermission('users.manage'), async (req, res)
   if (id === Number(req.user.id) && banned) return res.status(400).json({ error: '不能停用当前管理员账号' })
   const target = await q.get('SELECT id, username FROM users WHERE id = ?', id)
   if (!target) return res.status(404).json({ error: '用户不存在' })
-  if (isConfiguredAdmin(configuredAdminAccount(), target)) {
+  const root = await q.get('SELECT user_id FROM admin_root WHERE singleton = 1')
+  if (root && String(root.user_id) === String(target.id) || isConfiguredAdmin(configuredAdminAccount(), target)) {
     return res.status(403).json({ error: '不能停用后台管理员账号' })
   }
   if (await q.get('SELECT user_id FROM admin_staff WHERE user_id = ?', id)) return res.status(403).json({ error: '不能停用后台运营成员账号，请先移除其后台角色' })
@@ -400,6 +404,40 @@ r.get('/staff', requireOwner, async (_req, res) => {
      ORDER BY s.created_at DESC`
   )
   res.json({ staff: rows.map((row) => ({ ...row, userId: Number(row.userId), createdAt: Number(row.createdAt) })) })
+})
+
+r.post('/credentials', requireOwner, async (req, res) => {
+  const currentPassword = String(req.body?.currentPassword || '')
+  const username = String(req.body?.username || '').trim()
+  const newPassword = String(req.body?.newPassword || '')
+  if (!currentPassword || !username || !newPassword) {
+    return res.status(400).json({ error: '请填写当前密码、管理员账号和新密码' })
+  }
+  if (username.length < 2 || username.length > 32 || !/^[\p{L}\p{N}._-]+$/u.test(username)) {
+    return res.status(400).json({ error: '账号需为 2 到 32 位字母、数字、点、下划线或短横线' })
+  }
+  if (newPassword.length < 12 || newPassword.length > 128) {
+    return res.status(400).json({ error: '新密码需为 12 到 128 个字符' })
+  }
+  const current = await q.get('SELECT password_hash FROM users WHERE id = ?', req.user.id)
+  if (!current || !verifyPassword(currentPassword, current.password_hash)) {
+    return res.status(401).json({ error: '当前密码不正确' })
+  }
+  const duplicate = await q.get('SELECT id FROM users WHERE lower(username) = lower(?) AND id != ? LIMIT 1', username, req.user.id)
+  if (duplicate) return res.status(409).json({ error: '这个账号已被其他用户使用' })
+  if (username === req.user.username && verifyPassword(newPassword, current.password_hash)) {
+    return res.status(400).json({ error: '新账号和新密码都没有变化' })
+  }
+
+  await tx(async () => {
+    await q.run('UPDATE users SET username = ?, password_hash = ? WHERE id = ?', username, hashPassword(newPassword), req.user.id)
+    await audit(req.user.id, 'admin.credentials.update', 'admin_root', req.user.id, { usernameChanged: username !== req.user.username })
+  })
+  const otherDevices = await q.all('SELECT id FROM user_devices WHERE user_id = ? AND id != ?', req.user.id, req.deviceId)
+  await q.run('DELETE FROM user_devices WHERE user_id = ? AND id != ?', req.user.id, req.deviceId)
+  for (const device of otherDevices) revokeDeviceSockets(req.user.id, device.id)
+  const updated = await q.get(`SELECT ${USER_COLS} FROM users WHERE id = ?`, req.user.id)
+  res.json({ ok: true, user: selfUser(updated), revokedDevices: otherDevices.length })
 })
 
 r.post('/staff', requireOwner, async (req, res) => {

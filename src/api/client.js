@@ -220,7 +220,7 @@ export const api = {
   votePoll: (pollId, optionIds) => request(`/polls/${pollId}/vote`, { method: 'POST', body: { optionIds } }),
   closePoll: (pollId) => request(`/polls/${pollId}/close`, { method: 'POST' }),
 
-  /* ---- 运营管理后台（所有权限由服务端 ADMIN_USER_IDS 再校验） ---- */
+  /* ---- 运营管理后台（权限均由服务端固定管理员身份与角色再次校验） ---- */
   adminOverview: () => request('/admin/overview'),
   adminAnalytics: (days = 7) => request(`/admin/analytics?days=${days}`),
   adminUsers: ({ q = '', status = '', page = 1, limit = 20 } = {}) =>
@@ -245,6 +245,7 @@ export const api = {
   adminStaff: () => request('/admin/staff'),
   adminSetStaffRole: (userId, role) => request('/admin/staff', { method: 'POST', body: { userId, role } }),
   adminRemoveStaff: (userId) => request(`/admin/staff/${userId}`, { method: 'DELETE' }),
+  adminUpdateCredentials: (credentials) => request('/admin/credentials', { method: 'POST', body: credentials }),
 
   /* ---- 消息收藏（PRD §9） ----
      收藏是**快照**：原消息撤回后收藏里的内容仍在，所以列表出参自带正文与文件地址，

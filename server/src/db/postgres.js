@@ -535,6 +535,11 @@ CREATE TABLE IF NOT EXISTS admin_staff (
   created_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
   created_at  BIGINT NOT NULL DEFAULT ((EXTRACT(EPOCH FROM now()) * 1000)::bigint)
 );
+CREATE TABLE IF NOT EXISTS admin_root (
+  singleton   INTEGER PRIMARY KEY CHECK (singleton = 1),
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at  BIGINT NOT NULL DEFAULT ((EXTRACT(EPOCH FROM now()) * 1000)::bigint)
+);
 CREATE TABLE IF NOT EXISTS auth_identities (
   kind        TEXT NOT NULL CHECK (kind IN ('phone','email')),
   address     TEXT NOT NULL,

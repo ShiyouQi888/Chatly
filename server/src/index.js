@@ -26,6 +26,7 @@ import feedbackRoutes from './routes/feedback.js'
 import notificationRoutes from './routes/notifications.js'
 import statusRoutes from './routes/statuses.js'
 import adminRoutes from './routes/admin.js'
+import { bootstrapAdmin } from './admin-bootstrap.js'
 import { attachWs } from './ws.js'
 import { q, ready, info } from './db.js'
 import { authRequired } from './auth.js'
@@ -124,6 +125,7 @@ attachWs(server)
    的服务 —— 那比启动时直接报错难查得多。 */
 try {
   await ready()
+  await bootstrapAdmin()
 } catch (e) {
   console.error(`\n  数据层初始化失败（${info().driver}）：${e.message}\n`)
   process.exit(1)

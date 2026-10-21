@@ -574,6 +574,10 @@
 .op-moment-main > p, .op-comment-copy > p, .op-feedback > p { color: #c6cfdd; font-size: 13px; }
 .op-moment-main > small, .op-feedback-head span, .op-comment-copy > small { color: #8491a6; font-size: 11px; }
 .op-system-copy { color: #aeb8c8; font-size: 13px; line-height: 1.75; }
+.op-credential-form { display: grid; gap: 12px; margin: 16px 0; }
+.op-credential-form label { display: grid; gap: 7px; color: #dce3ef; font-size: 12px; font-weight: 650; }
+.op-credential-form input { width: 100%; }
+.op-credential-form button { justify-self: start; margin-top: 2px; }
 .op-system-copy code, .op-table code, .op-config-hint { border-color: #374258; border-radius: 7px; background: #1a2231; color: #d2caff; font-size: 11px; }
 
 .op-primary, .op-secondary { min-height: 42px; padding-inline: 17px; border-radius: 10px; font-size: 13px; font-weight: 650; }

@@ -16,18 +16,16 @@
 
 4. 默认 Web 端口绑定到主机回环地址 `127.0.0.1:8080`。在同一主机配置 HTTPS 反向代理转发到该地址。若由云负载均衡器直连容器端口，把 `CHATLY_BIND_ADDRESS` 设为 `0.0.0.0`，并在负载均衡器终止 TLS、限制入站访问。
 
-## 首个管理员
+## 管理员账号
 
-注册首个用户后，查出其 ID：
+首次部署前，在 `.env` 中设置 `ADMIN_USERNAME` 和至少 12 位的 `ADMIN_PASSWORD`。首次启动会自动创建固定管理员账号，不需要先注册普通用户或查询用户 ID。初始化后可在 `/qishiyou` 的“服务状态”页面修改管理员账号和密码；新凭据保存在数据库中，后续重建容器不会被环境变量覆盖。
 
-```bash
-docker compose -f docker-compose.app.yml exec postgres psql -U chatly -d chatly -c 'SELECT id, username FROM users;'
-```
+如果你是从旧版本升级，可暂时保留 `ADMIN_ACCOUNT` 指向已有用户名或用户 ID。首次启动新版本时会把该账号迁移为固定管理员。
 
-把对应 ID 或用户名写入 `.env` 的 `ADMIN_ACCOUNT`，然后重建后端容器使变量生效：
+首次部署的环境变量修改后，使用以下命令启动或重建后端：
 
 ```bash
-docker compose -f docker-compose.app.yml up -d --force-recreate server
+docker compose -f docker-compose.app.yml up --build -d
 ```
 
 部署不会自动创建演示账号或演示数据。
