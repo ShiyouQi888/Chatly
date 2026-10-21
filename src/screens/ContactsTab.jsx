@@ -14,11 +14,11 @@ function contactInitial(user) {
   return /^[A-Z]$/.test(ch) ? ch : '#'
 }
 
-export default function ContactsTab({ nav }) {
+export default function ContactsTab({ nav, onIncomingCountChange }) {
   const { showToast } = useApp()
   const { conversations, createPrivateChat, createGroupChat } = useChat()
   const [contacts, setContacts] = useState([])
-  const [incomingRequestCount, setIncomingRequestCount] = useState(0)
+  const [incomingRequestCount, setIncomingRequestCount] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
@@ -76,6 +76,10 @@ export default function ContactsTab({ nav }) {
       .then((result) => setIncomingRequestCount((result.incoming || []).length))
       .catch(() => {})
   }
+
+  useEffect(() => {
+    if (incomingRequestCount !== null) onIncomingCountChange?.(incomingRequestCount)
+  }, [incomingRequestCount, onIncomingCountChange])
 
   const filtered = useMemo(() => {
     const key = query.trim().toLocaleLowerCase('zh-CN')

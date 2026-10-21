@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
+import { api } from '../api/client.js'
 import { useApp } from '../store/AppContext.jsx'
 import { useAuth } from '../store/AuthContext.jsx'
 import { useChat } from '../store/ChatStore.jsx'
@@ -51,6 +52,7 @@ export default function Phone() {
      用这个信号传达：MeTab 挂载/更新时读到它就切过去并清空。 */
   const [notifySettingsSignal, setNotifySettingsSignal] = useState(0)
   const [statusComposeSignal, setStatusComposeSignal] = useState(0)
+  const [friendRequestCount, setFriendRequestCount] = useState(0)
   /**
    * 「跳到聊天里某条消息」的请求：`{ conversationId, messageId, nonce }`。
    *
@@ -67,6 +69,34 @@ export default function Phone() {
     () => conversations.reduce((n, c) => n + (c.muted ? 0 : c.unread || 0), 0),
     [conversations]
   )
+
+  /* 通讯录页面会随 Tab 切换卸载；在 Phone 层同步申请数，才能让底栏持续显示提醒。 */
+  useEffect(() => {
+    if (!ready || !user) {
+      setFriendRequestCount(0)
+      return undefined
+    }
+    let active = true
+    const refresh = async () => {
+      try {
+        const result = await api.friendRequests()
+        if (active) setFriendRequestCount((result.incoming || []).length)
+      } catch {
+        // 网络短暂失败时保留最后一次已知状态。
+      }
+    }
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') void refresh()
+    }
+    void refresh()
+    const timer = window.setInterval(refresh, 30_000)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+    }
+  }, [ready, user?.id])
 
   /* 会话对象从 store 里按 id 取，保证打开时拿到的是最新状态（预览/未读/在线） */
   const openChat = useMemo(
@@ -149,7 +179,7 @@ export default function Phone() {
         <div className="phone-screen">
           <div className="screen-body">
             {tab === 'chat' && <ChatTab nav={nav} statusComposeSignal={statusComposeSignal} />}
-            {tab === 'contacts' && <ContactsTab nav={nav} />}
+            {tab === 'contacts' && <ContactsTab nav={nav} onIncomingCountChange={setFriendRequestCount} />}
             {tab === 'moment' && <MomentTab nav={nav} />}
             {tab === 'discover' && <DiscoverTab nav={nav} />}
             {tab === 'me' && <MeTab nav={nav} notifySettingsSignal={notifySettingsSignal} />}
@@ -195,6 +225,7 @@ export default function Phone() {
                     <span className="tab-ic">
                       <Ico size={23} sw={active ? 2.1 : 1.75} />
                       {t.key === 'chat' && unreadTotal > 0 && <Badge count={unreadTotal} />}
+                      {t.key === 'contacts' && friendRequestCount > 0 && <Badge dot />}
                     </span>
                     <span className="tab-label">{t.label}</span>
                   </button>

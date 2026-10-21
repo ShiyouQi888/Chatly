@@ -24,6 +24,7 @@ import {
   IconBack,
   IconVideo,
   IconMore,
+  IconDownload,
   IconPlus,
   IconEmoji,
   IconMic,
@@ -171,11 +172,38 @@ function isVoiceMessage(m) {
 }
 
 function VoiceBubble({ m, mine }) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const { showToast } = useApp()
+  const download = () => {
+    if (!m.fileUrl || m.fileUrl.startsWith('blob:')) {
+      showToast(m.uploading ? '语音上传完成后即可下载' : '语音文件地址缺失')
+      return
+    }
+    const audioUrl = mediaUrl(m.fileUrl)
+    const link = document.createElement('a')
+    link.href = audioUrl
+    link.download = m.fileName || `语音消息.${String(m.fileUrl).split('.').pop()?.split('?')[0] || 'webm'}`
+    link.rel = 'noopener'
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+  }
   return (
-    <div className={`voice-bubble ${mine ? 'is-mine' : ''}`}>
-      <IconMic size={18} />
-      <audio controls preload="metadata" src={mediaUrl(m.fileUrl)} aria-label="语音消息" />
-    </div>
+    <>
+      <div className={`voice-bubble ${mine ? 'is-mine' : ''}`}>
+        <IconMic size={18} />
+        <audio controls preload="metadata" src={mediaUrl(m.fileUrl)} aria-label="语音消息" />
+        <button type="button" className="voice-more" aria-label="语音消息更多操作" title="更多操作" onClick={() => setMenuOpen(true)}>
+          <IconMore size={18} />
+        </button>
+      </div>
+      <ActionMenu
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        title="语音消息"
+        items={[{ label: '下载语音', icon: <IconDownload size={20} />, onClick: download }]}
+      />
+    </>
   )
 }
 
@@ -648,11 +676,12 @@ function InfoSheet({ open, onClose, chat, me, onDelete, onProfile, onGroup, onEd
    用 useImperativeHandle 而不是把 text 状态提到 ChatRoom ——
    那样输入框每敲一个字都要重渲染整个消息列表，长会话下会明显卡。 */
 const Composer = forwardRef(function Composer(
-  { onSend, onPlus, onTyping, onVoiceRecord, recording, disabled, emojiOpen, onToggleEmoji, onCloseEmoji, quote, onCancelQuote },
+  { onSend, onPlus, onTyping, onVoiceStart, onVoiceStop, recording, disabled, emojiOpen, onToggleEmoji, onCloseEmoji, quote, onCancelQuote },
   ref
 ) {
   const [text, setText] = useState('')
   const [focus, setFocus] = useState(false)
+  const [voiceMode, setVoiceMode] = useState(false)
   const { showToast } = useApp()
   const taRef = useRef(null)
 
@@ -729,11 +758,15 @@ const Composer = forwardRef(function Composer(
       <div className="cp-row">
       <button
         type="button"
-        className={`cp-btn ${recording ? 'is-recording' : ''}`}
-        onClick={onVoiceRecord}
+        className={`cp-btn ${voiceMode ? 'is-on' : ''} ${recording ? 'is-recording' : ''}`}
+        onClick={() => {
+          if (recording) return
+          setVoiceMode((mode) => !mode)
+          onCloseEmoji()
+        }}
         disabled={disabled}
-        aria-label={recording ? '结束并发送语音' : '录制语音消息'}
-        title={recording ? '点击结束并发送' : '录制语音消息'}
+        aria-label={voiceMode ? '切换文字输入' : '切换语音输入'}
+        title={voiceMode ? '切换文字输入' : '切换语音输入'}
       >
         <IconMic size={21} />
       </button>
@@ -751,37 +784,70 @@ const Composer = forwardRef(function Composer(
           程序性 focus（insert() 挑完表情会把光标放回输入框）也会触发 focus 事件，
           那样挑一个表情面板就被自己关掉。详见 dismissEmoji 的注释。 */}
       <div
-        className="cp-field"
+        className={`cp-field ${voiceMode ? 'is-voice-mode' : ''}`}
         onPointerDown={dismissEmoji}
         onClick={dismissEmoji}
       >
-        <textarea
-          ref={taRef}
-          rows={1}
-          value={text}
-          placeholder={disabled ? '连接中…' : '输入消息…'}
-          disabled={disabled}
-          onChange={(e) => {
-            setText(e.target.value)
-            onTyping()
-          }}
-          onFocus={() => setFocus(true)}
-          onBlur={() => setFocus(false)}
-          onKeyDown={(e) => {
-            // 读取设置：回车是发送还是换行
-            const enterToSend = localStorage.getItem('chatly-enter-to-send') !== 'false'
-            if (e.key === 'Enter' && !e.shiftKey && enterToSend) {
-              e.preventDefault()
-              submit()
-            }
-          }}
-        />
+        {voiceMode ? (
+          <button
+            type="button"
+            className={`cp-hold-talk ${recording ? 'is-recording' : ''}`}
+            disabled={disabled}
+            aria-label={recording ? '松开发送语音' : '按住说话'}
+            onPointerDown={(event) => {
+              if (disabled) return
+              event.preventDefault()
+              try { event.currentTarget.setPointerCapture(event.pointerId) } catch {}
+              onVoiceStart()
+            }}
+            onPointerUp={() => onVoiceStop(false)}
+            onPointerCancel={() => onVoiceStop(true)}
+            onContextMenu={(event) => event.preventDefault()}
+            onKeyDown={(event) => {
+              if ((event.key === ' ' || event.key === 'Enter') && !event.repeat) {
+                event.preventDefault()
+                onVoiceStart()
+              }
+            }}
+            onKeyUp={(event) => {
+              if (event.key === ' ' || event.key === 'Enter') {
+                event.preventDefault()
+                onVoiceStop(false)
+              }
+            }}
+            onBlur={() => { if (recording) onVoiceStop(false) }}
+          >
+            {recording ? '松开发送' : '按住说话'}
+          </button>
+        ) : (
+          <textarea
+            ref={taRef}
+            rows={1}
+            value={text}
+            placeholder={disabled ? '连接中…' : '输入消息…'}
+            disabled={disabled}
+            onChange={(e) => {
+              setText(e.target.value)
+              onTyping()
+            }}
+            onFocus={() => setFocus(true)}
+            onBlur={() => setFocus(false)}
+            onKeyDown={(e) => {
+              // 读取设置：回车是发送还是换行
+              const enterToSend = localStorage.getItem('chatly-enter-to-send') !== 'false'
+              if (e.key === 'Enter' && !e.shiftKey && enterToSend) {
+                e.preventDefault()
+                submit()
+              }
+            }}
+          />
+        )}
       </div>
 
       {/* 表情按钮**始终**存在：以前「有输入就换成发送」的写法会让人正在打字时
           点不到表情，这是真没法用的缺陷。现在是 发送 / 加号 二选一，表情常驻。
           切勿在同一按钮内既挂 onClick 又给里面的图标挂 onClick —— 会触发两次。 */}
-      <button
+      {!voiceMode && <button
         type="button"
         className={`cp-btn ${emojiOpen ? 'is-on' : ''}`}
         onClick={onToggleEmoji}
@@ -789,9 +855,9 @@ const Composer = forwardRef(function Composer(
         aria-expanded={emojiOpen}
       >
         <IconEmoji size={21} />
-      </button>
+      </button>}
 
-      {text.trim() ? (
+      {!voiceMode && (text.trim() ? (
         <button type="button" className="cp-send" onClick={submit} aria-label="发送">
           <IconSend size={19} />
         </button>
@@ -799,7 +865,7 @@ const Composer = forwardRef(function Composer(
         <button type="button" className="cp-btn" onClick={onPlus} aria-label="更多">
           <IconPlus size={21} />
         </button>
-      )}
+      ))}
       </div>
     </div>
   )
@@ -937,6 +1003,8 @@ export default function ChatRoom({ chat, onBack, jumpTo, onJumped }) {
   const voiceStreamRef = useRef(null)
   const voiceChunksRef = useRef([])
   const voiceTimeoutRef = useRef(null)
+  const voiceHoldActiveRef = useRef(false)
+  const voiceCanceledRef = useRef(false)
   const [recording, setRecording] = useState(false)
   const lastIdRef = useRef(null)
   const flashTimer = useRef(null)
@@ -1400,20 +1468,25 @@ export default function ChatRoom({ chat, onBack, jumpTo, onJumped }) {
     voiceStreamRef.current?.getTracks().forEach((track) => track.stop())
     voiceStreamRef.current = null
     voiceRecorderRef.current = null
+    voiceHoldActiveRef.current = false
     setRecording(false)
   }
 
-  const recordVoice = async () => {
-    if (recording) {
-      voiceRecorderRef.current?.stop()
-      return
-    }
+  const startVoiceRecording = async () => {
+    if (voiceHoldActiveRef.current || recording) return
+    voiceHoldActiveRef.current = true
+    voiceCanceledRef.current = false
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      voiceHoldActiveRef.current = false
       showToast('当前浏览器不支持语音录制')
       return
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      if (!voiceHoldActiveRef.current) {
+        stream.getTracks().forEach((track) => track.stop())
+        return
+      }
       const candidates = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus']
       const mimeType = candidates.find((type) => MediaRecorder.isTypeSupported?.(type))
       const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
@@ -1425,12 +1498,16 @@ export default function ChatRoom({ chat, onBack, jumpTo, onJumped }) {
       }
       recorder.onerror = () => {
         showToast('录音失败，请检查麦克风权限')
+        voiceCanceledRef.current = true
         stopVoiceStream()
       }
       recorder.onstop = async () => {
         const blob = new Blob(voiceChunksRef.current, { type: recorder.mimeType || 'audio/webm' })
         const extension = blob.type.includes('mp4') ? 'm4a' : blob.type.includes('ogg') ? 'ogg' : 'webm'
+        const canceled = voiceCanceledRef.current
         stopVoiceStream()
+        voiceCanceledRef.current = false
+        if (canceled) return
         if (!blob.size) {
           showToast('没有录到声音')
           return
@@ -1453,12 +1530,25 @@ export default function ChatRoom({ chat, onBack, jumpTo, onJumped }) {
       recorder.start(250)
       setRecording(true)
       voiceTimeoutRef.current = setTimeout(() => {
+        voiceHoldActiveRef.current = false
         if (recorder.state === 'recording') recorder.stop()
         showToast('语音录制达到 2 分钟上限，正在发送')
       }, 120_000)
     } catch (error) {
+      voiceHoldActiveRef.current = false
       stopVoiceStream()
       showToast(error.name === 'NotAllowedError' ? '请允许麦克风权限后重试' : '无法访问麦克风')
+    }
+  }
+
+  const stopVoiceRecording = (cancel = false) => {
+    voiceHoldActiveRef.current = false
+    voiceCanceledRef.current = cancel
+    const recorder = voiceRecorderRef.current
+    if (recorder && recorder.state !== 'inactive') recorder.stop()
+    else if (!recorder) {
+      voiceStreamRef.current?.getTracks().forEach((track) => track.stop())
+      voiceStreamRef.current = null
     }
   }
 
@@ -1724,7 +1814,8 @@ export default function ChatRoom({ chat, onBack, jumpTo, onJumped }) {
             setPlus(true)
           }}
           disabled={!connected}
-          onVoiceRecord={recordVoice}
+          onVoiceStart={startVoiceRecording}
+          onVoiceStop={stopVoiceRecording}
           recording={recording}
           emojiOpen={emoji}
           onToggleEmoji={() => setEmoji((v) => !v)}

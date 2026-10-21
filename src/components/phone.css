@@ -92,6 +92,13 @@
   right: -11px;
 }
 
+.tab-ic .badge.badge-dot {
+  top: -1px;
+  right: -5px;
+  border: 2px solid var(--surface, #fff);
+  background: #ef4444;
+}
+
 .tab-label {
   font-size: var(--fs-micro);
   font-weight: 500;
