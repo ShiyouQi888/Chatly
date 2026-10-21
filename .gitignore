@@ -13,6 +13,8 @@ server/data/
 server/uploads/
 server/private-uploads/
 server/.env
+/.env
+/release/
 
 # 测试与截图脚本的临时产物（CDP profile、探针文件、截图）
 .tmp/

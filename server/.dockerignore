@@ -1,0 +1,9 @@
+.git
+node_modules
+.env
+data
+uploads
+private-uploads
+coverage
+test
+*.log

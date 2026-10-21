@@ -1,6 +1,25 @@
 # 部署与运维说明
 
-当前仓库提供应用服务和开发依赖配置，不含生产级编排、自动备份、集中日志平台或告警配置。下面的步骤是上线前需要由部署环境落实的最低要求。
+仓库提供前端、后端和 PostgreSQL/Redis 的 Docker 编排与健康检查；仍不包含自动备份、集中日志平台或告警配置。生产环境需由部署平台补齐这些运维能力。
+
+## Docker 整栈部署
+
+根目录 `Dockerfile` 构建 Vite 前端并用 Nginx 提供静态文件与同源 API/WebSocket 反向代理；`server/Dockerfile` 以非 root 用户运行 Node 后端。独立的 `docker-compose.app.yml` 会启动前端、后端、PostgreSQL 和 Redis：
+
+1. 将 `.env.docker.example` 复制为项目根目录 `.env`，为 `POSTGRES_PASSWORD`、`JWT_SECRET` 和 `AUTH_OTP_SECRET` 配置独立强随机值。`JWT_SECRET` 与 `AUTH_OTP_SECRET` 至少 32 字节；生产环境由密钥管理服务注入，不要把真实密钥提交到 Git。
+2. 启动整栈：
+
+   ```bash
+   docker compose -f docker-compose.app.yml up --build -d
+   ```
+
+3. 在部署主机访问 `http://localhost:8080`。HTTPS 应由外部负载均衡器或反向代理终止，再转发到前端容器端口。默认 Web 端口只绑定宿主机回环地址；可用 `CHATLY_HTTP_PORT` 修改端口。若需要直接从公网访问容器，需将 `CHATLY_BIND_ADDRESS` 设为 `0.0.0.0`，并自行配置 TLS 与防火墙。
+
+Compose 会等待 PostgreSQL、Redis 和后端健康检查通过再启动依赖服务。后端只加入 Compose 内部网络，不发布宿主机端口；PostgreSQL/Redis 的调试端口只绑定 `127.0.0.1`。数据库、Redis、公开上传和私有聊天附件分别由命名卷持久化。`docker compose ... down` 保留卷，`down -v` 会永久删除这些数据。
+
+可用 `openssl rand -hex 32` 为三个必填秘密生成 URL 安全的 32 字节值。Compose 设置单层可信代理，反向代理后的登录/注册限流仍会按真实客户端 IP 区分。
+
+地图浏览器密钥可通过 `VITE_TMAP_KEY` 在前端构建时注入；该密钥会进入浏览器产物，应配置域名/来源限制。其余地图、邮箱、短信、后台管理员和消息静态加密配置通过 `.env` 注入后端。首次上线不会自动灌入演示账号；注册首个用户后，将其用户 ID 配入 `ADMIN_USER_IDS` 并重启后端以授予后台权限。
 
 ## 环境配置
 
@@ -12,7 +31,7 @@
 - 多实例运行时配置 `REDIS_URL`，用于在线状态和跨实例事件；没有 Redis 时应用会降级为进程内状态，不能视作多实例实时能力正常。
 - 地图服务 `TENCENT_MAP_KEY` 按需设置。`PORT`、`HOST` 可由服务管理器覆盖。
 
-前端执行 `npm ci && npm run build`，部署 `dist/` 到 HTTPS 站点；后端在 `server/` 执行 `npm ci` 后以进程管理器启动 `node src/index.js`。反向代理需转发 `/api`、`/uploads` 和 WebSocket `/ws`，并正确传递升级头。公网部署应限制后端端口，仅允许反向代理访问。
+不使用 Docker 时，前端执行 `npm ci && npm run build`，部署 `dist/` 到 HTTPS 站点；后端在 `server/` 执行 `npm ci` 后以进程管理器启动 `node src/index.js`。反向代理需转发 `/api`、`/uploads` 和 WebSocket `/ws`，并正确传递升级头。公网部署应限制后端端口，仅允许反向代理访问。
 
 ## 备份与恢复
 

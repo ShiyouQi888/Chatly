@@ -61,25 +61,38 @@ npm install
 npm run dev      # http://127.0.0.1:5198
 ```
 
-打开 <http://127.0.0.1:5198> ，用**演示账号一键登录**即可开始聊天。
-
-| 用户名          | 昵称  | 密码          |
-| ------------ | --- | ----------- |
-| `chenmo`     | 陈墨  | `chatly123` |
-| `linxiaoxia` | 林小夏 | `chatly123` |
-| `ajie`       | 阿杰  | `chatly123` |
-| `xiaolu`     | 小鹿  | `chatly123` |
-| `chenyu`     | 陈宇  | `chatly123` |
-| `xiatian`    | 夏天  | `chatly123` |
-
-> **想看实时效果**：用两个不同的浏览器 profile（或一个正常窗口 + 一个无痕窗口）分别登录两个账号。
-> 同一个浏览器的两个标签页共享 localStorage，只能登录一个账号。
+打开 <http://127.0.0.1:5198>，使用已注册的账号登录，或通过邮箱验证码注册。
 
 生产构建：
 
 ```bash
 npm run build && npm run preview
 ```
+
+### Docker 完整部署
+
+仓库提供完整前后端容器编排。先复制 `.env.docker.example` 为项目根目录 `.env`，将三个必填秘密替换为独立强随机值（可用 `openssl rand -hex 32` 生成），然后运行：
+
+```bash
+docker compose -f docker-compose.app.yml up --build -d
+```
+
+默认通过部署主机本机的 `http://localhost:8080` 访问。前端 Nginx 会把 `/api`、`/uploads`、`/health` 和 `/ws` 转发给后端；PostgreSQL、Redis 及公开/私有上传文件使用命名卷持久化。Web 默认仅绑定宿主机回环地址，数据库、Redis 和后端只在 Docker 内网可访问。生产环境应在前面配置 HTTPS 反向代理；需要直接对外发布 Web 时，将 `CHATLY_BIND_ADDRESS` 设为 `0.0.0.0` 并确保 TLS 与防火墙已配置。
+
+查看容器状态和日志：
+
+```bash
+docker compose -f docker-compose.app.yml ps
+docker compose -f docker-compose.app.yml logs -f server web
+```
+
+停止容器但保留数据：
+
+```bash
+docker compose -f docker-compose.app.yml down
+```
+
+`down -v` 会删除数据库、Redis 和上传文件卷，请勿用于日常停机。
 
 > 前端端口固定 `127.0.0.1:5198`（`strictPort`），后端固定 `127.0.0.1:3002`。
 > Vite 已把 `/api`、`/uploads`、`/ws` 代理到后端，前端代码里不需要写后端地址。
@@ -127,8 +140,8 @@ ADMIN_USER_IDS=1,8
 | 项       | 说明                                                                                 |
 | ------- | ---------------------------------------------------------------------------------- |
 | 前端      | React 18 + Vite 5                                                                  |
-| 前端运行时依赖 | **零**（不含图标库 / UI 框架 / 日期库 / socket.io / axios / 表情库）                               |
-| 图标      | `src/components/Icon.jsx`，50+ 个手写内联 SVG，统一 24×24 stroke 风格                          |
+| 前端运行时依赖 | React 18、Radix UI 原语、shadcn 风格后台组件与 Lucide 图标                                      |
+| 图标      | 客户端常用图标由 `src/components/Icon.jsx` 绘制；运营后台使用 Lucide                             |
 | 表情      | Microsoft Fluent Emoji（MIT），386 个彩色 SVG 落在 `public/emoji/`，清单见 `src/data/emoji.js` |
 | 图像      | 头像由 data-URI SVG 生成；聊天图片走真实上传                                                      |
 | 样式      | 每屏独立 CSS + `tokens.css` 设计令牌                                                       |
@@ -161,7 +174,7 @@ src/
 │   ├── PollBubble.jsx     群投票（发起面板 + 消息气泡 + 详情层，三合一）
 │   └── ForwardSheet.jsx   转发目标选择器（整屏层：会话列表 + 搜索 + 确认发送）
 ├── screens/
-│   ├── LoginScreen.jsx    登录 / 注册（含演示账号一键登录）
+│   ├── LoginScreen.jsx    登录 / 注册（用户名登录、邮箱验证注册）
 │   ├── ChatTab.jsx        聊天首页（真实状态 + 会话列表 + 建群/私聊）
 │   ├── ChatRoom.jsx       私聊 / 群聊（真实收发 + 已读回执到人 + 撤回 + 引用回复 + 转发 + 长按菜单 + 禁言锁定）
 │   ├── UserProfile.jsx    他人资料页（整屏覆盖层，从聊天顶部头像 / 会话设置进入）

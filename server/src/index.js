@@ -34,8 +34,10 @@ import { ready as redisReady, status as redisStatus, close as redisClose } from 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.env.PORT) || 3002
 const HOST = process.env.HOST || '127.0.0.1'
+const TRUST_PROXY_HOPS = Number(process.env.TRUST_PROXY_HOPS) || 0
 
 const app = express()
+if (Number.isInteger(TRUST_PROXY_HOPS) && TRUST_PROXY_HOPS > 0) app.set('trust proxy', TRUST_PROXY_HOPS)
 app.use(express.json({ limit: '2mb' }))
 app.use(express.urlencoded({ extended: true }))
 

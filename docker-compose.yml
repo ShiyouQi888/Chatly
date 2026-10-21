@@ -27,7 +27,7 @@ services:
       # 让排序/比较稳定，别跟着宿主机的 locale 跑
       POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
     ports:
-      - "55433:5432"
+      - "127.0.0.1:55433:5432"
     volumes:
       - chatly-pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -45,7 +45,7 @@ services:
     # appendonly：在线状态丢了不要紧（有 TTL 会自愈），但调试时想回看就靠它
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "6380:6379"
+      - "127.0.0.1:6380:6379"
     volumes:
       - chatly-redisdata:/data
     healthcheck:

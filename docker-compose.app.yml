@@ -1,0 +1,90 @@
+# 独立的完整部署栈，不与开发用 docker-compose.yml 共用数据库卷。
+# docker compose -f docker-compose.app.yml up --build -d
+name: chatly-production
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: chatly
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在项目根目录 .env 设置 POSTGRES_PASSWORD}
+      POSTGRES_DB: chatly
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - prod-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chatly -d chatly"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - prod-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3002
+      TRUST_PROXY_HOPS: 1
+      DB_DRIVER: postgres
+      DATABASE_URL: postgres://chatly:${POSTGRES_PASSWORD:?请在项目根目录 .env 设置 POSTGRES_PASSWORD}@postgres:5432/chatly
+      PG_POOL_MAX: ${PG_POOL_MAX:-10}
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:?请在项目根目录 .env 设置 JWT_SECRET}
+      AUTH_OTP_SECRET: ${AUTH_OTP_SECRET:?请在项目根目录 .env 设置 AUTH_OTP_SECRET}
+      ADMIN_USER_IDS: ${ADMIN_USER_IDS:-}
+      MESSAGE_ENCRYPTION_KEY: ${MESSAGE_ENCRYPTION_KEY:-}
+      TENCENT_MAP_KEY: ${TENCENT_MAP_KEY:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      AUTH_EMAIL_FROM: ${AUTH_EMAIL_FROM:-}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER:-}
+    volumes:
+      - prod-uploads:/app/uploads
+      - prod-private-uploads:/app/private-uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3002/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_TMAP_KEY: ${VITE_TMAP_KEY:-}
+    restart: unless-stopped
+    ports:
+      - "${CHATLY_BIND_ADDRESS:-127.0.0.1}:${CHATLY_HTTP_PORT:-8080}:80"
+    depends_on:
+      server:
+        condition: service_healthy
+
+volumes:
+  prod-postgres:
+  prod-redis:
+  prod-uploads:
+  prod-private-uploads:
