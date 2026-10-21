@@ -6,6 +6,7 @@ import { api, formatAgo } from '../api/client.js'
 import { Avatar, Chip, Empty } from '../components/ui.jsx'
 import MomentDetail from './MomentDetail.jsx'
 import UserProfile from './UserProfile.jsx'
+import FriendRequestsPage from './FriendRequestsPage.jsx'
 import { IconBack, IconBell, IconChat, IconHeart, IconInfo, IconGear, IconCheck } from '../components/Icon.jsx'
 import './notice-center.css'
 
@@ -36,6 +37,7 @@ export default function NoticeCenter({ onBack, nav, onOpenSettings }) {
      不在 Phone 那层做：通知中心本身就是覆盖层，往上提一层会让状态和关闭顺序更难对齐。 */
   const [detail, setDetail] = useState(null) // 动态对象
   const [profileId, setProfileId] = useState(null)
+  const [friendRequestsOpen, setFriendRequestsOpen] = useState(false)
 
   /* 打开这一屏就拉一次：通知可能在别的设备 / 别的页面上刚产生。
      同时立一个「正在看通知」的标记 —— NotificationStore 收到 WS 推送时读它，
@@ -84,6 +86,10 @@ export default function NoticeCenter({ onBack, nav, onOpenSettings }) {
       return
     }
     if (n.kind === 'follow') {
+      if (n.body === '申请添加你为好友') {
+        setFriendRequestsOpen(true)
+        return
+      }
       if (!n.actor?.id) return showToast('这个人已经不存在了')
       setProfileId(n.actor.id)
       return
@@ -180,6 +186,9 @@ export default function NoticeCenter({ onBack, nav, onOpenSettings }) {
       {/* 就地打开的两个覆盖层（见上面 detail / profileId 的注释）。
           MomentDetail 自己会拉评论，这里只把动态对象交进去。 */}
       {detail && <MomentDetail moment={detail} onBack={() => setDetail(null)} />}
+      {friendRequestsOpen && <FriendRequestsPage
+        onBack={() => setFriendRequestsOpen(false)}
+      />}
       {profileId && (
         <UserProfile userId={profileId} onBack={() => setProfileId(null)} onMessage={() => setProfileId(null)} />
       )}

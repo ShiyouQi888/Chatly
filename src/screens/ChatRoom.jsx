@@ -121,7 +121,8 @@ function FileCard({ m, mine }) {
   const kb = m.fileSize ? `${(m.fileSize / 1024).toFixed(1)} KB` : '未知大小'
 
   const open = () => {
-    if (!m.fileUrl) return showToast('文件地址缺失')
+    if (m.uploading) return showToast('文件上传完成后即可打开')
+    if (!m.fileUrl || m.fileUrl.startsWith('blob:')) return showToast('文件地址缺失')
     window.open(mediaUrl(m.fileUrl), '_blank', 'noopener')
   }
 
@@ -137,6 +138,30 @@ function FileCard({ m, mine }) {
           打开
         </button>
       </span>
+    </div>
+  )
+}
+
+function UploadProgress({ message }) {
+  if (!message.uploading && !message.uploadFailed) return null
+  const progress = Math.max(0, Math.min(100, Number(message.uploadProgress) || 0))
+  const label = message.uploadFailed ? '上传失败' : message.uploadStage || '准备上传'
+  return (
+    <div className={`msg-upload-progress ${message.uploadFailed ? 'is-failed' : ''}`}>
+      <div className="msg-upload-label">
+        <span>{label}</span>
+        {!message.uploadFailed && <span>{progress}%</span>}
+      </div>
+      <div
+        className="msg-upload-track"
+        role="progressbar"
+        aria-label="附件上传进度"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={progress}
+      >
+        <span style={{ width: `${message.uploadFailed ? 100 : progress}%` }} />
+      </div>
     </div>
   )
 }
@@ -438,6 +463,8 @@ function Message({ m, chat, me, peersWithState, readPopMsgId, onLongPress, onOpe
             缺的时候气泡里会写清「只发了地点名」，不画地图。 */}
         {m.kind === 'location' && <LocationBubble m={m} onOpen={onOpenLoc} />}
 
+        <UploadProgress message={m} />
+
         {/* 投票消息：详情不在消息体里（服务端只给 pollId），由 store 按 id 批量补拉。
             还没拉到就先画骨架 —— **不能画「0 票」**，那是在撒谎。 */}
         {m.kind === 'poll' && !m.revoked && (
@@ -451,8 +478,15 @@ function Message({ m, chat, me, peersWithState, readPopMsgId, onLongPress, onOpe
           />
         )}
 
+        {m.failed && (
+          <div className="msg-send-error" role="status">
+            <span className="msg-send-error-mark" aria-hidden="true">!</span>
+            <small>{m.failureMessage || '消息发送失败'}</small>
+          </div>
+        )}
+
         <span className="msg-foot">
-          {m.failed && <em className="msg-failed">发送失败</em>}
+          {m.failed && <em className="msg-failed" aria-label="发送失败">!</em>}
           {m.pending && <em>发送中</em>}
           {!m.pending && !m.failed && <em>{m.time}</em>}
           {mine && !m.pending && !m.failed && (
@@ -853,6 +887,7 @@ export default function ChatRoom({ chat, onBack, jumpTo, onJumped }) {
     openConversation,
     closeConversation,
     sendMessage,
+    sendAttachment,
     revokeMessage,
     notifyTyping,
     messagesOf,
@@ -1346,18 +1381,16 @@ export default function ChatRoom({ chat, onBack, jumpTo, onJumped }) {
     const file = e.target.files?.[0]
     if (!file) return
     const kind = fileKindRef.current
-    showToast('上传中…')
     try {
-      const up = await api.upload(file)
-      await sendMessage({
+      await sendAttachment({
         conversationId: chat.id,
         kind,
-        fileUrl: up.url,
-        fileName: up.fileName,
-        fileSize: up.fileSize,
+        file,
       })
     } catch (err) {
       showToast(err.message || '发送失败')
+    } finally {
+      if (e.target) e.target.value = ''
     }
   }
 
@@ -1407,15 +1440,11 @@ export default function ChatRoom({ chat, onBack, jumpTo, onJumped }) {
           return
         }
         const file = new File([blob], `voice-note-${Date.now()}.${extension}`, { type: blob.type })
-        showToast('语音上传中…')
         try {
-          const uploaded = await api.upload(file)
-          await sendMessage({
+          await sendAttachment({
             conversationId: chat.id,
             kind: 'file',
-            fileUrl: uploaded.url,
-            fileName: uploaded.fileName,
-            fileSize: uploaded.fileSize,
+            file,
           })
         } catch (error) {
           showToast(error.message || '语音发送失败')

@@ -4,6 +4,7 @@ import { useApp } from '../store/AppContext.jsx'
 import { useChat, avatarOf } from '../store/ChatStore.jsx'
 import { ActionMenu, Avatar, Empty } from '../components/ui.jsx'
 import UserProfile from './UserProfile.jsx'
+import FriendRequestsPage from './FriendRequestsPage.jsx'
 import { IconBack, IconChat, IconChevron, IconContacts, IconMore, IconPlus, IconSearch, IconScan, IconTrash, IconUser } from '../components/Icon.jsx'
 import './contacts-tab.css'
 
@@ -24,6 +25,7 @@ export default function ContactsTab({ nav }) {
   const [selected, setSelected] = useState([])
   const [menu, setMenu] = useState(null)
   const [profileId, setProfileId] = useState(null)
+  const [friendRequestsOpen, setFriendRequestsOpen] = useState(false)
   const [showAddMenu, setShowAddMenu] = useState(false)
   const [groupSheet, setGroupSheet] = useState(false)
   const [groupsExpanded, setGroupsExpanded] = useState(false)
@@ -144,7 +146,7 @@ export default function ContactsTab({ nav }) {
         </label>
 
         <section className="contacts-shortcuts">
-          <button type="button" onClick={() => nav.openSearch()}><span className="contacts-shortcut-icon is-add"><IconPlus size={19} /></span><b>新的朋友</b><span>搜索并添加</span></button>
+          <button type="button" onClick={() => setFriendRequestsOpen(true)}><span className="contacts-shortcut-icon is-add"><IconPlus size={19} /></span><b>新的朋友</b><span>好友申请与添加</span></button>
           <button type="button" onClick={() => setGroupSheet(true)}><span className="contacts-shortcut-icon is-group"><IconChat size={19} /></span><b>群聊</b><span>{groupChats.length} 个</span></button>
         </section>
 
@@ -166,7 +168,7 @@ export default function ContactsTab({ nav }) {
 
         {loading && <p className="contacts-state">正在加载通讯录…</p>}
         {error && <div className="contacts-state is-error"><span>{error}</span><button type="button" onClick={loadContacts}>重试</button></div>}
-        {!loading && !error && contacts.length === 0 && <Empty icon={<IconContacts size={27} />} title="通讯录还是空的" desc="和好友互相关注后，会显示在这里" />}
+        {!loading && !error && contacts.length === 0 && <Empty icon={<IconContacts size={27} />} title="通讯录还是空的" desc="对方同意好友申请后，会显示在这里" />}
         {!loading && !error && contacts.length > 0 && filtered.length === 0 && <Empty icon={<IconSearch size={25} />} title="没有找到联系人" desc="试试其他姓名或账号" />}
 
         {groups.map(([letter, users]) => (
@@ -194,6 +196,12 @@ export default function ContactsTab({ nav }) {
 
       <ActionMenu open={!!menu} onClose={() => setMenu(null)} title={menu?.nickname || menu?.username} items={menuItems} />
       <ActionMenu open={showAddMenu} onClose={() => setShowAddMenu(false)} title="通讯录菜单" items={addItems} />
+
+      {friendRequestsOpen && <FriendRequestsPage
+        onBack={() => setFriendRequestsOpen(false)}
+        onAddFriend={() => { setFriendRequestsOpen(false); nav.openSearch() }}
+        onUpdated={loadContacts}
+      />}
 
       {profileId && <UserProfile userId={profileId} onBack={() => setProfileId(null)} onMessage={async () => {
         const user = contacts.find((u) => u.id === profileId)

@@ -235,6 +235,35 @@ CREATE TABLE IF NOT EXISTS follows (
   PRIMARY KEY (follower_id, followee_id)
 );
 
+/* 好友申请独立于关注关系：只有 recipient 接受后才写入双方 follows。 */
+CREATE TABLE IF NOT EXISTS friend_requests (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  requester_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  recipient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status       TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','accepted','rejected','cancelled')),
+  created_at   INTEGER NOT NULL,
+  updated_at   INTEGER NOT NULL,
+  CHECK (requester_id <> recipient_id)
+);
+/* 已删除好友关系保留为双向 tombstone，用于隐藏彼此动态并拦截旧私聊。 */
+CREATE TABLE IF NOT EXISTS removed_contacts (
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  contact_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  removed_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, contact_id),
+  CHECK (user_id <> contact_id)
+);
+CREATE INDEX IF NOT EXISTS idx_removed_contacts_contact ON removed_contacts(contact_id, user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_friend_requests_pending_pair
+  ON friend_requests(requester_id, recipient_id) WHERE status = 'pending';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_friend_requests_pending_unordered
+  ON friend_requests(
+    CASE WHEN requester_id < recipient_id THEN requester_id ELSE recipient_id END,
+    CASE WHEN requester_id < recipient_id THEN recipient_id ELSE requester_id END
+  ) WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS idx_friend_requests_recipient
+  ON friend_requests(recipient_id, status, created_at DESC);
+
 /* 24 小时状态：每个用户只保留一条当前状态，发布新状态会替换旧状态。 */
 CREATE TABLE IF NOT EXISTS user_statuses (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -148,7 +148,7 @@ img {
  *     `inset:0` 只到导航栏上沿，底部会漏出一条 `.tabbar`：
  *     看着像"这页没做完"，点它还会把当前页直接卸掉（编辑到一半的内容全丢）。
  * 所以后者统一加这个类，把底边按导航栏的实际高度往下补。
- * 用 --tabbar-h + 安全区算，导航栏以后变高也不会漏。
+ * 用自适应的 --tabbar-h 覆盖底栏及设备安全区，导航栏以后变高也不会漏。
  * `.phone-screen` 是 overflow:hidden，多补出来的部分会被裁掉，不会溢出到桌面。
  *
  * ⚠️ 选择器必须带 `.phone-screen`。写成单个 `.cover-tabbar` 是**不生效**的：
@@ -162,7 +162,7 @@ img {
  *    只靠 me-tab.css 里的 `inset: 0` 会正好停在导航栏上沿、底部漏一条。 */
 .phone-screen .cover-tabbar,
 .phone-screen .sub-page {
-  bottom: calc(-1 * (var(--tabbar-h) + env(safe-area-inset-bottom)));
+  bottom: calc(-1 * var(--tabbar-h));
 }
 
 @media (prefers-reduced-motion: reduce) {

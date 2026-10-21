@@ -22,6 +22,7 @@ import { sharedGroupCount } from './profile.js'
 import { isFollowing, getMoment } from './moment.js'
 import { onlineSetOf, broadcastToUsers } from './ws.js'
 import { privacyOfMany, onlineVisible } from './privacy.js'
+import { friendStates } from './friends.js'
 
 /* ================= 推荐用户 ================= */
 
@@ -94,7 +95,9 @@ export async function recommendUsers({ viewerId, tag = '', limit = 20, offset = 
   /* 在线状态是**按人**门控的（对方关了「在线状态可见」就是离线），
      且不能逐个人查 —— 在 PG + Redis 下那是 2N 次网络往返。
      先批量取一次隐私设置与在线集合，再在 map 里查表。 */
-  const [privacy, present] = await Promise.all([privacyOfMany(pageIds), onlineSetOf(pageIds)])
+  const [privacy, present, relationships] = await Promise.all([
+    privacyOfMany(pageIds), onlineSetOf(pageIds), friendStates(Number(viewerId), pageIds),
+  ])
   const list = await Promise.all(
     page.map(async (r) => {
       const u = publicUser(r)
@@ -106,6 +109,7 @@ export async function recommendUsers({ viewerId, tag = '', limit = 20, offset = 
         ...u,
         online: onlineVisible(privacy.get(Number(r.id))) && present.has(Number(r.id)),
         following,
+        friendStatus: relationships.get(Number(r.id)) || 'none',
         mutualGroups: groups,
         mutualTags: tags,
         sameRegion: near === 2,
@@ -189,7 +193,9 @@ export async function nearbyUsers({ viewerId, limit = 20 }) {
      两个都提到循环外面 / 只算一次。 */
   const mineTags = await myTagsOf(viewerId)
   const allIds = rows.map((r) => Number(r.id))
-  const [privacy, present] = await Promise.all([privacyOfMany(allIds), onlineSetOf(allIds)])
+  const [privacy, present, relationships] = await Promise.all([
+    privacyOfMany(allIds), onlineSetOf(allIds), friendStates(Number(viewerId), allIds),
+  ])
 
   const list = (
     await Promise.all(
@@ -223,6 +229,7 @@ export async function nearbyUsers({ viewerId, limit = 20 }) {
           ...u,
           online: onlineVisible(privacy.get(Number(r.id))) && present.has(Number(r.id)),
           following: !!r.followed,
+          friendStatus: relationships.get(Number(r.id)) || 'none',
           mutualTags: sharedTags(mineTags, u.tags),
           mutualGroups: groups,
           distanceLabel,
@@ -269,14 +276,16 @@ export async function upcomingActivities({ viewerId, limit = 20 }) {
        JOIN moment_cards mc ON mc.moment_id = m.id AND mc.kind = 'activity'
       WHERE ${startsAtSql} > ?
         AND (
-          m.user_id = ? OR m.visibility = 'public'
+          m.user_id = ? OR (m.visibility = 'public' AND NOT EXISTS (
+            SELECT 1 FROM removed_contacts rc WHERE rc.user_id = m.user_id AND rc.contact_id = ?
+          ))
           OR (m.visibility = 'friends'
             AND EXISTS (SELECT 1 FROM follows f1 WHERE f1.follower_id = m.user_id AND f1.followee_id = ?)
             AND EXISTS (SELECT 1 FROM follows f2 WHERE f2.follower_id = ? AND f2.followee_id = m.user_id))
         )
       ORDER BY ${startsAtSql} ASC, m.id DESC
       LIMIT ?`,
-    Date.now(), viewerId, viewerId, viewerId, Number(limit) || 20
+    Date.now(), viewerId, viewerId, viewerId, viewerId, Number(limit) || 20
   )
   const moments = await Promise.all(ids.map((row) => getMoment(row.id, viewerId)))
   return { activities: moments.filter((m) => m?.card?.kind === 'activity') }

@@ -9,6 +9,7 @@ import { authRequired } from '../auth.js'
 import { createMessage, isMember, memberIds, canSpeak, assertReplyTo } from '../chat.js'
 import { broadcastToUsers } from '../ws.js'
 import { createPoll, viewPoll, viewPollsByIds, pollConversations, listPolls, votePoll, closePoll } from '../poll.js'
+import { q } from '../db.js'
 
 const r = Router()
 r.use(authRequired)
@@ -61,6 +62,16 @@ r.post('/', async (req, res) => {
      只查 isMember 的话，禁言群里发起投票就成了一条绕过禁言的发言通道。 */
   const speak = await canSpeak(cid, req.user.id)
   if (!speak.ok) return res.status(speak.status || 403).json({ error: speak.error || '无权在该会话发起投票' })
+  const conversation = await q.get('SELECT type FROM conversations WHERE id = ?', cid)
+  if (conversation?.type === 'private') {
+    const peer = await q.get(
+      'SELECT user_id AS userId FROM conversation_members WHERE conversation_id = ? AND user_id <> ? LIMIT 1',
+      cid, req.user.id
+    )
+    if (peer && await q.get('SELECT 1 FROM removed_contacts WHERE user_id = ? AND contact_id = ?', peer.userId, req.user.id)) {
+      return res.status(403).json({ error: '对方已将你删除，消息未发送', code: 'friend_removed' })
+    }
+  }
 
   let created
   try {

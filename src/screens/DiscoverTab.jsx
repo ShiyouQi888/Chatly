@@ -52,6 +52,10 @@ const SECTIONS = [
   { key: 'users', label: '用户' },
 ]
 
+const friendActionLabel = (status) => ({
+  outgoing: '等待验证', incoming: '收到申请', friends: '已添加',
+}[status] || '加好友')
+
 /* ===== 推荐用户行 ===== */
 function UserRow({ u, onFollow, onOpen }) {
   return (
@@ -63,7 +67,7 @@ function UserRow({ u, onFollow, onOpen }) {
       <button type="button" className="rc-meta" onClick={() => onOpen(u)}>
         <b>
           {u.nickname}
-          {u.following && <i className="rc-badge">已关注</i>}
+          {u.friendStatus && u.friendStatus !== 'none' && <i className="rc-badge">{friendActionLabel(u.friendStatus)}</i>}
         </b>
         {/* 推荐理由只显示后端算得出来的（共同群聊 / 共同兴趣 / 同城），算不出就不显示 ——
             不要写「可能认识」这种无法证伪的话 */}
@@ -77,12 +81,13 @@ function UserRow({ u, onFollow, onOpen }) {
       </button>
       <button
         type="button"
-        className={`rc-follow ${u.following ? 'is-on' : ''}`}
+        className={`rc-follow ${u.friendStatus !== 'none' ? 'is-on' : ''}`}
         onClick={() => onFollow(u)}
-        aria-pressed={!!u.following}
-        aria-label={u.following ? `取消关注 ${u.nickname}` : `关注 ${u.nickname}`}
+        disabled={u.friendStatus !== 'none'}
+        aria-pressed={u.friendStatus === 'friends'}
+        aria-label={`${friendActionLabel(u.friendStatus)} ${u.nickname}`}
       >
-        {u.following ? '已关注' : '关注'}
+        {friendActionLabel(u.friendStatus)}
       </button>
     </div>
   )
@@ -105,11 +110,12 @@ function NearbyCard({ p, onSay, onOpen, onFollow }) {
         </div>
         <button
           type="button"
-          className={`rc-follow ${p.following ? 'is-on' : ''}`}
+          className={`rc-follow ${p.friendStatus !== 'none' ? 'is-on' : ''}`}
           onClick={() => onFollow(p)}
-          aria-label={p.following ? `取消关注 ${p.nickname}` : `关注 ${p.nickname}`}
+          disabled={p.friendStatus !== 'none'}
+          aria-label={`${friendActionLabel(p.friendStatus)} ${p.nickname}`}
         >
-          {p.following ? '已关注' : '关注'}
+          {friendActionLabel(p.friendStatus)}
         </button>
       </div>
 

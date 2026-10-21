@@ -84,7 +84,13 @@ export async function followCounts(userId) {
 
 const VISIBLE_SQL = `
   m.user_id = @viewer
-  OR m.visibility = 'public'
+  OR (
+    m.visibility = 'public'
+    AND NOT EXISTS (
+      SELECT 1 FROM removed_contacts rc
+      WHERE rc.user_id = m.user_id AND rc.contact_id = @viewer
+    )
+  )
   OR (
     m.visibility = 'friends'
     AND EXISTS (SELECT 1 FROM follows f1 WHERE f1.follower_id = m.user_id AND f1.followee_id = @viewer)
@@ -96,11 +102,13 @@ const VISIBLE_SQL = `
 export async function visibleTo(momentId, viewerId) {
   const row = await q.get('SELECT user_id AS userId, visibility FROM moments WHERE id = ?', momentId)
   if (!row) return false
-  return (
-    row.userId === viewerId ||
-    row.visibility === 'public' ||
-    (row.visibility === 'friends' && (await isMutual(row.userId, viewerId)))
+  if (Number(row.userId) === Number(viewerId)) return true
+  const removed = await q.get(
+    'SELECT 1 FROM removed_contacts WHERE user_id = ? AND contact_id = ?',
+    row.userId, viewerId
   )
+  if (removed) return false
+  return row.visibility === 'public' || (row.visibility === 'friends' && (await isMutual(row.userId, viewerId)))
 }
 
 /* ================= 查询 ================= */

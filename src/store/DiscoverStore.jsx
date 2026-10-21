@@ -7,7 +7,7 @@
  *   「这条是不是真的存下来了」就说不清了 —— 这正是本项目一直在避免的事。
  *
  * 三件刻意的设计：
- *   1. **关注是乐观更新 + 失败回滚**。点了立刻变，等一个来回会显得卡；
+ *   1. **好友申请状态乐观更新 + 失败回滚**。点了立刻变，等一个来回会显得卡；
  *      但失败必须回滚，否则界面上的「已关注」和库里的关系对不上。
  *   2. **热门动态复用 MomentStore 的接口**（`scope=hot`），不自己再造一份列表 ——
  *      两处各存一份，点赞数就会打架。
@@ -49,12 +49,11 @@ function reducer(state, action) {
       }
     }
 
-    /* 关注状态就地翻转 —— 乐观更新与回滚都走它 */
-    case 'FOLLOW':
+    case 'FRIEND_STATUS':
       return {
         ...state,
-        users: state.users.map((u) => (u.id === action.id ? { ...u, following: action.on } : u)),
-        nearby: state.nearby.map((u) => (u.id === action.id ? { ...u, following: action.on } : u)),
+        users: state.users.map((u) => (u.id === action.id ? { ...u, friendStatus: action.status } : u)),
+        nearby: state.nearby.map((u) => (u.id === action.id ? { ...u, friendStatus: action.status } : u)),
       }
 
     /* 加入成功后从「可加入」列表里摘掉：它已经在我的会话里了 */
@@ -175,23 +174,19 @@ export function DiscoverProvider({ children }) {
     }
   }, [state.usersHasMore, state.users.length, loadingMore])
 
-  /* ---------- 关注 / 取关 ---------- */
+  /* ---------- 好友申请 ---------- */
   const follow = useCallback(async (id) => {
     const cur =
       state.users.find((u) => u.id === id) || state.nearby.find((u) => u.id === id)
     if (!cur || id === meRef.current?.id) return
-    const next = !cur.following
-    dispatch({ type: 'FOLLOW', id, on: next })
+    if ((cur.friendStatus || 'none') !== 'none') return
+    dispatch({ type: 'FRIEND_STATUS', id, status: 'outgoing' })
     try {
-      const out = next ? await api.followUser(id) : await api.unfollowUser(id)
-      /* 以服务端返回的状态为准：别人的操作可能同时发生。
-         ⚠️ **只认布尔值**。这个字段曾经因为后端对象展开的顺序问题被覆盖成「关注数」，
-         `!!数量` 恒为 true —— 表现就是「取关了，按钮还写着已关注」，而库里其实已经删了。
-         类型不对就不采信，保留乐观值，别让一个字段类型错误把界面带偏。 */
-      if (typeof out?.following === 'boolean') dispatch({ type: 'FOLLOW', id, on: out.following })
+      const out = await api.requestFriend(id)
+      dispatch({ type: 'FRIEND_STATUS', id, status: out.friendStatus || 'outgoing' })
     } catch {
-      dispatch({ type: 'FOLLOW', id, on: !next })
-      throw new Error(next ? '关注失败，请重试' : '取关失败，请重试')
+      dispatch({ type: 'FRIEND_STATUS', id, status: 'none' })
+      throw new Error('好友申请发送失败，请重试')
     }
   }, [state.users, state.nearby])
 

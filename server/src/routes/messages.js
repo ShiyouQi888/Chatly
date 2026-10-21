@@ -34,6 +34,22 @@ const KINDS = ['text', 'image', 'file', 'video', 'location']
 /** 需要带文件的类型（text / location 不需要） */
 const FILE_KINDS = ['image', 'file', 'video']
 
+async function removedPrivatePeer(conversationId, senderId) {
+  const conversation = await q.get('SELECT type FROM conversations WHERE id = ?', conversationId)
+  if (conversation?.type !== 'private') return false
+  const peer = await q.get(
+    'SELECT user_id AS userId FROM conversation_members WHERE conversation_id = ? AND user_id <> ? LIMIT 1',
+    conversationId, senderId
+  )
+  return !!(peer && await q.get(
+    'SELECT 1 FROM removed_contacts WHERE user_id = ? AND contact_id = ?', peer.userId, senderId
+  ))
+}
+
+function removedPeerResponse(res) {
+  return res.status(403).json({ error: '对方已将你删除，消息未发送', code: 'friend_removed' })
+}
+
 /* ---------- 搜索我有权访问的文字消息 ---------- */
 r.get('/search', async (req, res) => {
   const term = String(req.query.q || '').trim().slice(0, 100)
@@ -106,6 +122,8 @@ r.post('/', async (req, res) => {
      转发走同一个门（它本质也是在这个会话里发消息），见下 POST /forward。 */
   const speak = await canSpeak(cid, req.user.id)
   if (!speak.ok || !cid) return res.status(speak.status || 403).json({ error: speak.error || '无权在该会话发言' })
+
+  if (await removedPrivatePeer(cid, req.user.id)) return removedPeerResponse(res)
 
   if (!KINDS.includes(kind)) {
     return res.status(400).json({ error: `不支持的消息类型：${kind}` })
@@ -207,6 +225,7 @@ r.post('/forward', async (req, res) => {
 
   const speak = await canSpeak(targetConversationId, req.user.id)
   if (!speak.ok) return res.status(speak.status || 403).json({ error: speak.error || '无权在目标会话发言' })
+  if (await removedPrivatePeer(targetConversationId, req.user.id)) return removedPeerResponse(res)
 
   const out = await forwardMessages(messageIds, targetConversationId, req.user.id)
   const ids = await memberIds(targetConversationId)

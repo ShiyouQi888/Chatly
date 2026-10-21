@@ -1,5 +1,5 @@
 /**
- * /api/v1/users —— 用户列表（发起聊天 / 建群）+ 找人 + 查看他人资料 + 关注
+ * /api/v1/users —— 用户列表（发起聊天 / 建群）+ 找人 + 查看他人资料 + 好友申请
  *
  * ## 隐私闸在哪一层
  * 三个「添加好友」开关管的是**能不能被找到**，不是「能不能被加」。
@@ -9,22 +9,51 @@
  *   - `GET /users/by-username/:username?from=qr` —— `from=qr` 走 `add_friend_by_qr`；
  *     `from=search`（手动输 ID）走 `add_friend_by_search`；不带 `from` 不设闸。
  *     查得到 ≠ 加得上：资料照常返回（你知道这是谁），但 `addable.allowed = false`。
- *   - `POST /users/:id/follow` 带 `source` 时再校验一遍 —— 前端可以绕过，
+ *   - `POST /users/:id/friend-request` 带 `source` 时再校验一遍 —— 前端可以绕过，
  *     服务端不能只靠界面把按钮禁掉。
  * 不带渠道的入口（群成员列表、发现页推荐）一律放行，见 privacy.js 顶部说明。
  */
 import { Router } from 'express'
 import { authRequired, publicUser, USER_COLS } from '../auth.js'
-import { q } from '../db.js'
+import { q, tx } from '../db.js'
 import { listUsers } from '../chat.js'
 import { profileForViewer, privateConversationWith, userIdByUsername, readProfile, PHONE_RE } from '../profile.js'
 import { isOnlineAnywhere, onlineSetOf } from '../ws.js'
 import { privacyOf, privacyOfMany, onlineVisible, canAddBy, CHANNEL_KEY } from '../privacy.js'
 import { pushNotification } from '../notification.js'
-import { follow, unfollow, isFollowing, followCounts, followingIds } from '../moment.js'
+import { unfollow, isFollowing, followCounts, followingIds } from '../moment.js'
+import { cancelFriendRequest, createFriendRequest, decideFriendRequest, friendStates, listFriendRequests } from '../friends.js'
 
 const r = Router()
 r.use(authRequired)
+
+/* ---------- 好友申请 ---------- */
+r.get('/friend-requests', async (req, res) => {
+  res.json(await listFriendRequests(Number(req.user.id)))
+})
+
+r.post('/friend-requests/:requestId/accept', async (req, res) => {
+  const id = Number(req.params.requestId)
+  const result = id ? await decideFriendRequest(id, Number(req.user.id), 'accepted') : null
+  if (!result) return res.status(404).json({ error: '好友申请不存在或已处理' })
+  await pushNotification({ userId: result.requesterId, actorId: result.recipientId, kind: 'follow', refId: result.requestId, body: '已同意你的好友申请' })
+  res.json({ ok: true, status: 'friends' })
+})
+
+r.post('/friend-requests/:requestId/reject', async (req, res) => {
+  const id = Number(req.params.requestId)
+  const result = id ? await decideFriendRequest(id, Number(req.user.id), 'rejected') : null
+  if (!result) return res.status(404).json({ error: '好友申请不存在或已处理' })
+  res.json({ ok: true, status: 'rejected' })
+})
+
+r.delete('/friend-requests/:requestId', async (req, res) => {
+  const id = Number(req.params.requestId)
+  if (!id || !(await cancelFriendRequest(id, Number(req.user.id)))) {
+    return res.status(404).json({ error: '好友申请不存在或已处理' })
+  }
+  res.json({ ok: true, status: 'cancelled' })
+})
 
 /* ---------- 通讯录联系人（互相关注） ---------- */
 r.get('/contacts', async (req, res) => {
@@ -53,8 +82,16 @@ r.get('/contacts', async (req, res) => {
 r.delete('/contacts/:id', async (req, res) => {
   const id = Number(req.params.id)
   if (!id || id === Number(req.user.id)) return res.status(400).json({ error: '联系人 id 无效' })
-  await unfollow(Number(req.user.id), id)
-  await unfollow(id, Number(req.user.id))
+  if (!(await q.get('SELECT id FROM users WHERE id = ?', id))) return res.status(404).json({ error: '联系人不存在' })
+  const viewerId = Number(req.user.id)
+  const now = Date.now()
+  await tx(async () => {
+    await q.run('DELETE FROM removed_contacts WHERE (user_id = ? AND contact_id = ?) OR (user_id = ? AND contact_id = ?)', viewerId, id, id, viewerId)
+    await q.run('INSERT INTO removed_contacts (user_id, contact_id, removed_at) VALUES (?, ?, ?)', viewerId, id, now)
+    await q.run('INSERT INTO removed_contacts (user_id, contact_id, removed_at) VALUES (?, ?, ?)', id, viewerId, now)
+    await unfollow(viewerId, id)
+    await unfollow(id, viewerId)
+  })
   res.json({ ok: true })
 })
 
@@ -98,6 +135,7 @@ async function viewerPayload(viewerId, targetId, { channel = null } = {}) {
        先写布尔再展开的话，`following` 会被覆盖成一个数字。 */
     following: await isFollowing(viewerId, targetId),
     followedBy: await isFollowing(targetId, viewerId),
+    friendStatus: (await friendStates(viewerId, [targetId])).get(Number(targetId)) || 'none',
     /* 只能看、不能加：命中了对方某个渠道的隐私开关时给出原因，界面据此把按钮换掉 */
     addable: isSelf ? { allowed: true, reason: null } : canAddBy(privacy, channel),
   }
@@ -106,9 +144,9 @@ async function viewerPayload(viewerId, targetId, { channel = null } = {}) {
 /* ---------- 关注 ----------
    关注关系不只是「个人主页的数字」：动态的「仅好友可见」就是按**互相关注**判的。
    没有这张表的话，可见范围就是一个点了没反应的假开关。 */
-r.post('/:id/follow', async (req, res) => {
+const sendFriendRequest = async (req, res) => {
   const id = Number(req.params.id)
-  if (!id || id === req.user.id) return res.status(400).json({ error: '不能关注自己' })
+  if (!id || id === Number(req.user.id)) return res.status(400).json({ error: '不能申请添加自己' })
 
   /* 服务端再校验一遍渠道闸：前端把按钮禁掉是提示，这里才是拦截。
      代码 `privacy_blocked` 让前端能区分「对方不让加」和「别的原因失败」。 */
@@ -120,15 +158,17 @@ r.post('/:id/follow', async (req, res) => {
     }
   }
 
-  /* follow() 返回 false 表示本来就关注着 —— 那种情况不能再发一条「有人关注了你」，
-     否则反复点同一个按钮会刷出重复通知。 */
-  const created = await follow(req.user.id, id)
-  if (created) {
-    await pushNotification({ userId: id, actorId: req.user.id, kind: 'follow' })
+  if (!(await q.get('SELECT id FROM users WHERE id = ?', id))) return res.status(404).json({ error: '用户不存在' })
+  const request = await createFriendRequest(Number(req.user.id), id)
+  if (request.created) {
+    await pushNotification({ userId: id, actorId: req.user.id, kind: 'follow', refId: request.requestId, body: '申请添加你为好友' })
   }
-  // 展开在前、布尔在后 —— 反过来的话计数会把 `following` 覆盖掉（见 moment.js 的注释）
-  res.json({ ok: true, ...(await followCounts(id)), following: true })
-})
+  res.json({ ok: true, requestId: request.requestId, friendStatus: request.status, requested: request.status === 'outgoing' })
+}
+
+r.post('/:id/friend-request', sendFriendRequest)
+/* 旧客户端兼容：原 follow 写操作现在也只会创建待同意申请，不再直接建立关系。 */
+r.post('/:id/follow', sendFriendRequest)
 
 r.delete('/:id/follow', async (req, res) => {
   const id = Number(req.params.id)
@@ -171,6 +211,7 @@ r.get('/search', async (req, res) => {
     onlineSetOf(ids),
     followingIds(req.user.id),
   ])
+  const relationships = await friendStates(Number(req.user.id), ids)
 
   const users = rows
     /* 自己永远搜得到自己；别人要过闸 */
@@ -185,6 +226,7 @@ r.get('/search', async (req, res) => {
         ...publicUser(row),
         online: onlineVisible(privacy.get(id)) && present.has(id),
         following: following.has(id),
+        friendStatus: relationships.get(id) || 'none',
         isSelf: id === Number(req.user.id),
       }
     })

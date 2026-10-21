@@ -26,7 +26,7 @@ import './scan.css'
  *      无头浏览器没有摄像头，但可以往 file input 里塞一张真实 PNG
  *   3. 手动   —— 直接输 ID（界面上的「ID: xxxx」），走后端按 username 查
  *
- * 识别的结果**只有三类是真实动作**：加好友（写 follows 表）、发消息（建/开私聊）、复制文本。
+ * 识别的结果**只有三类是真实动作**：发送好友申请、发消息（建/开私聊）、复制文本。
  * 群码 / 动态码只做到「认出来 + 明确说暂未支持」—— 后端还没有对应的入群校验，
  * 做成按钮就是个点了没反应的假东西。
  */
@@ -256,7 +256,7 @@ export default function ScanPage({ onBack, nav }) {
     }
   }, [manual, showToast])
 
-  /* ---------- 加好友（写 follows 表） ---------- */
+  /* ---------- 发送好友申请 ---------- */
   const onFollow = useCallback(async () => {
     const id = result?.profile?.userId
     if (!id) return
@@ -265,9 +265,9 @@ export default function ScanPage({ onBack, nav }) {
       /* 把识别时的渠道原样带给服务端（`qr` 或 `search`）——
          服务端据此校验对方的「通过二维码 / 通过搜索添加」开关。
          界面上把按钮禁掉只是提示，真正拦住的是这一层。 */
-      await api.followUser(id, result?.from)
-      setResult((r) => (r ? { ...r, profile: { ...r.profile, following: true } } : r))
-      showToast('已加为好友')
+      const out = await api.requestFriend(id, result?.from)
+      setResult((r) => (r ? { ...r, profile: { ...r.profile, friendStatus: out.friendStatus || 'outgoing' } } : r))
+      showToast(out.friendStatus === 'incoming' ? '对方已申请添加你，请到通讯录处理' : '好友申请已发送')
     } catch (e) {
       showToast(e.message || '操作失败')
     } finally {
@@ -430,7 +430,7 @@ export default function ScanPage({ onBack, nav }) {
                     <b>{prof.nickname}</b>
                     <em>@{prof.username}</em>
                     {result.profile.isSelf && <span className="scan-chip">这是你自己的码</span>}
-                    {!result.profile.isSelf && result.profile.following && <span className="scan-chip">已加为好友</span>}
+                    {!result.profile.isSelf && result.profile.friendStatus === 'friends' && <span className="scan-chip">已添加</span>}
                   </div>
                 </div>
                 <p className="scan-bio">{prof.bio || '这个人很神秘，什么都没写'}</p>
@@ -445,10 +445,14 @@ export default function ScanPage({ onBack, nav }) {
 
                 {!result.profile.isSelf ? (
                   <div className="scan-person-acts">
-                    {result.profile.following ? (
+                    {result.profile.friendStatus === 'friends' ? (
                       <button type="button" className="scan-btn scan-btn--done" disabled>
-                        <IconCheck size={18} /> 已加为好友
+                        <IconCheck size={18} /> 已添加
                       </button>
+                    ) : result.profile.friendStatus === 'outgoing' ? (
+                      <button type="button" className="scan-btn scan-btn--done" disabled>等待对方同意</button>
+                    ) : result.profile.friendStatus === 'incoming' ? (
+                      <button type="button" className="scan-btn scan-btn--done" disabled>对方已申请 · 到通讯录处理</button>
                     ) : blocked ? (
                       <button
                         type="button"
@@ -489,7 +493,7 @@ export default function ScanPage({ onBack, nav }) {
                 )}
 
                 <p className="scan-note">
-                  加上好友后，动态页会开始出现 Ta 的内容；双方互加之后，彼此的「仅好友」动态才可见。
+                  申请通过后，双方会成为好友，彼此的「仅好友」动态才可见。
                 </p>
               </>
             )}

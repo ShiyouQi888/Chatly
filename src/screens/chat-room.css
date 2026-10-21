@@ -1799,8 +1799,87 @@ button.img-bubble.is-locked {
 
 /* 发送失败 */
 .msg-foot em.msg-failed {
+  display: inline-flex;
+  width: 15px;
+  height: 15px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #e53945;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.msg-send-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  max-width: min(280px, 100%);
+  color: #d9363e;
+  line-height: 1.35;
+}
+
+.msg-send-error-mark {
+  display: inline-flex;
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+  border-radius: 50%;
+  background: #e53945;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.msg-send-error small {
+  font-size: 11px;
+}
+
+.msg-upload-progress {
+  width: min(100%, 280px);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.msg-upload-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-2);
+  font-size: var(--fs-micro);
+  line-height: 1.3;
+}
+
+.msg-upload-track {
+  height: 4px;
+  overflow: hidden;
+  border-radius: var(--r-full);
+  background: var(--surface-3);
+}
+
+.msg-upload-track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--brand-grad);
+  transition: width 120ms linear;
+}
+
+.msg-upload-progress.is-failed .msg-upload-label {
   color: #f04a5e;
-  font-weight: 600;
+}
+
+.msg-upload-progress.is-failed .msg-upload-track > span {
+  background: #f04a5e;
 }
 
 /* 正在输入三点 */

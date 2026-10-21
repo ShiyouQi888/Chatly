@@ -38,6 +38,8 @@ function lastBody(lm, geoName) {
   const t = lm.text || ''
   if (t === '(消息已撤回)') return '消息已撤回'
   if (lm.kind === 'image') return '[图片]'
+  /* 新版视频消息有独立 kind；兼容早期把视频作为普通文件发送的历史消息。 */
+  if (lm.kind === 'video' || /\.(mp4|webm|mov|m4v|avi|mkv|ogv)(?:$|[?#])/i.test(lm.fileName || t)) return '视频'
   /* 位置消息的「正文」是地点名 —— 服务端把它放在 geo.name 而不是 content 里，
      这里得单独取一次，否则会话列表的预览会是一条空白（看起来像消息没发出去）。 */
   if (lm.kind === 'location') return `[位置] ${geoName || ''}`.trim()
@@ -302,6 +304,20 @@ function reducer(state, action) {
       return { ...state, conversations, messages: { ...state.messages, [convId]: list } }
     }
 
+    case 'UPLOAD_PROGRESS': {
+      const list = state.messages[action.convId]
+      if (!list) return state
+      return {
+        ...state,
+        messages: {
+          ...state.messages,
+          [action.convId]: list.map((m) => m.id === action.tempId
+            ? { ...m, uploadProgress: action.progress, uploadStage: action.stage }
+            : m),
+        },
+      }
+    }
+
     /** REST 返回后顶掉乐观消息（若 WS 已抢先落位，则只删占位） */
     case 'REPLACE_TEMP': {
       const list = state.messages[action.convId]
@@ -318,7 +334,9 @@ function reducer(state, action) {
         messages: {
           ...state.messages,
           [action.convId]: (state.messages[action.convId] || []).map((m) =>
-            m.id === action.tempId ? { ...m, pending: false, failed: true } : m
+            m.id === action.tempId
+              ? { ...m, pending: false, failed: true, failureMessage: action.failureMessage || '消息发送失败', uploadFailed: !!m.uploading, uploading: false }
+              : m
           ),
         },
       }
@@ -948,8 +966,68 @@ export function ChatProvider({ children }) {
       dispatch({ type: 'REPLACE_TEMP', convId, tempId, message: mapMessage(message, me.id) })
       return message
     } catch (e) {
-      dispatch({ type: 'MARK_FAILED', convId, tempId })
+      dispatch({ type: 'MARK_FAILED', convId, tempId, failureMessage: e.message })
       throw e
+    }
+  }, [])
+
+  const sendAttachment = useCallback(async ({ conversationId, kind, file }) => {
+    const me = meRef.current
+    if (!me) throw new Error('未登录')
+    if (!(file instanceof Blob)) throw new Error('没有选择文件')
+
+    const tempId = `tmp-upload-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    const previewUrl = URL.createObjectURL(file)
+    dispatch({
+      type: 'UPSERT_MESSAGE',
+      message: {
+        id: tempId,
+        convId: conversationId,
+        from: 'me',
+        mine: true,
+        senderId: me.id,
+        sender: me.nickname,
+        av: avatarOf(me),
+        kind,
+        text: '',
+        fileUrl: previewUrl,
+        fileName: file.name || '未命名文件',
+        fileSize: file.size || 0,
+        time: formatTime(Date.now()),
+        createdAt: Date.now(),
+        read: false,
+        revoked: false,
+        pending: true,
+        failed: false,
+        uploading: true,
+        uploadProgress: 0,
+        uploadStage: '准备上传',
+      },
+    })
+
+    try {
+      const uploaded = await api.upload(file, {
+        onProgress: (progress) => dispatch({
+          type: 'UPLOAD_PROGRESS',
+          convId: conversationId,
+          tempId,
+          progress,
+          stage: progress >= 100 ? '正在发送' : '正在上传',
+        }),
+      })
+      const { message } = await api.sendMessage({
+        conversationId,
+        kind,
+        fileUrl: uploaded.url,
+        fileName: uploaded.fileName || file.name,
+        fileSize: uploaded.fileSize || file.size,
+      })
+      URL.revokeObjectURL(previewUrl)
+      dispatch({ type: 'REPLACE_TEMP', convId: conversationId, tempId, message: mapMessage(message, me.id) })
+      return message
+    } catch (error) {
+      dispatch({ type: 'MARK_FAILED', convId: conversationId, tempId, failureMessage: error.message })
+      throw error
     }
   }, [])
 
@@ -1130,6 +1208,7 @@ export function ChatProvider({ children }) {
       openConversation,
       closeConversation,
       sendMessage,
+      sendAttachment,
       revokeMessage,
       notifyTyping,
       createPrivateChat,
@@ -1166,6 +1245,7 @@ export function ChatProvider({ children }) {
       openConversation,
       closeConversation,
       sendMessage,
+      sendAttachment,
       revokeMessage,
       notifyTyping,
       loadPolls,

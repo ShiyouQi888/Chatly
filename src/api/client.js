@@ -1,3 +1,5 @@
+import { compressImage } from '../lib/compress-image.js'
+
 /**
  * 后端 API 客户端
  * 所有请求走 Vite 代理 /api/v1 → http://127.0.0.1:3002
@@ -43,9 +45,40 @@ async function request(path, { method = 'GET', body, raw = false } = {}) {
   if (!res.ok) {
     const err = new Error(data.error || data.message || `请求失败 (${res.status})`)
     err.status = res.status
+    err.code = data.code || null
     throw err
   }
   return data
+}
+
+function uploadRequest(path, file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    const form = new FormData()
+    form.append('file', file, file.name || 'upload')
+    xhr.open('POST', `${BASE}${path}`)
+    const token = tokenStore.get()
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable) return
+      onProgress?.(Math.min(99, Math.round((event.loaded / event.total) * 100)))
+    }
+    xhr.onerror = () => reject(new Error('网络错误，上传失败'))
+    xhr.onabort = () => reject(new Error('上传已取消'))
+    xhr.onload = () => {
+      let data = {}
+      try { data = xhr.responseText ? JSON.parse(xhr.responseText) : {} } catch { data = { error: xhr.responseText } }
+      if (xhr.status < 200 || xhr.status >= 300) {
+        const error = new Error(data.error || data.message || `上传失败 (${xhr.status})`)
+        error.status = xhr.status
+        reject(error)
+        return
+      }
+      onProgress?.(100)
+      resolve(data)
+    }
+    xhr.send(form)
+  })
 }
 
 export const api = {
@@ -62,15 +95,17 @@ export const api = {
 
   /* ---- 资料 ---- */
   updateProfile: (fields) => request('/auth/me', { method: 'PATCH', body: fields }),
-  uploadAvatar: (file) => {
+  uploadAvatar: async (file) => {
     const fd = new FormData()
-    fd.append('file', file, file.name || 'avatar.png')
+    const image = await compressImage(file, 'avatar')
+    fd.append('file', image, image.name || 'avatar.webp')
     return request('/auth/me/avatar', { method: 'POST', body: fd, raw: true })
   },
   /** 主页背景图：和头像同构，服务端一步落库并删掉旧图 */
-  uploadCover: (file) => {
+  uploadCover: async (file) => {
     const fd = new FormData()
-    fd.append('file', file, file.name || 'cover.jpg')
+    const image = await compressImage(file, 'cover')
+    fd.append('file', image, image.name || 'cover.webp')
     return request('/auth/me/cover', { method: 'POST', body: fd, raw: true })
   },
   /** 恢复默认背景（库里把 profile_cover 置空，前端画原来的插画） */
@@ -285,19 +320,30 @@ export const api = {
 
   /* ---- 用户反馈（「我 → 帮助与反馈」） ---- */
   /** 截图先单独上传，拿到 /uploads 地址后再随反馈一起提交 */
-  uploadFeedbackScreenshot: (formData) =>
-    request('/feedback/screenshot', { method: 'POST', body: formData, raw: true }),
+  uploadFeedbackScreenshot: async (formData) => {
+    const file = formData.get('file')
+    if (file instanceof Blob) {
+      const image = await compressImage(file, 'screenshot')
+      formData.set('file', image, image.name || 'screenshot.webp')
+    }
+    return request('/feedback/screenshot', { method: 'POST', body: formData, raw: true })
+  },
   submitFeedback: ({ type, description, contact, screenshotUrl }) =>
     request('/feedback', { method: 'POST', body: { type, description, contact, screenshotUrl } }),
 
-  /* ---- 关注（动态的「仅好友可见」按互相关注判定） ----
-     `source` 是**可选**的渠道声明：只有「扫码 / 搜索」这类「被找到」的入口才传，
-     服务端据此校验对方的隐私开关。群成员列表、发现页推荐不传（那些人本就在你眼前）。 */
+  /* 好友申请的 source 用于服务端校验对方的添加权限。 */
+  requestFriend: (id, source) =>
+    request(`/users/${id}/friend-request`, { method: 'POST', body: source ? { source } : undefined }),
+  /** 旧版兼容入口：服务端现在也会按好友申请处理，不会直接建立关系。 */
   followUser: (id, source) =>
     request(`/users/${id}/follow`, { method: 'POST', body: source ? { source } : undefined }),
   unfollowUser: (id) => request(`/users/${id}/follow`, { method: 'DELETE' }),
   contacts: () => request('/users/contacts'),
   removeContact: (id) => request(`/users/contacts/${id}`, { method: 'DELETE' }),
+  friendRequests: () => request('/users/friend-requests'),
+  acceptFriendRequest: (id) => request(`/users/friend-requests/${id}/accept`, { method: 'POST' }),
+  rejectFriendRequest: (id) => request(`/users/friend-requests/${id}/reject`, { method: 'POST' }),
+  cancelFriendRequest: (id) => request(`/users/friend-requests/${id}`, { method: 'DELETE' }),
 
   /* ---- 发现页 ---- */
   /** 推荐用户。tag 为空=全部；排序由后端按「共同群聊 > 共同兴趣 > 同城」给 */
@@ -340,10 +386,9 @@ export const api = {
     ),
 
   /* ---- 上传 ---- */
-  upload: (file) => {
-    const fd = new FormData()
-    fd.append('file', file)
-    return request('/messages/upload', { method: 'POST', body: fd, raw: true })
+  upload: async (file, { onProgress } = {}) => {
+    const image = await compressImage(file, 'chat')
+    return uploadRequest('/messages/upload', image, onProgress)
   },
 
   /**
@@ -351,9 +396,10 @@ export const api = {
    * 走动态自己的接口而不是 `/messages/upload` —— 两边体积上限不同
    * （图片 12MB / 视频 80MB，聊天附件只有 20MB），视频根本传不动。
    */
-  uploadMomentMedia: (file, kind) => {
+  uploadMomentMedia: async (file, kind) => {
     const fd = new FormData()
-    fd.append('file', file)
+    const image = kind === 'video' ? file : await compressImage(file, 'moment')
+    fd.append('file', image, image.name || file.name)
     return request(`/moments/upload?kind=${kind === 'video' ? 'video' : 'image'}`, {
       method: 'POST',
       body: fd,

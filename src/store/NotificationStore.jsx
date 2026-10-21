@@ -263,7 +263,7 @@ export function noticeText(n) {
           ? `评论了你的动态：${n.body}`
           : '评论了你的动态'
     case 'follow':
-      return '关注了你'
+      return n.body || '关注了你'
     case 'group':
       return n.body || '群公告已更新'
     default:

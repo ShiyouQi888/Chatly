@@ -58,7 +58,9 @@
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
 
   /* ===== 布局 ===== */
+  /* 底部导航的最小总高度：包含触控区与设备安全区，实际高度由内容撑开。 */
   --tabbar-h: 58px;
+  --tabbar-h: max(58px, calc(56px + env(safe-area-inset-bottom, 0px)));
   /* 顶部留白：真机由系统状态栏占位，桌面预览需要显式留出 */
   --safe-top: 14px;
 

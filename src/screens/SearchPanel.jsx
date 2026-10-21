@@ -14,6 +14,9 @@ import './search-panel.css'
    和会话 / 动态的本地索引是独立数据源。
    所以它在结果区单独成组，并且是唯一受对方隐私开关约束的一类。 */
 const FILTERS = ['全部', '找人', '联系人', '聊天', '消息', '动态']
+const friendActionLabel = (status) => ({
+  outgoing: '等待验证', incoming: '收到申请', friends: '已添加',
+}[status] || '加好友')
 
 /* 搜索索引：会话和动态都来自真实后端（动态以前用的是原型数据，
    那些内容早就不存在了 —— 搜出来点开是空的就是这么来的） */
@@ -199,16 +202,14 @@ export default function SearchPanel({ onBack, nav }) {
     }
   }, [q])
 
-  /* 关注 / 取消关注。
-     把这次搜索的渠道（`search` / `phone`）一并带给服务端 —— 服务端据此再校验一次
-     对方的隐私开关（能搜到就说明开着，但接口不能只靠界面保证这一点）。 */
+  /* 好友申请把搜索渠道带给服务端，服务端再校验对方的隐私开关。 */
   const toggleFollow = async (u) => {
+    if ((u.friendStatus || 'none') !== 'none') return
     setFollowBusy(u.id)
     try {
-      if (u.following) await api.unfollowUser(u.id)
-      else await api.followUser(u.id, peopleBy)
-      setPeople((list) => list.map((x) => (x.id === u.id ? { ...x, following: !x.following } : x)))
-      showToast(u.following ? '已取消关注' : '已关注')
+      const out = await api.requestFriend(u.id, peopleBy)
+      setPeople((list) => list.map((x) => (x.id === u.id ? { ...x, friendStatus: out.friendStatus || 'outgoing' } : x)))
+      showToast(out.friendStatus === 'incoming' ? '对方已向你发送申请，请在通讯录中处理' : '好友申请已发送')
     } catch (e) {
       showToast(e.message || '操作失败')
     } finally {
@@ -454,12 +455,12 @@ function PeopleRow({ u, last, busy, onFollow, onSay }) {
         <span className="sp-p-acts">
           <button
             type="button"
-            className={`sp-p-btn ${u.following ? 'is-on' : ''}`}
-            disabled={busy}
+            className={`sp-p-btn ${(u.friendStatus || 'none') !== 'none' ? 'is-on' : ''}`}
+            disabled={busy || (u.friendStatus || 'none') !== 'none'}
             onClick={() => onFollow(u)}
             data-testid={`people-follow-${u.id}`}
           >
-            {u.following ? '已关注' : '关注'}
+            {friendActionLabel(u.friendStatus)}
           </button>
           <button
             type="button"

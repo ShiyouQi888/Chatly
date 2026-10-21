@@ -126,8 +126,8 @@ export default function NotificationSettings({ onBack }) {
                 right={<Switch on={prefs?.comment !== false} onChange={toggle('notify_comment')} disabled={saving.notify_comment} />}
               />
               <Row
-                label="新关注"
-                sub="有人关注了我"
+                label="好友申请"
+                sub="收到好友申请或申请处理结果"
                 right={<Switch on={prefs?.follow !== false} onChange={toggle('notify_follow')} disabled={saving.notify_follow} />}
               />
               <Row
