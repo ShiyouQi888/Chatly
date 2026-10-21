@@ -35,7 +35,11 @@ function isConfiguredAdmin(account, user) {
 }
 
 r.use(async (req, res, next) => {
-  const configuredRoot = await q.get('SELECT user_id FROM admin_root WHERE singleton = 1')
+  const configuredRoot = await q.get(
+    `SELECT root.user_id, admin.username
+     FROM admin_root root JOIN users admin ON admin.id = root.user_id
+     WHERE root.singleton = 1`
+  )
   const adminAccount = configuredAdminAccount()
   const isOwner = configuredRoot
     ? String(configuredRoot.user_id) === String(req.user.id)
@@ -45,7 +49,11 @@ r.use(async (req, res, next) => {
     return res.status(503).json({ error: '尚未初始化固定管理员，请在服务端配置 ADMIN_USERNAME 和 ADMIN_PASSWORD 后重启服务' })
   }
   if (!isOwner && !staff) {
-    return res.status(403).json({ error: `当前账号 @${req.user.username}（ID ${req.user.id}）没有运营后台权限。请将固定管理员账号配置为 ADMIN_ACCOUNT。` })
+    const configuredUsername = configuredRoot?.username || adminAccount
+    const hint = configuredUsername
+      ? `请退出后使用固定管理员账号 @${configuredUsername} 登录。`
+      : '请检查服务端 ADMIN_USERNAME / ADMIN_PASSWORD 配置并重启后端。'
+    return res.status(403).json({ error: `当前账号 @${req.user.username}（ID ${req.user.id}）没有运营后台权限。${hint}` })
   }
   req.adminRole = isOwner ? 'owner' : staff.role
   req.adminPermissions = ROLE_PERMISSIONS[req.adminRole] || []

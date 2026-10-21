@@ -431,6 +431,8 @@ CREATE TABLE IF NOT EXISTS admin_staff (
 CREATE TABLE IF NOT EXISTS admin_root (
   singleton   INTEGER PRIMARY KEY CHECK (singleton = 1),
   user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  bootstrap_username TEXT,
+  bootstrap_password_hash TEXT,
   created_at  INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
 );
 
