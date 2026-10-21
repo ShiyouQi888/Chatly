@@ -20,26 +20,29 @@ const ROLE_PERMISSIONS = {
 }
 const STAFF_ROLES = new Set(['moderator', 'support', 'analyst'])
 
-function configuredAdminAccounts() {
-  return new Set(
-    String(process.env.ADMIN_USER_IDS || '')
-      .split(',')
-      .map((value) => value.trim().toLowerCase())
-      .filter(Boolean)
-  )
+function configuredAdminAccount() {
+  /* One immutable root account comes from the server environment. The legacy plural
+     variable is read only as a migration fallback, and only its first value is used. */
+  return String(process.env.ADMIN_ACCOUNT || process.env.ADMIN_USER_ID || process.env.ADMIN_USER_IDS || '')
+    .split(',')[0]
+    .trim()
+    .toLowerCase()
+}
+
+function isConfiguredAdmin(account, user) {
+  if (!account || !user) return false
+  return account === String(user.id) || account === String(user.username || '').trim().toLowerCase()
 }
 
 r.use(async (req, res, next) => {
-  const admins = configuredAdminAccounts()
-  const userId = String(req.user.id)
-  const username = String(req.user.username || '').trim().toLowerCase()
-  const isOwner = admins.has(userId) || (!!username && admins.has(username))
+  const adminAccount = configuredAdminAccount()
+  const isOwner = isConfiguredAdmin(adminAccount, req.user)
   const staff = isOwner ? null : await q.get('SELECT role FROM admin_staff WHERE user_id = ?', req.user.id)
-  if (!isOwner && !staff && !admins.size) {
-    return res.status(503).json({ error: '运营后台尚未配置管理员，请在 server/.env 设置 ADMIN_USER_IDS（支持用户 ID 或账号名）并重启服务' })
+  if (!adminAccount) {
+    return res.status(503).json({ error: '运营后台尚未配置固定管理员，请在服务端环境变量设置 ADMIN_ACCOUNT 并重启服务' })
   }
   if (!isOwner && !staff) {
-    return res.status(403).json({ error: `当前账号 @${req.user.username}（ID ${req.user.id}）尚未开通运营后台权限。请将用户 ID 或账号名加入 ADMIN_USER_IDS 并重启服务。` })
+    return res.status(403).json({ error: `当前账号 @${req.user.username}（ID ${req.user.id}）没有运营后台权限。请将固定管理员账号配置为 ADMIN_ACCOUNT。` })
   }
   req.adminRole = isOwner ? 'owner' : staff.role
   req.adminPermissions = ROLE_PERMISSIONS[req.adminRole] || []
@@ -222,8 +225,7 @@ r.patch('/users/:id/status', requirePermission('users.manage'), async (req, res)
   if (id === Number(req.user.id) && banned) return res.status(400).json({ error: '不能停用当前管理员账号' })
   const target = await q.get('SELECT id, username FROM users WHERE id = ?', id)
   if (!target) return res.status(404).json({ error: '用户不存在' })
-  const admins = configuredAdminAccounts()
-  if (admins.has(String(target.id)) || admins.has(String(target.username || '').trim().toLowerCase())) {
+  if (isConfiguredAdmin(configuredAdminAccount(), target)) {
     return res.status(403).json({ error: '不能停用后台管理员账号' })
   }
   if (await q.get('SELECT user_id FROM admin_staff WHERE user_id = ?', id)) return res.status(403).json({ error: '不能停用后台运营成员账号，请先移除其后台角色' })
@@ -407,8 +409,7 @@ r.post('/staff', requireOwner, async (req, res) => {
   if (!STAFF_ROLES.has(role)) return res.status(400).json({ error: '运营角色无效' })
   const target = await q.get('SELECT id, username FROM users WHERE id = ?', userId)
   if (!target) return res.status(404).json({ error: '用户不存在' })
-  const admins = configuredAdminAccounts()
-  if (admins.has(String(target.id)) || admins.has(String(target.username || '').trim().toLowerCase())) {
+  if (isConfiguredAdmin(configuredAdminAccount(), target)) {
     return res.status(400).json({ error: '该账号已通过超级管理员名单获得权限，无需重复分配角色' })
   }
   const now = Date.now()

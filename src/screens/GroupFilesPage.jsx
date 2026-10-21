@@ -59,7 +59,7 @@ export default function GroupFilesPage({ chat, sendMessage, onBack }) {
     if (!file) return
     setUploading(true)
     try {
-      const uploaded = await api.upload(file)
+      const uploaded = await api.upload(file, { conversationId: chat.id })
       const kind = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'file'
       await sendMessage({
         conversationId: chat.id,

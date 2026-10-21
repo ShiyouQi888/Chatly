@@ -35,6 +35,27 @@ export async function friendStates(viewerId, targetIds) {
   return result
 }
 
+/** Private conversations require mutual friendship; a pending request is not permission to message. */
+export async function privateMessageGate(conversationId, senderId) {
+  const conversation = await q.get('SELECT type FROM conversations WHERE id = ?', conversationId)
+  if (conversation?.type !== 'private') return null
+  const peer = await q.get(
+    'SELECT user_id AS userId FROM conversation_members WHERE conversation_id = ? AND user_id <> ? LIMIT 1',
+    conversationId, senderId
+  )
+  if (!peer) return null
+
+  const removed = await q.get(
+    'SELECT 1 FROM removed_contacts WHERE (user_id = ? AND contact_id = ?) OR (user_id = ? AND contact_id = ?)',
+    peer.userId, senderId, senderId, peer.userId
+  )
+  if (removed) return { code: 'friend_removed', error: '对方已将你删除，消息未发送' }
+
+  const friends = await isFollowing(senderId, peer.userId) && await isFollowing(peer.userId, senderId)
+  if (!friends) return { code: 'friend_required', error: '你们还不是好友，请先发送好友申请并等待对方同意' }
+  return null
+}
+
 export async function createFriendRequest(requesterId, recipientId) {
   try {
     return await tx(async () => {

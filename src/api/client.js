@@ -71,6 +71,7 @@ function uploadRequest(path, file, onProgress) {
       if (xhr.status < 200 || xhr.status >= 300) {
         const error = new Error(data.error || data.message || `上传失败 (${xhr.status})`)
         error.status = xhr.status
+        error.code = data.code || null
         reject(error)
         return
       }
@@ -386,9 +387,12 @@ export const api = {
     ),
 
   /* ---- 上传 ---- */
-  upload: async (file, { onProgress } = {}) => {
+  upload: async (file, { onProgress, conversationId } = {}) => {
     const image = await compressImage(file, 'chat')
-    return uploadRequest('/messages/upload', image, onProgress)
+    const path = conversationId
+      ? `/messages/upload?conversationId=${encodeURIComponent(conversationId)}`
+      : '/messages/upload'
+    return uploadRequest(path, image, onProgress)
   },
 
   /**

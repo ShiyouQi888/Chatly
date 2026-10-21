@@ -18,6 +18,7 @@ export default function ContactsTab({ nav }) {
   const { showToast } = useApp()
   const { conversations, createPrivateChat, createGroupChat } = useChat()
   const [contacts, setContacts] = useState([])
+  const [incomingRequestCount, setIncomingRequestCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
@@ -45,7 +46,36 @@ export default function ContactsTab({ nav }) {
     }
   }
 
-  useEffect(() => { loadContacts() }, [])
+  useEffect(() => {
+    let active = true
+    const refreshIncomingRequests = async () => {
+      try {
+        const result = await api.friendRequests()
+        if (active) setIncomingRequestCount((result.incoming || []).length)
+      } catch {
+        // Keep the last known badge state if a transient request fails.
+      }
+    }
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') refreshIncomingRequests()
+    }
+    loadContacts()
+    refreshIncomingRequests()
+    const timer = window.setInterval(refreshIncomingRequests, 30000)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+    }
+  }, [])
+
+  const refreshContactsAndRequests = () => {
+    loadContacts()
+    api.friendRequests()
+      .then((result) => setIncomingRequestCount((result.incoming || []).length))
+      .catch(() => {})
+  }
 
   const filtered = useMemo(() => {
     const key = query.trim().toLocaleLowerCase('zh-CN')
@@ -146,7 +176,12 @@ export default function ContactsTab({ nav }) {
         </label>
 
         <section className="contacts-shortcuts">
-          <button type="button" onClick={() => setFriendRequestsOpen(true)}><span className="contacts-shortcut-icon is-add"><IconPlus size={19} /></span><b>新的朋友</b><span>好友申请与添加</span></button>
+          <button type="button" className="contacts-friend-requests" onClick={() => setFriendRequestsOpen(true)}>
+            <span className="contacts-shortcut-icon is-add"><IconPlus size={19} /></span>
+            <b>新的朋友</b>
+            <span className="contacts-shortcut-meta">好友申请与添加</span>
+            {incomingRequestCount > 0 && <span className="contacts-request-alert" role="img" aria-label={`有 ${incomingRequestCount} 个待处理好友申请`}>!</span>}
+          </button>
           <button type="button" onClick={() => setGroupSheet(true)}><span className="contacts-shortcut-icon is-group"><IconChat size={19} /></span><b>群聊</b><span>{groupChats.length} 个</span></button>
         </section>
 
@@ -200,7 +235,7 @@ export default function ContactsTab({ nav }) {
       {friendRequestsOpen && <FriendRequestsPage
         onBack={() => setFriendRequestsOpen(false)}
         onAddFriend={() => { setFriendRequestsOpen(false); nav.openSearch() }}
-        onUpdated={loadContacts}
+        onUpdated={refreshContactsAndRequests}
       />}
 
       {profileId && <UserProfile userId={profileId} onBack={() => setProfileId(null)} onMessage={async () => {

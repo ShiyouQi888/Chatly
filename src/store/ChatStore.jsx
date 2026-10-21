@@ -1007,6 +1007,7 @@ export function ChatProvider({ children }) {
 
     try {
       const uploaded = await api.upload(file, {
+        conversationId,
         onProgress: (progress) => dispatch({
           type: 'UPLOAD_PROGRESS',
           convId: conversationId,

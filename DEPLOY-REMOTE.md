@@ -24,7 +24,7 @@
 docker compose -f docker-compose.app.yml exec postgres psql -U chatly -d chatly -c 'SELECT id, username FROM users;'
 ```
 
-把对应 ID 写入 `.env` 的 `ADMIN_USER_IDS`，然后重建后端容器使变量生效：
+把对应 ID 或用户名写入 `.env` 的 `ADMIN_ACCOUNT`，然后重建后端容器使变量生效：
 
 ```bash
 docker compose -f docker-compose.app.yml up -d --force-recreate server

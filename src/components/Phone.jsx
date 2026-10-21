@@ -86,7 +86,12 @@ export default function Phone() {
     )
   }
 
-  if (window.location.pathname.replace(/\/+$/, '') === '/admin') {
+  const pathname = window.location.pathname.replace(/\/+$/, '') || '/'
+  if (pathname === '/admin') {
+    window.history.replaceState(null, '', '/qishiyou')
+    return <AdminConsole />
+  }
+  if (pathname === '/qishiyou') {
     return <AdminConsole />
   }
 

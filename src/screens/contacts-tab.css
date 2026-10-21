@@ -8,8 +8,10 @@
 .contacts-shortcuts { margin: 14px 0 19px; padding: 5px 12px; border-radius: 16px; background: var(--surface, #fff); box-shadow: 0 2px 10px rgba(32, 28, 70, .035); }
 .contacts-shortcuts button { width: 100%; min-height: 58px; display: flex; align-items: center; gap: 11px; text-align: left; border-bottom: 1px solid var(--line); }
 .contacts-shortcuts button:last-child { border-bottom: 0; }
+.contacts-shortcuts .contacts-friend-requests { position: relative; padding-right: 20px; }
 .contacts-shortcuts b { flex: 1; color: var(--text); font-size: 14px; font-weight: 650; }
-.contacts-shortcuts button > span:last-child { color: var(--text-3); font-size: 11px; }
+.contacts-shortcut-meta { color: var(--text-3); font-size: 11px; }
+.contacts-request-alert { position: absolute; top: 3px; right: 0; width: 16px; height: 16px; display: grid; place-items: center; border: 2px solid var(--surface, #fff); border-radius: 50%; background: #ef4444; color: #fff; font-size: 10px; font-weight: 800; line-height: 1; box-shadow: 0 1px 4px rgba(190, 24, 42, .24); }
 .contacts-shortcut-icon { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 12px; color: #fff; }
 .contacts-shortcut-icon.is-add { background: linear-gradient(145deg, #9f90ff, #6959e8); }
 .contacts-shortcut-icon.is-group { background: linear-gradient(145deg, #83c9f4, #438ce6); }
