@@ -2,12 +2,13 @@
  * /api/v1/auth —— 注册 / 登录 / 当前用户 / 改资料 / 传头像
  */
 import { Router } from 'express'
+import { bootstrapUserIds, allocateUserId, claimUserId, normalizeUserId, validUserId, userIdTransaction } from '../user-ids.js'
 import crypto from 'node:crypto'
-import { q, insert, tx } from '../db.js'
+import { q, insert } from '../db.js'
 import { hashPassword, verifyPassword, signToken, publicUser, selfUser, authRequired, USER_COLS } from '../auth.js'
 import { sanitizeProfile, updateProfile, readProfile, peersOf } from '../profile.js'
 import { uploadImage, uploadCover, removeUpload, AVATAR_MAX, COVER_MAX } from '../upload.js'
-import { broadcastToUsers, revokeDeviceSockets } from '../ws.js'
+import { broadcastToUsers, issueWsTicket, revokeDeviceSockets } from '../ws.js'
 import { authRateLimit } from '../auth-limit.js'
 
 const r = Router()
@@ -148,14 +149,15 @@ function registerWithIdentity(kind) {
       return res.status(400).json({ error: '验证码不正确' })
     }
 
-    const username = `${kind === 'phone' ? 'p' : 'e'}_${crypto.randomBytes(12).toString('hex')}`
+    await bootstrapUserIds()
     let userId
     try {
-      userId = await tx(async () => {
+      userId = await userIdTransaction(async () => {
         const stillRegistered = kind === 'phone'
           ? await q.get('SELECT id FROM users WHERE phone = ? OR phone = ?', address, legacyPhone(address))
           : await q.get('SELECT id FROM users WHERE lower(email) = ?', address)
         if (stillRegistered) throw Object.assign(new Error(kind === 'phone' ? '该手机号已注册' : '该邮箱已注册'), { status: 409 })
+        const username = await allocateUserId()
         const id = await insert(
           `INSERT INTO users (username, password_hash, nickname, avatar, bio, phone, email)
            VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -167,6 +169,7 @@ function registerWithIdentity(kind) {
           kind === 'phone' ? address : null,
           kind === 'email' ? address : null
         )
+        await claimUserId(username, id)
         await q.run('INSERT INTO auth_identities (kind, address, user_id, verified_at) VALUES (?, ?, ?, ?)', kind, address, id, Date.now())
         await q.run('DELETE FROM auth_verification_codes WHERE kind = ? AND address = ?', kind, address)
         return id
@@ -195,23 +198,32 @@ function recordLoginDevice(userId, req) {
 }
 
 r.post('/register', registerLimit, async (req, res) => {
-  const { username, password, nickname } = req.body || {}
+  const { password, nickname } = req.body || {}
+  const username = normalizeUserId(req.body?.username)
   if (!username || !password) return res.status(400).json({ error: '用户名和密码必填' })
-  if (String(username).length < 2) return res.status(400).json({ error: '用户名至少 2 个字符' })
+  if (!validUserId(username)) return res.status(400).json({ error: '用户 ID 需为 2–24 位英文字母或数字，不能包含空格和符号' })
   if (String(password).length < 6) return res.status(400).json({ error: '密码至少 6 位' })
 
-  if (await q.get('SELECT 1 FROM users WHERE username = ?', username)) {
+  await bootstrapUserIds()
+  if (await q.get('SELECT 1 FROM user_id_claims WHERE value = ?', username)) {
     return res.status(409).json({ error: '用户名已被占用' })
   }
 
-  const id = await insert(
-    'INSERT INTO users (username, password_hash, nickname, avatar, bio) VALUES (?, ?, ?, ?, ?)',
-    username,
-    hashPassword(String(password)),
-    nickname || username,
-    null,
-    ''
-  )
+  const id = await userIdTransaction(async () => {
+    if (await q.get('SELECT 1 FROM user_id_claims WHERE value = ?', username)) {
+      throw Object.assign(new Error('该用户 ID 已被使用，请换一个'), { status: 409 })
+    }
+    const newId = await insert(
+      'INSERT INTO users (username, password_hash, nickname, avatar, bio) VALUES (?, ?, ?, ?, ?)',
+      username,
+      hashPassword(String(password)),
+      nickname || username,
+      null,
+      ''
+    )
+    await claimUserId(username, newId)
+    return newId
+  })
   const user = await q.get(`SELECT ${USER_COLS} FROM users WHERE id = ?`, id)
   const sessionId = await recordLoginDevice(user.id, req)
   res.status(201).json({ user: selfUser(user), token: signToken(user, sessionId) })
@@ -229,11 +241,14 @@ r.post('/login', loginLimit, async (req, res) => {
 
   const normalizedPhone = normalizePhone(identifier)
   const normalizedEmail = normalizeEmail(identifier)
-  const row = normalizedPhone
+  const byUserId = /^[a-z0-9]+$/i.test(identifier)
+    ? await q.get('SELECT * FROM users WHERE lower(username) = ? LIMIT 1', identifier.toLowerCase())
+    : null
+  const row = byUserId || (normalizedPhone
     ? await q.get('SELECT * FROM users WHERE phone = ? OR phone = ? LIMIT 1', normalizedPhone, legacyPhone(normalizedPhone))
     : normalizedEmail
       ? await q.get('SELECT * FROM users WHERE lower(email) = ? LIMIT 1', normalizedEmail)
-      : await q.get('SELECT * FROM users WHERE username = ? LIMIT 1', identifier)
+      : await q.get('SELECT * FROM users WHERE lower(username) = ? LIMIT 1', identifier.toLowerCase()))
   if (!row || !verifyPassword(String(password), row.password_hash)) {
     return res.status(401).json({ error: '用户名或密码错误' })
   }
@@ -246,6 +261,11 @@ r.post('/login', loginLimit, async (req, res) => {
 
 r.get('/me', authRequired, (req, res) => {
   res.json({ user: selfUser(req.user) })
+})
+
+r.post('/ws-ticket', authRequired, async (req, res) => {
+  res.set('Cache-Control', 'no-store')
+  res.json({ ticket: await issueWsTicket(req.user.id, req.sessionId), expiresIn: 60 })
 })
 
 r.post('/logout', authRequired, async (req, res) => {

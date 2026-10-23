@@ -38,6 +38,7 @@ import fs from 'node:fs'
 
 import { db } from '../server/src/db.js'
 import { freePort, waitAppTarget, connectCdp, launchChrome, shoot } from './lib/cdp.mjs'
+import { ensureLoggedIn } from './lib/session.mjs'
 
 const API = 'http://127.0.0.1:3002/api/v1'
 const APP_HOST = 'http://127.0.0.1:5198'
@@ -183,11 +184,8 @@ window.__allFaqText = async () => {
 `
   const boot = async () => {
     await js(HELP)
-    await waitFor(`!!document.querySelector('.lg-demo-list button') || !!document.querySelector('.tabbar')`, 25000)
-    if (await js(`!!document.querySelector('.lg-demo-list button')`)) {
-      await js(`(() => { const b=[...document.querySelectorAll('.lg-demo-list button')].find(x=>x.textContent.includes(${JSON.stringify(NICK)})); if(b) b.click(); return !!b })()`)
-      await waitFor(`!!document.querySelector('.tabbar')`, 15000)
-    }
+    await waitFor(`!!document.querySelector('.lg-card, .login') || !!document.querySelector('.tabbar')`, 25000)
+    await ensureLoggedIn(js)
     await sleep(600)
     await js(HELP)
     await js(`window.__tab(3)`) // 「我」
@@ -342,7 +340,7 @@ try {
 
   /* 退出登录必须是真的：点了之后回到登录页 */
   ok(await A.js(`window.__rowTap('退出登录')`), '账号与安全页有「退出登录」')
-  ok(await A.waitFor(`!!document.querySelector('.lg-demo-list button')`, 8000), '★ 退出登录真的退出了（回到登录页，不是只弹提示）')
+  ok(await A.waitFor(`!!document.querySelector('.lg-card, .login')`, 8000), '★ 退出登录真的退出了（回到登录页，不是只弹提示）')
   await shoot(A.cdp, `${OUT}/logout.png`)
 
   /* 退出去之后要重新登录，继续后面的检查 */

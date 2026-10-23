@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process'
 import http from 'node:http'
 import fs from 'node:fs'
 import { URL as NodeURL } from 'node:url'
+import { ensureLoggedIn } from './lib/session.mjs'
 
 const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe'
 const PORT = 9415
@@ -97,14 +98,14 @@ const shot = async (n) => {
 
 await sleep(2400)
 
-// 应用现在有登录门：先用演示账号一键登录
-const loggedIn = await evalJs(`(() => {
-  const b = [...document.querySelectorAll('.lg-demo-list button')].find(x => x.textContent.includes('陈墨'))
-  if (!b) return false
-  b.click(); return true
-})()`)
-if (loggedIn) await sleep(2200)
-console.log('login:', loggedIn ? '已登录演示账号' : '未找到登录按钮（可能已登录）')
+// 登录页已无演示账号列表：走 API 登录 + 注入 token
+let loginState = 'failed'
+try {
+  loginState = await ensureLoggedIn(evalJs)
+} catch (e) {
+  console.log('login: API 登录失败 -', e.message)
+}
+console.log('login:', loginState === 'already' ? '已登录' : loginState === 'seeded' ? '已用 API 登录演示账号' : '失败')
 
 // 打开第一个会话
 await evalJs(`document.querySelector('.chat-row').click()`)

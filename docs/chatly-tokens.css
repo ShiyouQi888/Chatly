@@ -1,0 +1,284 @@
+/* ==========================================================================
+   Chatly Design Language System (CDLS) v1.0 — 令牌层
+   文件：docs/chatly-tokens.css
+   --------------------------------------------------------------------------
+   设计原则：借微信的「标准化结构」，用 Chatly 自己的气质。
+     · 中性面承载界面，品牌色只表达「动作 / 确认」
+     · 4px 栅格、固定字阶、克制的阴影、状态齐备
+     · 品牌：Chatly Violet（紫蓝）；正文：Noto Sans SC @450；圆角：柔和
+   可读文字令牌以 WCAG AA 为目标；非文本装饰色另行标注，不承载信息。
+   业务层禁止再写死 hex，统一走 var(--cl-*)。
+   ========================================================================== */
+
+:root {
+  /* ========== 品牌色阶：Chatly Violet ==========
+     500 是识别色；600 是「动作色」（白字 6.10:1，最稳）；700 更沉 */
+  --cl-brand-50: #f3f1fe;
+  --cl-brand-100: #e6e2fd;
+  --cl-brand-200: #ccc5fb;
+  --cl-brand-300: #a99ef5;
+  --cl-brand-400: #8b7cf6;   /* 白字 3.33 → 仅大字/图标 */
+  --cl-brand-500: #6d5df6;   /* 白字 4.62 AA，品牌识别 */
+  --cl-brand-600: #5b4bd8;   /* 白字 6.10 AA，主要动作 */
+  --cl-brand-700: #4a3cb0;   /* 白字 8.19 */
+  --cl-brand-800: #392e88;
+  --cl-brand-900: #2a2166;
+
+  --cl-brand: var(--cl-brand-500);
+  --cl-action: var(--cl-brand-600);
+  --cl-action-hover: var(--cl-brand-700);
+  --cl-action-pressed: #3d3296;
+  --cl-brand-soft: rgba(109, 93, 246, 0.1);
+  --cl-brand-soft-2: rgba(109, 93, 246, 0.18);
+  /* ========== 中性面：冷灰（带极淡紫调，区别于微信的暖灰） ========== */
+  --cl-bg: #f6f6fa;
+  --cl-bg-2: #fbfbfe;
+  --cl-surface: #ffffff;
+  --cl-surface-2: #f0f0f7;
+  --cl-surface-3: #e8e8f2;
+  --cl-surface-glass: rgba(255, 255, 255, 0.72);
+  --cl-line: rgba(23, 23, 31, 0.08);
+  --cl-line-strong: rgba(23, 23, 31, 0.14);
+  --cl-mask: rgba(17, 17, 24, 0.48);
+
+  /* ========== 文字层级：全部 AA ========== */
+  --cl-text-1: #17171f;      /* 16.5:1 正文/标题 */
+  --cl-text-2: #4a4a5a;      /* 8.1:1  次级 */
+  --cl-text-3: #6b6b82;      /* 4.8:1  三级说明（修正旧 #8c8ca0 的 3.08） */
+  --cl-text-4: #9a9ab0;      /* 2.8:1  仅非文本装饰，不得用于占位符或说明 */
+  --cl-text-muted: #6b6b82;  /* 5.2:1  占位符、时间、次要信息 */
+  --cl-text-on-brand: #ffffff;
+  --cl-text-disabled: #6b6b82; /* 禁用文字仍保持可读 */
+
+  /* ========== 语义色：一色一义，文字级全部 ≥4.5 ========== */
+  --cl-danger: #c62f42;          /* 白字 5.4 / 底上 5.0 */
+  --cl-danger-text: #c62f42;
+  --cl-danger-soft: rgba(198, 47, 66, 0.1);
+  --cl-success: #1e9e6a;         /* 填充/图标 3.4 */
+  --cl-success-text: #157a57;    /* 文字 5.3 */
+  --cl-success-soft: rgba(30, 158, 106, 0.1);
+  --cl-warning: #b26b00;         /* 填充/图标 4.2 */
+  --cl-warning-text: #8a5200;    /* 文字 6.4 */
+  --cl-warning-soft: rgba(178, 107, 0, 0.1);
+  --cl-info: #2563a8;            /* 6.1 */
+  --cl-info-soft: rgba(37, 99, 168, 0.1);
+  --cl-link: #4a5a9e;            /* 6.5，独立于品牌的链接色（学微信：链接≠动作色） */
+
+  /* ========== 强调色：仅图表 / 标签，不用于正文 ========== */
+  --cl-accent-cyan: #1e8fa8;
+  --cl-accent-mint: #1e9e6a;
+  --cl-accent-pink: #c2456e;
+  --cl-accent-amber: #b26b00;
+
+  /* ========== 圆角：柔和但仍在网格上（4 的倍数） ========== */
+  --cl-r-xs: 8px;
+  --cl-r-sm: 12px;
+  --cl-r-md: 16px;
+  --cl-r-lg: 20px;
+  --cl-r-xl: 28px;
+  --cl-r-full: 999px;
+
+  /* ========== 间距：4px 基准 ========== */
+  --cl-space-0: 0;
+  --cl-space-1: 2px;
+  --cl-space-2: 4px;
+  --cl-space-3: 8px;
+  --cl-space-4: 12px;
+  --cl-space-5: 16px;
+  --cl-space-6: 20px;
+  --cl-space-7: 24px;
+  --cl-space-8: 32px;
+  --cl-space-9: 40px;
+  --cl-space-10: 48px;
+
+  /* ========== 字体：Noto Sans SC，正文 450（Chatly 的签名） ========== */
+  --cl-font: "Noto Sans SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei",
+    -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --cl-font-scale: 1;
+  --cl-fs-micro: calc(11px * var(--cl-font-scale));
+  --cl-fs-caption: calc(12px * var(--cl-font-scale));
+  --cl-fs-footnote: calc(14px * var(--cl-font-scale));
+  --cl-fs-body: calc(15px * var(--cl-font-scale));
+  --cl-fs-subtitle: calc(17px * var(--cl-font-scale));
+  --cl-fs-title: calc(20px * var(--cl-font-scale));
+  --cl-fs-heading: calc(24px * var(--cl-font-scale));
+  --cl-fs-display: calc(30px * var(--cl-font-scale));
+
+  --cl-fw-regular: 400;
+  --cl-fw-body: 450;        /* 正文默认 */
+  --cl-fw-medium: 500;
+  --cl-fw-semibold: 600;    /* 标题 */
+  --cl-fw-bold: 700;        /* 仅 display */
+  --cl-lh-tight: 1.3;
+  --cl-lh-base: 1.5;
+  --cl-lh-relaxed: 1.65;
+
+  /* ========== 阴影：柔和紫调，比微信略多一层，但不喧宾夺主 ========== */
+  --cl-shadow-1: 0 1px 2px rgba(23, 23, 31, 0.04), 0 2px 8px rgba(23, 23, 31, 0.04);
+  --cl-shadow-2: 0 6px 20px rgba(23, 23, 31, 0.08);
+  --cl-shadow-3: 0 16px 40px rgba(23, 23, 31, 0.12);
+  --cl-shadow-brand: 0 8px 24px rgba(91, 75, 216, 0.28);
+
+  /* ========== 布局骨架 ========== */
+  --cl-nav-h: 44px;
+  --cl-tabbar-h: 58px;
+  --cl-cell-h: 56px;
+  --cl-page-px: 16px;
+  --cl-tap-min: 44px;
+  --cl-safe-top: 14px;
+
+  /* ========== 动效 ========== */
+  --cl-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --cl-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --cl-dur-fast: 140ms;
+  --cl-dur: 200ms;
+  --cl-dur-slow: 300ms;
+
+  /* ========== 层级刻度（消灭散值 z-index） ========== */
+  --cl-z-base: 0;
+  --cl-z-raised: 10;
+  --cl-z-sticky: 20;
+  --cl-z-overlay: 100;
+  --cl-z-modal: 200;
+  --cl-z-toast: 300;
+  --cl-z-tooltip: 400;
+
+  /* ========== 焦点 ========== */
+  --cl-focus-ring: rgba(109, 93, 246, 0.55);
+}
+
+/* ==========================================================================
+   暗色模式（data-theme="dark"）
+   ========================================================================== */
+[data-theme="dark"] {
+  --cl-bg: #0f1014;
+  --cl-bg-2: #121319;
+  --cl-surface: #171922;
+  --cl-surface-2: #1e2029;
+  --cl-surface-3: #262936;
+  --cl-line: rgba(255, 255, 255, 0.08);
+  --cl-line-strong: rgba(255, 255, 255, 0.14);
+  --cl-mask: rgba(0, 0, 0, 0.6);
+
+  --cl-text-1: #ecedf2;      /* 16.3:1 */
+  --cl-text-2: #a8aabc;      /* 7.6:1 */
+  --cl-text-3: #8a8c9e;      /* 5.3:1 */
+  --cl-text-4: #5e6072;      /* 装饰 */
+  --cl-text-muted: #8a8c9e;  /* 次要信息和占位符 */
+  --cl-text-disabled: #8a8c9e; /* 禁用文字仍保持可读 */
+
+  --cl-brand: #8b7cf6;       /* 暗底上更亮，图标 5.3:1 */
+  --cl-action: #6d5df6;      /* 白字 4.62 AA */
+  --cl-action-hover: #5b4bd8; /* 白字 6.10:1，悬停态仍满足 AA */
+  --cl-action-pressed: #5b4bd8;
+  --cl-brand-soft: rgba(139, 124, 246, 0.14);
+  --cl-brand-soft-2: rgba(139, 124, 246, 0.22);
+  --cl-surface-glass: rgba(23, 25, 34, 0.78);
+
+  --cl-danger: #ef6b7b;
+  --cl-danger-text: #ef6b7b;
+  --cl-success: #35c48c;
+  --cl-success-text: #45cf98;
+  --cl-warning: #e0a33f;
+  --cl-warning-text: #e8b45c;
+  --cl-info: #6aa8e8;
+  --cl-link: #8fa3d6;
+
+  --cl-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.25);
+  --cl-shadow-2: 0 6px 20px rgba(0, 0, 0, 0.4);
+  --cl-shadow-3: 0 16px 40px rgba(0, 0, 0, 0.5);
+  --cl-shadow-brand: 0 8px 24px rgba(109, 93, 246, 0.35);
+
+  --cl-focus-ring: rgba(139, 124, 246, 0.6);
+}
+
+/* 旧运行时令牌映射。仅在此文件被显式接入时生效；App 当前仍加载 src/styles/tokens.css。 */
+:root {
+  --brand-1: var(--cl-brand-400);
+  --brand-2: var(--cl-brand-500);
+  --brand-3: var(--cl-action);
+  --brand-action: var(--cl-action);
+  --brand-grad: linear-gradient(135deg, var(--cl-action), var(--cl-action-hover));
+  --brand-soft: var(--cl-brand-soft);
+  --brand-soft-2: var(--cl-brand-soft-2);
+  --bg: var(--cl-bg);
+  --bg-warm: var(--cl-bg-2);
+  --surface: var(--cl-surface);
+  --surface-2: var(--cl-surface-2);
+  --surface-3: var(--cl-surface-3);
+  --surface-glass: var(--cl-surface-glass, rgba(255, 255, 255, 0.72));
+  --text-1: var(--cl-text-1);
+  --text-2: var(--cl-text-2);
+  --text-3: var(--cl-text-3);
+  --text-4: var(--cl-text-4); /* 仅装饰，不承载可读信息 */
+  --text-muted: var(--cl-text-muted);
+  --text-disabled: var(--cl-text-disabled);
+  --text-on-brand: var(--cl-text-on-brand);
+  --link: var(--cl-link);
+  --line: var(--cl-line);
+  --line-2: var(--cl-line-strong);
+  --shadow-sm: var(--cl-shadow-1);
+  --shadow-md: var(--cl-shadow-2);
+  --shadow-lg: var(--cl-shadow-3);
+  --shadow-brand: var(--cl-shadow-brand);
+  --r-xs: var(--cl-r-xs);
+  --r-sm: var(--cl-r-sm);
+  --r-md: var(--cl-r-md);
+  --r-lg: var(--cl-r-lg);
+  --r-xl: var(--cl-r-xl);
+  --r-full: var(--cl-r-full);
+  --font: var(--cl-font);
+  --font-scale: var(--cl-font-scale);
+  --fs-display: var(--cl-fs-display);
+  --fs-h1: var(--cl-fs-heading);
+  --fs-h2: var(--cl-fs-subtitle);
+  --fs-body: var(--cl-fs-body);
+  --fs-sub: var(--cl-fs-footnote);
+  --fs-cap: var(--cl-fs-caption);
+  --fs-micro: var(--cl-fs-micro);
+  --ease: var(--cl-ease);
+  --ease-in-out: var(--cl-ease-in-out);
+  --dur-fast: var(--cl-dur-fast);
+  --dur: var(--cl-dur);
+  --dur-slow: var(--cl-dur-slow);
+  --space-0: var(--cl-space-0);
+  --space-1: var(--cl-space-1);
+  --space-2: var(--cl-space-2);
+  --space-3: var(--cl-space-3);
+  --space-4: var(--cl-space-4);
+  --space-5: var(--cl-space-5);
+  --space-6: var(--cl-space-6);
+  --space-7: var(--cl-space-7);
+  --space-8: var(--cl-space-8);
+  --space-9: var(--cl-space-9);
+  --space-10: var(--cl-space-10);
+  --z-base: var(--cl-z-base);
+  --z-raised: var(--cl-z-raised);
+  --z-sticky: var(--cl-z-sticky);
+  --z-overlay: var(--cl-z-overlay);
+  --z-modal: var(--cl-z-modal);
+  --z-toast: var(--cl-z-toast);
+  --z-tooltip: var(--cl-z-tooltip);
+  --focus-ring: var(--cl-focus-ring);
+  --tabbar-h: var(--cl-tabbar-h);
+  --safe-top: var(--cl-safe-top);
+  --tap-min: var(--cl-tap-min);
+}
+
+/* ==========================================================================
+   基础接线：统一焦点环 + 减少动效
+   ========================================================================== */
+:where(button, a, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--cl-focus-ring);
+  outline-offset: 2px;
+  border-radius: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

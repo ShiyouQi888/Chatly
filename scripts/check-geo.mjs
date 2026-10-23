@@ -43,6 +43,7 @@ import { db, insertSync as insert } from '../server/src/db.js'
 import { freePort, waitAppTarget, connectCdp, launchChrome, shoot } from './lib/cdp.mjs'
 import { purgeDebris, purgeMoments } from './lib/debris.mjs'
 import { wgs84ToGcj02, haversineKm } from '../shared/geo-math.mjs'
+import { ensureLoggedIn } from './lib/session.mjs'
 
 const API = 'http://127.0.0.1:3002/api/v1'
 const APP_HOST = 'http://127.0.0.1:5198'
@@ -488,7 +489,7 @@ window.__openCard = (msgId) => {
 const injectHelp = () => js(HELP)
 
 const up = await waitFor(
-  `document.readyState !== 'loading' && (!!document.querySelector('.lg-demo-list button') || !!document.querySelector('.tabbar'))`,
+  `document.readyState !== 'loading' && (!!document.querySelector('.lg-card, .login') || !!document.querySelector('.tabbar'))`,
   30000
 )
 if (!up) throw new Error('应用没挂载')
@@ -514,12 +515,7 @@ const tapAt = async (sel) => {
 }
 
 /* ---- 上号 ---- */
-if (await js(`!!document.querySelector('.lg-demo-list button')`)) {
-  await js(
-    `(() => { const b=[...document.querySelectorAll('.lg-demo-list button')].find(x=>x.textContent.includes('陈墨')); if(b) b.click(); return !!b })()`
-  )
-  await waitFor(`!!document.querySelector('.tabbar')`, 15000)
-}
+await ensureLoggedIn(js)
 await sleep(700)
 await injectHelp()
 ok((await js(`window.innerWidth`)) === 390, '视口已按 390×844 移动端覆盖')

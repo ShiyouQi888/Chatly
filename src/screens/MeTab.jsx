@@ -696,7 +696,7 @@ export default function MeTab({ nav, notifySettingsSignal }) {
           />
 
           <div className="me-idcard">
-            <Avatar src={avatarOf(user)} name={user?.nickname || ''} size={76} radius={24} ring={0} />
+            <Avatar src={avatarOf(user)} name={user?.nickname || ''} size={68} radius={22} ring={0} />
             <div className="me-info">
               <div className="me-name">
                 <h2>{user?.nickname}</h2>
@@ -768,17 +768,6 @@ export default function MeTab({ nav, notifySettingsSignal }) {
 
         {/* 快捷四宫格 */}
         <QuickGrid onOpen={(k) => setPage(k)} />
-
-        {/* 个性签名卡：点进真实的资料编辑 */}
-        <button type="button" className="me-quote" onClick={() => setEditing(true)}>
-          <span className="me-quote-mark">“</span>
-          <p>
-            {user?.bio || '还没有个性签名'}
-            <br />
-            <em>—— 点这里编辑资料</em>
-          </p>
-          <IconChevron size={16} />
-        </button>
 
         {/* 设置列表 */}
         <Group>

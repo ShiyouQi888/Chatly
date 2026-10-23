@@ -22,6 +22,7 @@ import fs from 'node:fs'
 /* ⚠️ qSync 是 SQLite 专有的**同步**直连，只给自检脚本用（q 已 async）。 */
 import { db, qSync as q } from '../server/src/db.js'
 import { freePort, waitAppTarget, connectCdp, launchChrome, shoot } from './lib/cdp.mjs'
+import { ensureLoggedIn } from './lib/session.mjs'
 
 const API = 'http://127.0.0.1:3002/api/v1'
 const APP_HOST = 'http://127.0.0.1:5198'
@@ -153,14 +154,11 @@ const closeMenus = async () => {
 
 const booted = await waitFor(
   `location.protocol !== 'about:' && document.body.innerText.trim().length > 2 &&
-   (!!document.querySelector('.lg-demo-list button') || !!document.querySelector('.tabbar'))`,
+   (!!document.querySelector('.lg-card, .login') || !!document.querySelector('.tabbar'))`,
   40000
 )
 if (!booted) throw new Error('应用没挂载')
-if (await js(`!!document.querySelector('.lg-demo-list button')`)) {
-  await js(`[...document.querySelectorAll('.lg-demo-list button')].find(x=>x.textContent.includes('陈墨'))?.click()`)
-  await waitFor(`!!document.querySelector('.tabbar')`, 15000)
-}
+await ensureLoggedIn(js)
 await sleep(800)
 await js(`[...document.querySelectorAll('.tabbar .tab')][0]?.click()`)
 await waitFor(`!!document.querySelector('.chat-row')`, 12000)

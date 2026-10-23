@@ -19,6 +19,7 @@ import fs from 'node:fs'
 
 import { freePort, waitAppTarget, connectCdp, launchChrome, shoot } from './lib/cdp.mjs'
 import { purgeDebris, purgeOrphanUploads } from './lib/debris.mjs'
+import { ensureLoggedIn } from './lib/session.mjs'
 
 const API = 'http://127.0.0.1:3002/api/v1'
 const APP_HOST = 'http://127.0.0.1:5198'
@@ -199,15 +200,10 @@ window.__toast = () => document.querySelector('.toast')?.textContent.trim() || n
   const boot = async (nick) => {
     await js(HELP)
     const up = await waitFor(
-      `!!document.querySelector('.lg-demo-list button') || !!document.querySelector('.chat-list .chat-row')`
+      `!!document.querySelector('.lg-card, .login') || !!document.querySelector('.chat-list .chat-row')`
     )
     if (!up) throw new Error('应用没挂载')
-    if (await js(`!!document.querySelector('.lg-demo-list button')`)) {
-      await js(
-        `(() => { const b=[...document.querySelectorAll('.lg-demo-list button')].find(x=>x.textContent.includes(${JSON.stringify(nick)})); if(b) b.click(); return !!b })()`
-      )
-      await waitFor(`!!document.querySelector('.tabbar')`, 15000)
-    }
+    await ensureLoggedIn(js)
     /* ⚠️ 进列表不等于列表加载完：`.tabbar` 出现的那一刻会话可能还是空的，
        立刻去找那一行必然找不到（空集选择器静默返回 false，症状看起来像「群没建成」）。 */
     await waitFor(`document.querySelectorAll('.chat-row').length > 0`, 15000)

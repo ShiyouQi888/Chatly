@@ -13,7 +13,6 @@ import NoticeCenter from '../screens/NoticeCenter.jsx'
 import SearchPanel from '../screens/SearchPanel.jsx'
 import ScanPage from '../screens/ScanPage.jsx'
 import LoginScreen from '../screens/LoginScreen.jsx'
-import AdminConsole from '../screens/AdminConsole.jsx'
 import { IconChat, IconContacts, IconMoment, IconCompass, IconUser } from './Icon.jsx'
 import { Badge, Toast } from './ui.jsx'
 import './phone.css'
@@ -114,15 +113,6 @@ export default function Phone() {
         </div>
       </div>
     )
-  }
-
-  const pathname = window.location.pathname.replace(/\/+$/, '') || '/'
-  if (pathname === '/admin') {
-    window.history.replaceState(null, '', '/qishiyou')
-    return <AdminConsole />
-  }
-  if (pathname === '/qishiyou') {
-    return <AdminConsole />
   }
 
   if (!user) {

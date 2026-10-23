@@ -2,18 +2,18 @@
 .notice {
   position: absolute;
   inset: 0;
-  z-index: 82;
+  z-index: var(--z-overlay);
   background: var(--bg);
   display: flex;
   flex-direction: column;
-  animation: subIn 0.24s var(--ease) both;
+  animation: subIn var(--dur) var(--ease) both;
 }
 
 .notice-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 2px 12px 10px;
+  gap: var(--space-3);
+  padding: var(--space-1) var(--space-4) var(--space-3);
   flex: 0 0 auto;
 }
 
@@ -25,7 +25,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
+  gap: var(--space-3);
 }
 
 .notice-count {
@@ -36,7 +36,8 @@
   background: var(--brand-2);
   min-width: 18px;
   height: 18px;
-  padding: 0 5px;
+  /* 1px 是徽标行间微调，不属于 4px 节奏刻度，刻意保留字面值 */
+  padding: 1px var(--space-2);
   border-radius: var(--r-full);
   display: inline-flex;
   align-items: center;
@@ -56,8 +57,8 @@
 
 .notice-tabs {
   display: flex;
-  gap: 7px;
-  padding: 0 18px 12px;
+  gap: var(--space-3);
+  padding: 0 var(--space-5) var(--space-4);
   flex: 0 0 auto;
 }
 
@@ -70,21 +71,21 @@
 .notice-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 0 14px;
+  gap: var(--space-3);
+  padding: 0 var(--space-4);
 }
 
 .notice-row {
   display: flex;
   align-items: flex-start;
-  gap: 11px;
+  gap: var(--space-4);
   width: 100%;
-  padding: 13px;
+  padding: var(--space-4);
   border-radius: var(--r-lg);
   background: var(--surface);
   box-shadow: var(--shadow-sm);
   text-align: left;
-  transition: background 0.16s var(--ease);
+  transition: background var(--dur-fast) var(--ease);
 }
 
 .notice-row:active {
@@ -103,7 +104,7 @@
 .nr-sys {
   width: 44px;
   height: 44px;
-  border-radius: 14px;
+  border-radius: var(--r-sm);
   background: var(--surface-2);
   color: var(--text-2);
   display: flex;
@@ -127,15 +128,15 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding-top: 2px;
+  gap: var(--space-1);
+  padding-top: var(--space-1);
 }
 
 .nr-top {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 10px;
+  gap: var(--space-3);
 }
 
 .nr-top b {
@@ -161,7 +162,7 @@
 }
 
 .notice-foot {
-  padding: 10px 18px calc(14px + env(safe-area-inset-bottom));
+  padding: var(--space-3) var(--space-5) calc(var(--space-4) + env(safe-area-inset-bottom));
   flex: 0 0 auto;
 }
 
@@ -169,9 +170,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: var(--space-2);
   width: 100%;
-  padding: 13px;
+  padding: var(--space-4);
   border-radius: var(--r-md);
   background: var(--surface);
   color: var(--text-2);
@@ -184,18 +185,18 @@
 .search-panel {
   position: absolute;
   inset: 0;
-  z-index: 84;
+  z-index: var(--z-overlay);
   background: var(--bg);
   display: flex;
   flex-direction: column;
-  animation: subIn 0.24s var(--ease) both;
+  animation: subIn var(--dur) var(--ease) both;
 }
 
 .sp-head {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: calc(var(--safe-top) + 2px) 14px 12px;
+  gap: var(--space-2);
+  padding: calc(var(--safe-top) + var(--space-1)) var(--space-4) var(--space-4);
   flex: 0 0 auto;
 }
 
@@ -203,10 +204,10 @@
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-3);
   background: var(--surface-2);
   border-radius: var(--r-full);
-  padding: 10px 14px;
+  padding: var(--space-3) var(--space-4);
   color: var(--text-3);
 }
 
@@ -248,8 +249,8 @@
 
 .sp-filters {
   display: flex;
-  gap: 7px;
-  padding: 0 16px 12px;
+  gap: var(--space-3);
+  padding: 0 var(--space-5) var(--space-4);
   overflow-x: auto;
   flex: 0 0 auto;
 }
@@ -258,55 +259,57 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding-bottom: 20px;
+  padding-bottom: var(--space-6);
 }
 
 .sp-group {
-  padding: 0 16px;
-  margin-bottom: 16px;
+  padding: 0 var(--space-5);
+  margin-bottom: var(--space-5);
 }
 
 .sp-block {
-  padding: 0 18px;
-  margin-bottom: 20px;
+  padding: 0 var(--space-5);
+  margin-bottom: var(--space-6);
 }
 
 .sp-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-3);
   align-items: center;
 }
 
 .sp-clear-hist {
   font-size: var(--fs-micro);
   color: var(--text-3);
-  padding: 5px 8px;
+  padding: var(--space-2) var(--space-3);
 }
 
 .sp-empty-hist {
   font-size: var(--fs-sub);
   color: var(--text-4);
-  padding: 4px 2px 8px;
+  padding: var(--space-2) var(--space-1) var(--space-3);
 }
 
 /* 搜索结果行 */
 .sp-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-4);
   width: 100%;
-  padding: 12px 14px;
+  padding: var(--space-4) var(--space-4);
   position: relative;
   text-align: left;
-  transition: background 0.16s var(--ease);
+  transition: background var(--dur-fast) var(--ease);
 }
 
 .sp-row:not(.is-last)::after {
   content: '';
   position: absolute;
-  left: 66px;
-  right: 14px;
+  /* 与 .sp-row-body 左边缘对齐：行内边距 + 头像/图标 40px + gap。
+     写成 calc 而不是字面 66px —— padding 令牌化后会漂。 */
+  left: calc(var(--space-4) + 40px + var(--space-4));
+  right: var(--space-4);
   bottom: 0;
   height: 1px;
   background: var(--line);
@@ -320,7 +323,7 @@
   flex: 0 0 auto;
   width: 40px;
   height: 40px;
-  border-radius: 13px;
+  border-radius: var(--r-sm);
   background: var(--brand-soft);
   color: var(--brand-2);
   display: flex;
@@ -333,7 +336,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--space-1);
 }
 
 .sp-row-body b {
@@ -350,7 +353,7 @@
   color: var(--text-3);
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -365,7 +368,7 @@
 
 .sp-load-more {
   width: 100%;
-  padding: 12px;
+  padding: var(--space-4);
   color: var(--brand-2);
   font-size: var(--fs-micro);
 }
@@ -379,8 +382,9 @@
   font-weight: 600;
   color: var(--brand-2);
   background: var(--brand-soft);
-  padding: 1px 6px;
-  border-radius: 5px;
+  /* 1px 是徽标行间微调，不属于 4px 节奏刻度，刻意保留字面值 */
+  padding: 1px var(--space-2);
+  border-radius: var(--r-xs);
   flex: 0 0 auto;
 }
 
@@ -397,9 +401,9 @@
 .sp-hot-row {
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: var(--space-4);
   width: 100%;
-  padding: 13px 14px;
+  padding: var(--space-4) var(--space-4);
   text-align: left;
   font-size: var(--fs-sub);
   position: relative;
@@ -445,7 +449,7 @@
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
 }
 
 .sp-p-btn {
@@ -453,10 +457,10 @@
   font-weight: 600;
   color: var(--text-on-brand);
   background: var(--brand-grad);
-  padding: 6px 11px;
+  padding: var(--space-2) var(--space-4);
   border-radius: var(--r-full);
   box-shadow: var(--shadow-sm);
-  transition: transform 0.14s var(--ease);
+  transition: transform var(--dur-fast) var(--ease);
 }
 
 .sp-p-btn:active {
@@ -488,7 +492,7 @@
 }
 
 .sp-people-empty {
-  padding: 16px 14px;
+  padding: var(--space-5) var(--space-4);
   font-size: var(--fs-sub);
   color: var(--text-4);
   text-align: center;

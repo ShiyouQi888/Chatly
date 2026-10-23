@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Chatly · 设计系统审计看板</title>
+<style>
+  :root{
+    --bg:#0e1014; --surface:#161a21; --surface-2:#1c212a; --line:#262d38;
+    --ink:#eef1f5; --ink-2:#aeb7c4; --ink-3:#7d8797;
+    --brand:#9b8cfb; --brand-2:#6d5df6;
+    --pass:#4ecb9b; --fail:#f2657a; --warn:#e9b45c;
+    --r:14px;
+    --font:"Noto Sans SC","Source Han Sans SC","PingFang SC","Microsoft YaHei",-apple-system,"Segoe UI",sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--ink);font-family:var(--font);font-weight:400;line-height:1.6;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:48px 28px 80px}
+  header{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:28px;margin-bottom:36px}
+  .eyebrow{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--brand);font-weight:600}
+  h1{font-size:30px;font-weight:700;letter-spacing:-.01em;margin-top:8px}
+  .sub{color:var(--ink-3);font-size:13px;margin-top:8px}
+  .grade{text-align:right;flex-shrink:0}
+  .grade .num{font-size:64px;font-weight:800;line-height:1;background:linear-gradient(135deg,#9b8cfb,#6d5df6);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .grade .lvl{font-size:13px;color:var(--ink-2);margin-top:4px}
+  h2{font-size:16px;font-weight:700;margin:44px 0 18px;display:flex;align-items:center;gap:10px}
+  h2::before{content:"";width:4px;height:16px;border-radius:2px;background:linear-gradient(180deg,#9b8cfb,#6d5df6)}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:22px}
+  /* scorecard */
+  .score{display:grid;gap:14px}
+  .row{display:grid;grid-template-columns:160px 1fr 52px;align-items:center;gap:14px}
+  .row .name{font-size:13px;color:var(--ink-2)}
+  .track{height:9px;background:var(--surface-2);border-radius:99px;overflow:hidden}
+  .fill{height:100%;border-radius:99px;transition:width .8s cubic-bezier(.22,1,.36,1)}
+  .row .val{font-size:13px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
+  .g-a{background:var(--pass)} .g-b{background:#8bc7f0} .g-c{background:var(--warn)} .g-d{background:var(--fail)} .g-f{background:#c0392b}
+  /* tables */
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line)}
+  th{color:var(--ink-3);font-weight:600;font-size:11.5px;letter-spacing:.04em;text-transform:uppercase}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  tr:last-child td{border-bottom:none}
+  .tag{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;line-height:1.6}
+  .tag.fail{background:rgba(242,101,122,.13);color:#ff8fa0}
+  .tag.pass{background:rgba(78,203,155,.13);color:#6fe0b4}
+  .tag.p0{background:rgba(242,101,122,.15);color:#ff8fa0}
+  .tag.p1{background:rgba(233,180,92,.15);color:#f0c778}
+  .tag.p2{background:rgba(125,135,151,.18);color:#b6c0cd}
+  .mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;color:var(--ink-2)}
+  /* findings */
+  .find{display:grid;gap:12px}
+  .fitem{display:flex;gap:14px;padding:16px 18px;background:var(--surface);border:1px solid var(--line);border-radius:12px;align-items:flex-start}
+  .fitem .badge{flex-shrink:0;margin-top:2px}
+  .fitem .body{flex:1;min-width:0}
+  .fitem .t{font-weight:700;font-size:14px;margin-bottom:4px}
+  .fitem .d{font-size:12.5px;color:var(--ink-2)}
+  .fitem .ev{font-size:11.5px;color:var(--ink-3);margin-top:6px}
+  /* stat grid */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  .stat{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .stat .k{font-size:11.5px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em}
+  .stat .v{font-size:26px;font-weight:800;margin-top:6px;font-variant-numeric:tabular-nums}
+  .stat .v small{font-size:13px;font-weight:500;color:var(--ink-3)}
+  .legend{font-size:11.5px;color:var(--ink-3);margin-top:10px}
+  footer{margin-top:56px;padding-top:22px;border-top:1px solid var(--line);font-size:12px;color:var(--ink-3);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+  @media(max-width:640px){
+    .stats{grid-template-columns:repeat(2,1fr)}
+    .row{grid-template-columns:110px 1fr 44px}
+    .grade{text-align:left}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow">Design System Audit · 2026-10-22</div>
+      <h1>Chatly 前端设计系统审计</h1>
+      <div class="sub">范围：src/ 全量前端（App 61 屏 + admin 控制台） · 标准：WCAG 2.1 AA · 4/8px 栅格 · 令牌 SSOT</div>
+    </div>
+    <div class="grade">
+      <div class="num">48</div>
+      <div class="lvl">D+ · 标准化成熟度</div>
+    </div>
+  </header>
+
+  <div class="stats">
+    <div class="stat"><div class="k">硬编码色值</div><div class="v">~490 <small>处</small></div></div>
+    <div class="stat"><div class="k">间距令牌</div><div class="v" style="color:var(--fail)">0 <small>个</small></div></div>
+    <div class="stat"><div class="k">z-index 散值</div><div class="v">30 <small>种</small></div></div>
+    <div class="stat"><div class="k">outline 焦点样式</div><div class="v" style="color:var(--fail)">0 <small>处</small></div></div>
+  </div>
+
+  <h2>维度评分卡</h2>
+  <div class="card score">
+    <div class="row"><div class="name">令牌层</div><div class="track"><div class="fill g-c" style="width:62%"></div></div><div class="val">62</div></div>
+    <div class="row"><div class="name">色彩系统</div><div class="track"><div class="fill g-d" style="width:45%"></div></div><div class="val">45</div></div>
+    <div class="row"><div class="name">字体系统</div><div class="track"><div class="fill g-c" style="width:58%"></div></div><div class="val">58</div></div>
+    <div class="row"><div class="name">间距与布局</div><div class="track"><div class="fill g-f" style="width:30%"></div></div><div class="val">30</div></div>
+    <div class="row"><div class="name">形状（圆角/阴影）</div><div class="track"><div class="fill g-c" style="width:65%"></div></div><div class="val">65</div></div>
+    <div class="row"><div class="name">组件原语</div><div class="track"><div class="fill g-d" style="width:42%"></div></div><div class="val">42</div></div>
+    <div class="row"><div class="name">层级 z-index</div><div class="track"><div class="fill g-d" style="width:40%"></div></div><div class="val">40</div></div>
+    <div class="row"><div class="name">动效</div><div class="track"><div class="fill g-c" style="width:68%"></div></div><div class="val">68</div></div>
+    <div class="row"><div class="name">可访问性</div><div class="track"><div class="fill g-d" style="width:38%"></div></div><div class="val">38</div></div>
+    <div class="row"><div class="name">主题与暗色</div><div class="track"><div class="fill g-d" style="width:40%"></div></div><div class="val">40</div></div>
+  </div>
+  <div class="legend">等级：≥90 A ｜ 80 B ｜ 65 C ｜ 45 D ｜ &lt;45 F</div>
+
+  <h2>P0 · 可访问性硬伤</h2>
+  <div class="card" style="padding:0;overflow:hidden">
+    <table>
+      <thead><tr><th>文字令牌</th><th class="mono">色值</th><th class="mono">背景</th><th class="num">对比度</th><th>判定</th></tr></thead>
+      <tbody>
+        <tr><td>text-1</td><td class="mono">#16161f</td><td class="mono">#f7f7fb</td><td class="num">16.82:1</td><td><span class="tag pass">PASS</span></td></tr>
+        <tr><td>text-2</td><td class="mono">#4a4a5a</td><td class="mono">#f7f7fb</td><td class="num">8.13:1</td><td><span class="tag pass">PASS</span></td></tr>
+        <tr><td>text-3</td><td class="mono">#8c8ca0</td><td class="mono">#f7f7fb</td><td class="num" style="color:var(--fail);font-weight:700">3.08:1</td><td><span class="tag fail">FAIL</span></td></tr>
+        <tr><td>text-4</td><td class="mono">#b4b4c4</td><td class="mono">#ffffff</td><td class="num" style="color:var(--fail);font-weight:700">1.91:1</td><td><span class="tag fail">FAIL</span></td></tr>
+        <tr><td>accent-amber（文字）</td><td class="mono">#ffb43f</td><td class="mono">#ffffff</td><td class="num" style="color:var(--fail);font-weight:700">1.77:1</td><td><span class="tag fail">FAIL</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>P0 · 主题按钮白字对比度（5 套主题 4 套不达标）</h2>
+  <div class="card" style="padding:0;overflow:hidden">
+    <table>
+      <thead><tr><th>主题</th><th class="mono">渐变起 / 终</th><th class="num">白字对比度</th><th>判定</th></tr></thead>
+      <tbody>
+        <tr><td>极光 <span style="color:var(--ink-3);font-size:11px">（默认）</span></td><td class="mono">#9b8cfb / #5b6ef5</td><td class="num" style="color:var(--fail);font-weight:700">2.79 / 4.21</td><td><span class="tag fail">FAIL</span></td></tr>
+        <tr><td>海盐</td><td class="mono">#8fd3f4 / #4a8fe0</td><td class="num" style="color:var(--fail);font-weight:700">1.64 / 3.34</td><td><span class="tag fail">FAIL</span></td></tr>
+        <tr><td>暮色</td><td class="mono">#f6b9c9 / #e8799b</td><td class="num" style="color:var(--fail);font-weight:700">1.65 / 2.75</td><td><span class="tag fail">FAIL</span></td></tr>
+        <tr><td>云朵</td><td class="mono">#e8e8f4 / #b8b8d4</td><td class="num" style="color:var(--fail);font-weight:700">1.22 / 1.94</td><td><span class="tag fail">FAIL</span></td></tr>
+        <tr><td>午夜</td><td class="mono">#4a4a6a / #1f1f33</td><td class="num" style="color:var(--pass);font-weight:700">8.47 / 16.13</td><td><span class="tag pass">PASS</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>分级发现</h2>
+  <div class="find">
+    <div class="fitem"><span class="badge tag p0">P0</span><div class="body">
+      <div class="t">焦点态几乎不存在</div>
+      <div class="d">全站 :focus-visible 仅 7 处、outline 声明 0 处。键盘用户无法感知焦点，违反 WCAG 2.4.7。</div>
+      <div class="ev">global.css · 修复：统一 :focus-visible { outline: 2px solid var(--focus-ring) }</div>
+    </div></div>
+    <div class="fitem"><span class="badge tag p0">P0</span><div class="body">
+      <div class="t">换肤不完整 + 浅色主题不可读</div>
+      <div class="d">applyThemeColors 只改 9 个品牌变量；~490 处写死 hex 的元素不换肤。5 套主题 4 套按钮文字低于 4.5:1。</div>
+      <div class="ev">utils/theme.js:17-33 · data/themes.js · 引入 --brand-ink 或渐变遮罩</div>
+    </div></div>
+    <div class="fitem"><span class="badge tag p1">P1</span><div class="body">
+      <div class="t">间距系统完全缺失</div>
+      <div class="d">零 --space-* 令牌；padding/margin/gap 覆盖 1–18px 每个整数，无栅格可言。</div>
+      <div class="ev">~800 处字面值 · 建议 4px 基准 --space-0..10</div>
+    </div></div>
+    <div class="fitem"><span class="badge tag p1">P1</span><div class="body">
+      <div class="t">字号刻度被 ~280 处字面 px 绕过</div>
+      <div class="d">var(--fs-*) 用 433 处，但另混入 9/9.5/10/13/14/16/18… 等刻度外值；13 与 13.5 并存。</div>
+      <div class="ev">建议 7 阶字阶，禁刻度外 px</div>
+    </div></div>
+    <div class="fitem"><span class="badge tag p1">P1</span><div class="body">
+      <div class="t">缺 Button / Input 原语，按钮被重复实现 18 次</div>
+      <div class="d">ui.jsx 无 Button；18 个 CSS 各自实现 .btn。ui.jsx 与 shadcn ui/badge 撞名 Badge。</div>
+      <div class="ev">components/ui.jsx · components/ui/badge.jsx</div>
+    </div></div>
+    <div class="fitem"><span class="badge tag p1">P1</span><div class="body">
+      <div class="t">无语义色令牌，危险红有 11 个近似值</div>
+      <div class="d">#f04a5e/#e05252/#e34d59/#e8657f/#e8799b/#e53945/#e0455c/#ef4444… 同一"删除"语义四五种红。</div>
+      <div class="ev">chat-room.css:1291,1799,1859 · login.css:167,217</div>
+    </div></div>
+    <div class="fitem"><span class="badge tag p1">P1</span><div class="body">
+      <div class="t">z-index 无刻度，30 个散值</div>
+      <div class="d">-1…160 之间 55/59/60/78/80/82/84/90/95/96/100/115/118/119 全是打补丁值，叠层难推理。</div>
+      <div class="ev">建议 6 级 --z-* 刻度</div>
+    </div></div>
+    <div class="fitem"><span class="badge tag p2">P2</span><div class="body">
+      <div class="t">圆角混入 14 种非刻度值 · 动效时长无令牌</div>
+      <div class="d">圆角 5/7/9/10/11/13/14/15px 等；时长 0.12–0.3s + 120/140/180ms 混用，s/ms 不统一。</div>
+      <div class="ev">建议 --r-* 六档、--dur-fast/base/slow</div>
+    </div></div>
+  </div>
+
+  <footer>
+    <span>数据来源：静态扫描 + WCAG 对比度实测，未做估算填充</span>
+    <span>详细整改规范见 docs/DESIGN-SYSTEM-AUDIT-2026-10.md</span>
+  </footer>
+</div>
+</body>
+</html>

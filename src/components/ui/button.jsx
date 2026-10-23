@@ -9,13 +9,13 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: '!bg-primary !text-primary-foreground shadow-sm hover:brightness-110',
-        destructive: '!bg-destructive !text-white shadow-sm hover:brightness-110',
-        warning: '!bg-amber-400 !text-amber-950 shadow-sm hover:!bg-amber-300',
-        outline: '!border !border-input !bg-transparent !text-foreground hover:!bg-accent hover:!text-accent-foreground',
-        secondary: '!bg-secondary !text-secondary-foreground hover:!bg-accent',
-        ghost: '!text-foreground hover:!bg-accent hover:!text-accent-foreground',
-        link: '!text-primary underline-offset-4 hover:underline',
+        default: 'bg-primary text-primary-foreground shadow-sm hover:brightness-110',
+        destructive: 'bg-destructive text-white shadow-sm hover:brightness-110',
+        warning: 'bg-amber-400 text-amber-950 shadow-sm hover:bg-amber-300',
+        outline: 'border border-input bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground',
+        secondary: 'bg-secondary text-secondary-foreground hover:bg-accent',
+        ghost: 'text-foreground hover:bg-accent hover:text-accent-foreground',
+        link: 'text-primary underline-offset-4 hover:underline',
       },
       size: {
         default: 'h-9 px-4',
@@ -32,7 +32,7 @@ const buttonVariants = cva(
 
 export const Button = React.forwardRef(function Button({ className, variant, size, asChild = false, loading = false, disabled, children, ...props }, ref) {
   const Component = asChild ? Slot : 'button'
-  return <Component ref={ref} className={cn(buttonVariants({ variant, size }), className)} disabled={asChild ? undefined : disabled || loading} aria-busy={loading || undefined} {...props}>{loading && <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />}{children}</Component>
+  return <Component ref={ref} data-slot="button" data-variant={variant || 'default'} data-size={size || 'default'} className={cn(buttonVariants({ variant, size }), className)} disabled={asChild ? undefined : disabled || loading} aria-busy={loading || undefined} {...props}>{loading && <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />}{children}</Component>
 })
 
 export { buttonVariants }

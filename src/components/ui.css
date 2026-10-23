@@ -396,7 +396,7 @@
 .sheet-root {
   position: absolute;
   inset: 0;
-  z-index: 90;
+  z-index: var(--z-modal);
   display: flex;
   align-items: flex-end;
 }
@@ -510,7 +510,7 @@
   left: 50%;
   bottom: 96px;
   transform: translateX(-50%);
-  z-index: 120;
+  z-index: var(--z-toast);
   padding: 10px 18px;
   border-radius: var(--r-full);
   background: rgba(22, 22, 31, 0.86);

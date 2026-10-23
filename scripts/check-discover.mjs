@@ -29,6 +29,7 @@ import fs from 'node:fs'
 import { db } from '../server/src/db.js'
 import { freePort, waitAppTarget, connectCdp, launchChrome, shoot } from './lib/cdp.mjs'
 import { purgeDebris } from './lib/debris.mjs'
+import { ensureLoggedIn } from './lib/session.mjs'
 
 const API = 'http://127.0.0.1:3002/api/v1'
 const APP_HOST = 'http://127.0.0.1:5198'
@@ -430,12 +431,10 @@ let joinedGroupId = null
 
 try {
   await js(HELP)
-  const up = await waitFor(`!!document.querySelector('.lg-demo-list button') || !!document.querySelector('.tabbar')`, 30000)
+  const up = await waitFor(`!!document.querySelector('.lg-card, .login, .tabbar')`, 30000)
   if (!up) throw new Error('应用没挂载')
-  if (await js(`!!document.querySelector('.lg-demo-list button')`)) {
-    await js(`(() => { const b=[...document.querySelectorAll('.lg-demo-list button')].find(x=>x.textContent.includes('陈墨')); if(b) b.click(); return !!b })()`)
-    await waitFor(`!!document.querySelector('.tabbar')`, 15000)
-  }
+  await ensureLoggedIn(js)
+  await waitFor(`!!document.querySelector('.tabbar')`, 15000)
   await sleep(700)
   await js(HELP)
   await js(`window.__tab('发现')`)

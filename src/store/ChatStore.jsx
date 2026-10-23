@@ -130,6 +130,7 @@ function mapMessage(raw, meId) {
     fileUrl: raw.fileUrl || null,
     fileName: raw.fileName || null,
     fileSize: raw.fileSize || 0,
+    audioDurationMs: raw.audioDurationMs == null ? null : Number(raw.audioDurationMs),
     /* 位置消息：`{ name, address, lat, lng }`，非位置消息恒为 null。
        坐标可能是 null（用户只给了地点名）—— 别在这里补 0。 */
     geo: raw.geo || null,
@@ -313,6 +314,20 @@ function reducer(state, action) {
           ...state.messages,
           [action.convId]: list.map((m) => m.id === action.tempId
             ? { ...m, uploadProgress: action.progress, uploadStage: action.stage }
+            : m),
+        },
+      }
+    }
+
+    case 'RETRY_UPLOAD': {
+      const list = state.messages[action.convId]
+      if (!list) return state
+      return {
+        ...state,
+        messages: {
+          ...state.messages,
+          [action.convId]: list.map((m) => m.id === action.tempId
+            ? { ...m, pending: true, failed: false, uploadFailed: false, uploading: true, uploadProgress: 0, uploadStage: '正在重新上传' }
             : m),
         },
       }
@@ -971,43 +986,51 @@ export function ChatProvider({ children }) {
     }
   }, [])
 
-  const sendAttachment = useCallback(async ({ conversationId, kind, file }) => {
+  const sendAttachment = useCallback(async ({ conversationId, kind, file, voice = false, audioDurationMs = null, tempId: retryTempId = null, previewUrl: retryPreviewUrl = null }) => {
     const me = meRef.current
     if (!me) throw new Error('未登录')
     if (!(file instanceof Blob)) throw new Error('没有选择文件')
 
-    const tempId = `tmp-upload-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
-    const previewUrl = URL.createObjectURL(file)
-    dispatch({
-      type: 'UPSERT_MESSAGE',
-      message: {
-        id: tempId,
-        convId: conversationId,
-        from: 'me',
-        mine: true,
-        senderId: me.id,
-        sender: me.nickname,
-        av: avatarOf(me),
-        kind,
-        text: '',
-        fileUrl: previewUrl,
-        fileName: file.name || '未命名文件',
-        fileSize: file.size || 0,
-        time: formatTime(Date.now()),
-        createdAt: Date.now(),
-        read: false,
-        revoked: false,
-        pending: true,
-        failed: false,
-        uploading: true,
-        uploadProgress: 0,
-        uploadStage: '准备上传',
-      },
-    })
+    const tempId = retryTempId || `tmp-upload-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    const previewUrl = retryPreviewUrl || URL.createObjectURL(file)
+    if (retryTempId) {
+      dispatch({ type: 'RETRY_UPLOAD', convId: conversationId, tempId })
+    } else {
+      dispatch({
+        type: 'UPSERT_MESSAGE',
+        message: {
+          id: tempId,
+          convId: conversationId,
+          from: 'me',
+          mine: true,
+          senderId: me.id,
+          sender: me.nickname,
+          av: avatarOf(me),
+          kind,
+          text: '',
+          fileUrl: previewUrl,
+          fileName: file.name || '未命名文件',
+          fileSize: file.size || 0,
+          audioDurationMs,
+          uploadFile: file,
+          voiceMessage: voice,
+          time: formatTime(Date.now()),
+          createdAt: Date.now(),
+          read: false,
+          revoked: false,
+          pending: true,
+          failed: false,
+          uploading: true,
+          uploadProgress: 0,
+          uploadStage: '准备上传',
+        },
+      })
+    }
 
     try {
       const uploaded = await api.upload(file, {
         conversationId,
+        voice,
         onProgress: (progress) => dispatch({
           type: 'UPLOAD_PROGRESS',
           convId: conversationId,
@@ -1022,6 +1045,7 @@ export function ChatProvider({ children }) {
         fileUrl: uploaded.url,
         fileName: uploaded.fileName || file.name,
         fileSize: uploaded.fileSize || file.size,
+        audioDurationMs,
       })
       URL.revokeObjectURL(previewUrl)
       dispatch({ type: 'REPLACE_TEMP', convId: conversationId, tempId, message: mapMessage(message, me.id) })
@@ -1031,6 +1055,20 @@ export function ChatProvider({ children }) {
       throw error
     }
   }, [])
+
+  const retryAttachment = useCallback(async (message) => {
+    const pending = state.messages[message.convId]?.find((item) => item.id === message.id)
+    if (!pending?.uploadFile || pending.uploading) return
+    return sendAttachment({
+      conversationId: pending.convId,
+      kind: pending.kind,
+      file: pending.uploadFile,
+      voice: !!pending.voiceMessage,
+      audioDurationMs: pending.audioDurationMs,
+      tempId: pending.id,
+      previewUrl: pending.fileUrl,
+    })
+  }, [sendAttachment, state.messages])
 
   const revokeMessage = useCallback(async (messageId, convId) => {
     await api.revokeMessage(messageId)
@@ -1210,6 +1248,7 @@ export function ChatProvider({ children }) {
       closeConversation,
       sendMessage,
       sendAttachment,
+      retryAttachment,
       revokeMessage,
       notifyTyping,
       createPrivateChat,
@@ -1247,6 +1286,7 @@ export function ChatProvider({ children }) {
       closeConversation,
       sendMessage,
       sendAttachment,
+      retryAttachment,
       revokeMessage,
       notifyTyping,
       loadPolls,

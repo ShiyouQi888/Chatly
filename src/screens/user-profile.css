@@ -3,7 +3,7 @@
   position: absolute;
   inset: 0;
   /* 可能从群设置页里打开，必须压在它上面（群设置 130） */
-  z-index: 140;
+  z-index: var(--z-modal);
   display: flex;
   flex-direction: column;
   background: var(--bg);

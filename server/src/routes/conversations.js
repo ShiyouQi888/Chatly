@@ -35,6 +35,7 @@ import { isValidAvatarValue } from '../profile.js'
 import { uploadExists } from '../upload.js'
 import { favoritedMessageIds } from '../favorite.js'
 import { notifyAnnouncement } from '../notification.js'
+import { privatePairGate } from '../friends.js'
 
 const r = Router()
 r.use(authRequired)
@@ -69,6 +70,9 @@ r.post('/', async (req, res) => {
 
   const other = Number(userId)
   if (!other || other === req.user.id) return res.status(400).json({ error: '无效的会话对象' })
+  if (!(await q.get('SELECT id FROM users WHERE id = ?', other))) return res.status(404).json({ error: '用户不存在' })
+  const denial = await privatePairGate(Number(req.user.id), other)
+  if (denial) return res.status(403).json(denial)
   const cid = await ensurePrivate(req.user.id, other)
   res.status(201).json({ conversationId: cid })
 })
@@ -261,8 +265,17 @@ r.get('/:id/messages', async (req, res) => {
   const cid = Number(req.params.id)
   if (!(await isMember(cid, req.user.id))) return res.status(403).json({ error: '无权访问该会话' })
 
-  const limit = Math.min(Number(req.query.limit) || 50, 100)
-  const beforeId = req.query.beforeId ? Number(req.query.beforeId) : null
+  const rawLimit = req.query.limit
+  const parsedLimit = rawLimit == null || rawLimit === '' ? 50 : Number(rawLimit)
+  if (!Number.isSafeInteger(parsedLimit) || parsedLimit < 1) {
+    return res.status(400).json({ error: 'limit 必须是 1 到 100 之间的正整数' })
+  }
+  const limit = Math.min(parsedLimit, 100)
+  const rawBeforeId = req.query.beforeId
+  const beforeId = rawBeforeId == null || rawBeforeId === '' ? null : Number(rawBeforeId)
+  if (beforeId !== null && (!Number.isSafeInteger(beforeId) || beforeId < 1)) {
+    return res.status(400).json({ error: 'beforeId 必须是正整数' })
+  }
   const messages = await listMessages(cid, { limit, beforeId })
   const cursor = await readCursor(cid, req.user.id)
   /* 这一页里我收藏了哪些 —— 一次 IN 查询算完，别在出参里逐条查。

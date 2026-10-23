@@ -13,6 +13,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { URL as NodeURL } from 'node:url'
 import { purgeMessagesAfter, maxMessageId, purgeOrphanUploads } from './lib/debris.mjs'
+import { ensureLoggedIn } from './lib/session.mjs'
 
 /* 为了打开已读回执弹层，下面会真的发一条「控制台体检探针」—— 不清理的话
    每体检一次演示群里就多一条这种消息。开跑前记基线，收尾按基线删。 */
@@ -195,9 +196,9 @@ await cdp.send('Runtime.enable')
 await cdp.send('Log.enable')
 await cdp.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true })
 
-await waitFor(`!!document.querySelector('.lg-demo-list button')`)
-await js(`(() => { const b=[...document.querySelectorAll('.lg-demo-list button')].find(x=>x.textContent.includes('陈墨')); if(b) b.click(); return true })()`)
+const loginState = await ensureLoggedIn(js)
 await waitFor(`!!document.querySelector('.chat-list .chat-row')`)
+console.log(`  登录态：${loginState === 'already' ? '已登录' : '已用 API 登录演示账号'}`)
 
 // 依次访问四个 Tab
 for (const [i, name] of ['聊天', '动态', '发现', '我'].entries()) {

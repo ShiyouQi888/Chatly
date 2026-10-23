@@ -30,24 +30,49 @@
   --radius-lg: var(--radius);
 }
 
-:root {
-  --background: #0a0a0a;
-  --foreground: #fafafa;
-  --card: #171717;
-  --card-foreground: #fafafa;
-  --popover: #171717;
-  --popover-foreground: #fafafa;
-  --primary: #e5e5e5;
-  --primary-foreground: #171717;
-  --secondary: #27272a;
-  --secondary-foreground: #fafafa;
-  --muted: #27272a;
-  --muted-foreground: #a1a1aa;
-  --accent: #27272a;
-  --accent-foreground: #fafafa;
-  --destructive: #b91c1c;
-  --border: #ffffff1a;
-  --input: #ffffff26;
-  --ring: #737373;
-  --radius: 0.625rem;
+/* Shared by the console and Radix portals, isolated from the Chatly client. */
+html[data-app="admin"] {
+  color-scheme: dark;
+  --op-canvas: #101214;
+  --op-sidebar: #141619;
+  --op-surface: #1a1d21;
+  --op-surface-raised: #22262b;
+  --op-input: #15181b;
+  --op-line: #2c3137;
+  --op-line-strong: #424a53;
+  --op-ink: #f0f3f5;
+  --op-secondary: #b8c0c8;
+  --op-muted: #929da8;
+  --op-subtle: #7d8994;
+  --op-brand: #7ad7b1;
+  --op-brand-hover: #98e5c5;
+  --op-brand-soft: #7ad7b112;
+  --op-brand-line: #7ad7b135;
+  --op-danger: #f18e99;
+  --op-danger-soft: #f18e9912;
+  --op-warning: #e9c489;
+  --op-focus: #a3eed0;
+  --op-radius-sm: 8px;
+  --op-radius: 12px;
+  --op-radius-lg: 16px;
+  --op-font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --background: var(--op-canvas);
+  --foreground: var(--op-ink);
+  --card: var(--op-surface);
+  --card-foreground: var(--op-ink);
+  --popover: var(--op-surface-raised);
+  --popover-foreground: var(--op-ink);
+  --primary: var(--op-brand);
+  --primary-foreground: #102c21;
+  --secondary: var(--op-surface-raised);
+  --secondary-foreground: var(--op-ink);
+  --muted: var(--op-surface-raised);
+  --muted-foreground: var(--op-muted);
+  --accent: #2b3336;
+  --accent-foreground: var(--op-ink);
+  --destructive: #d85d6b;
+  --border: var(--op-line);
+  --input: var(--op-line-strong);
+  --ring: var(--op-focus);
+  --radius: 0.75rem;
 }

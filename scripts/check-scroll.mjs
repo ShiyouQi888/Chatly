@@ -24,6 +24,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { URL as NodeURL } from 'node:url'
 import { purgeDebris } from './lib/debris.mjs'
+import { ensureLoggedIn } from './lib/session.mjs'
 
 const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe'
 const API = 'http://127.0.0.1:3002/api/v1'
@@ -303,15 +304,15 @@ async function openConv(name) {
 }
 
 try {
-  await waitFor(`!!document.querySelector('.lg-demo-list button')`)
+  await waitFor(`!!document.querySelector('.lg-card, .login')`)
   try {
     await cdp.send('Runtime.evaluate', { expression: 'localStorage.clear()' })
   } catch {}
   await cdp.send('Page.reload', { ignoreCache: false })
   await sleep(1500)
-  await waitFor(`!!document.querySelector('.lg-demo-list button')`)
+  await waitFor(`!!document.querySelector('.lg-card, .login')`)
   await js(HELPERS)
-  await js(`(() => { const b=[...document.querySelectorAll('.lg-demo-list button')].find(x=>x.textContent.includes('陈墨')); if(b) b.click(); return true })()`)
+  await ensureLoggedIn(js)
   await waitFor(`!!document.querySelector('.chat-list .chat-row')`)
   await js(HELPERS)
 

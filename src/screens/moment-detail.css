@@ -2,11 +2,11 @@
 .md-root {
   position: absolute;
   inset: 0;
-  z-index: 130;
+  z-index: var(--z-modal);
   display: flex;
   flex-direction: column;
   background: var(--bg);
-  animation: mdIn 0.24s var(--ease) both;
+  animation: mdIn var(--dur) var(--ease) both;
 }
 
 @keyframes mdIn {
@@ -20,8 +20,8 @@
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: calc(var(--safe-top) + 8px) 14px 8px;
+  gap: var(--space-3);
+  padding: calc(var(--safe-top) + var(--space-3)) var(--space-4) var(--space-3);
   background: var(--surface);
   box-shadow: 0 1px 0 var(--line);
 }
@@ -56,21 +56,21 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 12px 14px 20px;
+  padding: var(--space-4) var(--space-4) var(--space-6);
 }
 
 /* ===== 主体卡片 ===== */
 .md-card {
   background: var(--surface);
   border-radius: var(--r-md);
-  padding: 14px;
+  padding: var(--space-4);
   box-shadow: 0 1px 2px rgba(22, 22, 31, 0.04);
 }
 
 .md-author {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
 }
 
 .md-author-body {
@@ -78,7 +78,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
 }
 
 .md-author-body b {
@@ -90,7 +90,7 @@
 .md-author-body em {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-2);
   font-style: normal;
   font-size: var(--fs-micro);
   color: var(--text-3);
@@ -105,18 +105,18 @@
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-2);
   font-size: var(--fs-micro);
   color: var(--text-3);
-  padding: 3px 9px;
+  padding: var(--space-1) var(--space-3);
   border-radius: var(--r-full);
   background: var(--surface-2);
 }
 
 .md-topic {
   display: inline-block;
-  margin-top: 10px;
-  padding: 3px 10px;
+  margin-top: var(--space-3);
+  padding: var(--space-1) var(--space-3);
   border-radius: var(--r-full);
   font-size: var(--fs-micro);
   font-weight: 600;
@@ -125,7 +125,7 @@
 }
 
 .md-text {
-  margin-top: 10px;
+  margin-top: var(--space-3);
   font-size: var(--fs-body);
   line-height: 1.72;
   color: var(--text-1);
@@ -135,9 +135,9 @@
 
 /* ===== 图片网格 ===== */
 .mdgrid {
-  margin-top: 11px;
+  margin-top: var(--space-4);
   display: grid;
-  gap: 5px;
+  gap: var(--space-2);
 }
 
 .mdgrid-1 {
@@ -178,11 +178,11 @@
 
 /* ===== 音乐 ===== */
 .md-music {
-  margin-top: 11px;
+  margin-top: var(--space-4);
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
   border-radius: var(--r-md);
   background: var(--surface-2);
 }
@@ -193,7 +193,7 @@
   flex: 0 0 auto;
   display: grid;
   place-items: center;
-  border-radius: 12px;
+  border-radius: var(--r-sm);
   color: #a765d0;
   background: rgba(167, 101, 208, 0.14);
 }
@@ -203,6 +203,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
+  /* 1px 是行间微调，不属于 4px 节奏刻度，刻意保留字面值 */
   gap: 1px;
 }
 
@@ -225,8 +226,8 @@
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 5px 10px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--r-full);
   font-size: var(--fs-micro);
   color: var(--text-4);
@@ -235,24 +236,24 @@
 }
 
 .md-time {
-  margin-top: 12px;
+  margin-top: var(--space-4);
   font-size: var(--fs-micro);
   color: var(--text-4);
 }
 
 .md-time i {
   font-style: normal;
-  margin-left: 4px;
+  margin-left: var(--space-2);
 }
 
 /* ===== 点赞的人 ===== */
 .md-likes {
-  margin-top: 12px;
-  padding-top: 11px;
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
   border-top: 1px solid var(--line);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-3);
   color: #e8657f;
 }
 
@@ -268,9 +269,9 @@
 
 /* ===== 动作 ===== */
 .md-acts {
-  margin-top: 12px;
+  margin-top: var(--space-4);
   display: flex;
-  gap: 10px;
+  gap: var(--space-3);
 }
 
 .md-act {
@@ -279,7 +280,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: var(--space-2);
   border-radius: var(--r-sm);
   font-size: var(--fs-sub);
   font-weight: 550;
@@ -294,7 +295,7 @@
 
 /* ===== 评论 ===== */
 .md-sec-title {
-  margin: 16px 0 10px;
+  margin: var(--space-5) 0 var(--space-3);
   font-size: var(--fs-cap);
   font-weight: 600;
   color: var(--text-3);
@@ -303,7 +304,7 @@
 .md-comments {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--space-4);
 }
 
 .mdc-group {
@@ -314,7 +315,8 @@
 .mdc {
   display: flex;
   align-items: flex-start;
-  gap: 9px;
+  /* ⚠️ 与 .mdc-kids 的缩进联动：头像 30px + 此 gap = 子评论缩进 */
+  gap: var(--space-3);
 }
 
 .mdc-body {
@@ -325,7 +327,7 @@
 .mdc-top {
   display: flex;
   align-items: baseline;
-  gap: 7px;
+  gap: var(--space-3);
 }
 
 .mdc-top b {
@@ -341,7 +343,7 @@
 }
 
 .mdc-body p {
-  margin-top: 3px;
+  margin-top: var(--space-1);
   font-size: var(--fs-sub);
   line-height: 1.6;
   color: var(--text-2);
@@ -357,7 +359,7 @@
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
 }
 
 .mdc-acts button {
@@ -369,19 +371,21 @@
   color: #d98a8a;
 }
 
-/* 回复缩进：靠 padding 而不是 margin，避免把父评论的宽度挤没 */
+/* 回复缩进：靠 padding 而不是 margin，避免把父评论的宽度挤没。
+   ⚠️ 值必须与「头像 30px + .mdc 的 gap」严格相等，否则子评论正文对不齐；
+   两者都由 --space-3 推导，改头像尺寸时要同步改这里。 */
 .mdc-kids {
-  margin-top: 10px;
-  padding-left: 39px;
+  margin-top: var(--space-3);
+  padding-left: calc(30px + var(--space-3));
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-3);
 }
 
 /* ===== 输入区 ===== */
 .md-input {
   flex: 0 0 auto;
-  padding: 9px 14px max(10px, env(safe-area-inset-bottom));
+  padding: var(--space-3) var(--space-4) max(10px, env(safe-area-inset-bottom));
   background: var(--surface);
   box-shadow: 0 -1px 0 var(--line);
 }
@@ -390,8 +394,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 7px;
-  padding: 4px 10px;
+  margin-bottom: var(--space-3);
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--r-xs);
   font-size: var(--fs-micro);
   color: var(--brand-2);
@@ -406,14 +410,14 @@
 .md-input {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: var(--space-3);
 }
 
 .md-input input {
   flex: 1;
   min-width: 0;
   height: 40px;
-  padding: 0 14px;
+  padding: 0 var(--space-4);
   border-radius: var(--r-full);
   border: 0;
   outline: none;
@@ -444,7 +448,7 @@
    这里写死会和行内样式打架；地图 SDK 也要求容器高度是确定的。 */
 .md-map {
   position: relative;
-  margin-top: 12px;
+  margin-top: var(--space-4);
   border-radius: var(--r-md);
   overflow: hidden;
   box-shadow: var(--shadow-sm);
@@ -464,8 +468,8 @@
   bottom: 0;
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 10px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   font-size: var(--fs-micro);
   color: var(--text-1);
   background: linear-gradient(to top, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0));

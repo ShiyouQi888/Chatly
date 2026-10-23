@@ -182,7 +182,7 @@ export function DiscoverProvider({ children }) {
     if ((cur.friendStatus || 'none') !== 'none') return
     dispatch({ type: 'FRIEND_STATUS', id, status: 'outgoing' })
     try {
-      const out = await api.requestFriend(id)
+      const out = await api.requestFriend(id, 'search')
       dispatch({ type: 'FRIEND_STATUS', id, status: out.friendStatus || 'outgoing' })
     } catch {
       dispatch({ type: 'FRIEND_STATUS', id, status: 'none' })

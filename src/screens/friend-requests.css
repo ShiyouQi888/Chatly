@@ -1,7 +1,7 @@
 .friend-requests-root {
   position: absolute;
   inset: 0;
-  z-index: 115;
+  z-index: var(--z-overlay);
   display: flex;
   flex-direction: column;
   background: var(--bg, #f5f6fa);

@@ -3,7 +3,7 @@
 .media-viewer {
   position: absolute;
   inset: 0;
-  z-index: 120;
+  z-index: var(--z-modal);
   /* 半透明 + 模糊，和项目里其它浮层（顶栏 blur(16px)、弹层 blur(8px)）一个语言。
      纯不透明会显得很"硬"，全透明又会把聊天内容透出来抢焦点。 */
   /* 0.82 太透：后面的动态卡片带颜色，毛玻璃一糊就在画面上方/下方留下几团色斑。

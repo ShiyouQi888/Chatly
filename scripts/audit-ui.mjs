@@ -6,6 +6,7 @@ import { spawn } from 'node:child_process'
 import http from 'node:http'
 import { URL as NodeURL } from 'node:url'
 import { purgeMessagesAfter, maxMessageId, purgeOrphanUploads } from './lib/debris.mjs'
+import { ensureLoggedIn } from './lib/session.mjs'
 
 /* 这个脚本是「遍历所有界面并点开能点的一切」—— 包括表情面板的大表情格子，
    点下去就是真发一条消息。所以它会往演示库里留东西（实测一轮留下一条
@@ -220,11 +221,12 @@ const bail = async (msg) => {
   cdp.close(); chrome.kill()
   process.exit(1)
 }
-await waitFor(`!!document.querySelector('.chat-list .chat-row') || !!document.querySelector('.lg-demo-list button')`)
-if (!(await ev(`!!document.querySelector('.chat-list .chat-row')`))) {
-  const clicked = await ev(`(()=>{const b=[...document.querySelectorAll('.lg-demo-list button')].find(x=>x.textContent.includes('陈墨'));if(!b)return false;b.click();return true})()`)
-  if (!clicked || !(await waitFor(`!!document.querySelector('.chat-list .chat-row')`))) await bail('登录失败，无法审计')
+try {
+  await ensureLoggedIn(ev)
+} catch (e) {
+  await bail('登录失败，无法审计：' + e.message)
 }
+if (!(await waitFor(`!!document.querySelector('.chat-list .chat-row')`))) await bail('登录失败，无法审计')
 await sleep(600)
 
 console.log('\n══════ 全屏 UI 审计（390×844） ══════\n')

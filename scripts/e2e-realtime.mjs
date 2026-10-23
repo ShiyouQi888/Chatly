@@ -10,6 +10,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import zlib from 'node:zlib'
 import { URL as NodeURL } from 'node:url'
+import { ensureLoggedIn } from './lib/session.mjs'
 
 const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe'
 const APP = 'http://127.0.0.1:5198/'
@@ -251,11 +252,7 @@ async function makeSession(port, dirName, tag) {
 
 /* ================= 页面侧助手 ================= */
 const HELPERS = `
-window.__pickDemo = (label) => {
-  const b = [...document.querySelectorAll('.lg-demo-list button')].find(x => x.textContent.includes(label))
-  if (!b) return false
-  b.click(); return true
-}
+/* __pickDemo 已废弃：登录改走 ensureLoggedIn（API token），见下方登录段。 */
 window.__rowByName = (name) => {
   // 必须按 .cr-name（会话名）匹配：群聊行的「预览」里也会出现成员昵称，
   // 用整行 textContent 匹配会误命中别的会话。
@@ -322,13 +319,13 @@ window.__imgCount = () => document.querySelectorAll('.room-scroll .img-bubble im
 
   try {
     /* ---------- 1. 登录 ---------- */
-    await A.waitFor(`!!document.querySelector('.lg-demo-list button')`)
-    await B.waitFor(`!!document.querySelector('.lg-demo-list button')`)
+    await A.waitFor(`!!document.querySelector('.lg-card, .login')`)
+    await B.waitFor(`!!document.querySelector('.lg-card, .login')`)
     // 助手函数挂在 window 上，登录过程不刷新页面，注入一次即可全程复用
     await A.js(HELPERS)
     await B.js(HELPERS)
-    await A.js(`window.__pickDemo('陈墨')`)
-    await B.js(`window.__pickDemo('林小夏')`)
+    await ensureLoggedIn(A.js, { identifier: 'chenmo' })
+    await ensureLoggedIn(B.js, { identifier: 'linxiaoxia' })
 
     const aIn = await A.waitFor(`!!document.querySelector('.tabbar') && !!document.querySelector('.chat-list .chat-row')`)
     const bIn = await B.waitFor(`!!document.querySelector('.tabbar') && !!document.querySelector('.chat-list .chat-row')`)

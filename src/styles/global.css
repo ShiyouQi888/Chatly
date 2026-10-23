@@ -55,6 +55,21 @@ img {
   max-width: 100%;
 }
 
+/* ===== 键盘焦点可见 =====
+ * 旧样式把 input/textarea 的 outline 直接清掉了，键盘用户完全看不到焦点。
+ * 这里统一补一条可见焦点环（:focus-visible 只在键盘/辅具触发时出现，鼠标点击不会闪）。
+ * 选择器带元素名，优先于上面 `input { outline:none }`。 */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 ::-webkit-scrollbar {
   width: 0;
   height: 0;

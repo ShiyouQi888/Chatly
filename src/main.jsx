@@ -10,6 +10,7 @@ import { FavoriteProvider } from './store/FavoriteStore.jsx'
 import { WatchLaterProvider } from './store/WatchLaterStore.jsx'
 import { NotificationProvider } from './store/NotificationStore.jsx'
 import Phone from './components/Phone.jsx'
+import AdminConsole from './screens/AdminConsole.jsx'
 import { applySavedAppearance, applySavedTheme } from './utils/theme.js'
 import { THEMES } from './data/themes.js'
 
@@ -30,9 +31,15 @@ applySavedTheme(THEMES)
  *   WatchLaterProvider —— 稍后看（聊天页长按菜单添加，我页查看列表）
  *   NotificationProvider —— 互动通知（通知中心 / 消息通知设置 / WS 推送与提醒；依赖 user 才知道给谁）
  */
+const pathname = window.location.pathname.replace(/\/+$/, '') || '/'
+const isAdmin = pathname === '/qishiyou' || pathname === '/admin'
+document.documentElement.dataset.app = isAdmin ? 'admin' : 'chat'
+if (pathname === '/admin') window.history.replaceState(null, '', '/qishiyou')
+if (isAdmin) document.title = 'Chatly · 运营管理后台'
+
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <AuthProvider>
+    {isAdmin ? <AdminConsole /> : <AuthProvider>
       <AppProvider>
         <ChatProvider>
           <MomentProvider>
@@ -48,6 +55,6 @@ createRoot(document.getElementById('root')).render(
           </MomentProvider>
         </ChatProvider>
       </AppProvider>
-    </AuthProvider>
+    </AuthProvider>}
   </React.StrictMode>
 )

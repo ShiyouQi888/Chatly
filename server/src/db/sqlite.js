@@ -61,6 +61,7 @@ const MESSAGES_COLS = `
   file_url        TEXT,
   file_name       TEXT,
   file_size       INTEGER,
+  audio_duration_ms INTEGER,
   reply_to_id     INTEGER REFERENCES messages(id) ON DELETE SET NULL,
   created_at      INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
   revoked_at      INTEGER,
@@ -728,6 +729,7 @@ try {
   if (addColumnIfMissing('messages', 'geo_lng', 'geo_lng REAL')) added.push('geo_lng')
   if (addColumnIfMissing('messages', 'content_encrypted', 'content_encrypted INTEGER NOT NULL DEFAULT 0')) added.push('content_encrypted')
   if (addColumnIfMissing('messages', 'burn_at', 'burn_at INTEGER')) added.push('burn_at')
+  if (addColumnIfMissing('messages', 'audio_duration_ms', 'audio_duration_ms INTEGER')) added.push('audio_duration_ms')
   if (addColumnIfMissing('favorites', 'content_encrypted', 'content_encrypted INTEGER NOT NULL DEFAULT 0')) added.push('favorites.content_encrypted')
   if (added.length) console.log(`[db] messages 表已补充字段：${added.join(', ')}`)
 }

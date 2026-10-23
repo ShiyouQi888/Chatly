@@ -292,6 +292,7 @@ CREATE TABLE IF NOT EXISTS messages (
   file_url        TEXT,
   file_name       TEXT,
   file_size       BIGINT,
+  audio_duration_ms INTEGER,
   reply_to_id     INTEGER REFERENCES messages(id) ON DELETE SET NULL,
   created_at      BIGINT  NOT NULL DEFAULT ((EXTRACT(EPOCH FROM now()) * 1000)::bigint),
   revoked_at      BIGINT,
@@ -661,6 +662,7 @@ const BACKFILL_COLUMNS = [
   ['user_devices', 'session_id TEXT'],
   ['messages', 'content_encrypted INTEGER NOT NULL DEFAULT 0'],
   ['messages', 'burn_at BIGINT'],
+  ['messages', 'audio_duration_ms INTEGER'],
   ['favorites', 'content_encrypted INTEGER NOT NULL DEFAULT 0'],
 ]
 

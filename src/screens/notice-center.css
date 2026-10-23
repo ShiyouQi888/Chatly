@@ -2,7 +2,7 @@
 .notice {
   position: absolute;
   inset: 0;
-  z-index: 82;
+  z-index: var(--z-overlay);
   background: var(--bg);
   display: flex;
   flex-direction: column;

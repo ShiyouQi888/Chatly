@@ -5,11 +5,18 @@ import { cn } from '../../lib/utils.js'
 export const AlertDialog = AlertDialogPrimitive.Root
 export const AlertDialogTrigger = AlertDialogPrimitive.Trigger
 export const AlertDialogPortal = AlertDialogPrimitive.Portal
+export const AlertDialogCancel = AlertDialogPrimitive.Cancel
 export const AlertDialogOverlay = React.forwardRef(function AlertDialogOverlay({ className, ...props }, ref) {
-  return <AlertDialogPrimitive.Overlay ref={ref} className={cn('fixed inset-0 z-[70] bg-black/70 backdrop-blur-sm', className)} {...props} />
+  return <AlertDialogPrimitive.Overlay ref={ref} className={cn('op-modal-overlay fixed inset-0 z-[70] bg-black/70 backdrop-blur-sm', className)} {...props} />
 })
-export const AlertDialogContent = React.forwardRef(function AlertDialogContent({ className, children, ...props }, ref) {
-  return <AlertDialogPortal><AlertDialogOverlay /><AlertDialogPrimitive.Content ref={ref} className={cn('fixed left-1/2 top-1/2 z-[70] grid w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 gap-5 rounded-xl !border !border-border !bg-popover p-6 !text-popover-foreground shadow-2xl outline-none', className)} {...props}>{children}</AlertDialogPrimitive.Content></AlertDialogPortal>
+export const AlertDialogContent = React.forwardRef(function AlertDialogContent({ className, children, onOpenAutoFocus, onCloseAutoFocus, ...props }, ref) {
+  const previousFocus = React.useRef(null)
+  const rememberFocus = (event) => { previousFocus.current = document.activeElement; onOpenAutoFocus?.(event) }
+  const restoreFocus = (event) => {
+    onCloseAutoFocus?.(event)
+    if (!event.defaultPrevented && previousFocus.current?.isConnected) { event.preventDefault(); previousFocus.current.focus() }
+  }
+  return <AlertDialogPortal><AlertDialogOverlay /><AlertDialogPrimitive.Content ref={ref} onOpenAutoFocus={rememberFocus} onCloseAutoFocus={restoreFocus} className={cn('op-dialog fixed left-1/2 top-1/2 z-[70] grid w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 gap-5 rounded-xl border border-border bg-popover p-6 text-popover-foreground shadow-2xl outline-none', className)} {...props}>{children}</AlertDialogPrimitive.Content></AlertDialogPortal>
 })
 export function AlertDialogHeader({ className, ...props }) { return <div className={cn('flex flex-col gap-1.5 text-left', className)} {...props} /> }
 export function AlertDialogFooter({ className, ...props }) { return <div className={cn('flex flex-col-reverse gap-2 sm:flex-row sm:justify-end', className)} {...props} /> }

@@ -1,7 +1,7 @@
 /**
  * Chatly 独立后端入口
  * REST: http://127.0.0.1:3002/api/v1
- * WS:   ws://127.0.0.1:3002/ws?token=<jwt>
+ * WS:   ws://127.0.0.1:3002/ws?ticket=<single-use-ticket>
  */
 import express from 'express'
 import http from 'node:http'
@@ -27,10 +27,12 @@ import notificationRoutes from './routes/notifications.js'
 import statusRoutes from './routes/statuses.js'
 import adminRoutes from './routes/admin.js'
 import { bootstrapAdmin } from './admin-bootstrap.js'
+import { bootstrapUserIds } from './user-ids.js'
 import { attachWs } from './ws.js'
 import { q, ready, info } from './db.js'
 import { authRequired } from './auth.js'
 import { ready as redisReady, status as redisStatus, close as redisClose } from './redis.js'
+import { purgeOrphanUploads } from './upload-cleanup.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.env.PORT) || 3002
@@ -125,6 +127,7 @@ attachWs(server)
    的服务 —— 那比启动时直接报错难查得多。 */
 try {
   await ready()
+  await bootstrapUserIds()
   await bootstrapAdmin()
 } catch (e) {
   console.error(`\n  数据层初始化失败（${info().driver}）：${e.message}\n`)
@@ -135,6 +138,15 @@ try {
    理由：它是「跨实例」的增强，不是核心能力 —— 本地开发没起容器是完全正常的状态，
    为了它启动失败会把 22 支自检全部打死。降级的事实会打到日志，也能从 /health 查到。 */
 await redisReady()
+
+/* 清理超过 24 小时且数据库完全没有引用的公开上传文件。 */
+const uploadCleanup = setInterval(() => {
+  void purgeOrphanUploads().then((removed) => {
+    if (removed) console.log(`[uploads] 已清理 ${removed} 个未引用文件`)
+  }).catch((error) => console.error('[uploads] 孤儿文件清理失败:', error.message))
+}, 24 * 60 * 60 * 1000)
+uploadCleanup.unref()
+void purgeOrphanUploads().catch((error) => console.error('[uploads] 孤儿文件清理失败:', error.message))
 
 /* 到期消息会同时从收藏和通知快照清除，避免阅后即焚内容经副本继续保留。 */
 const burnCleanup = setInterval(async () => {

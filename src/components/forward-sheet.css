@@ -7,7 +7,7 @@
 .fw-root {
   position: absolute;
   inset: 0;
-  z-index: 160;
+  z-index: var(--z-modal);
   display: flex;
   flex-direction: column;
   background: var(--bg);

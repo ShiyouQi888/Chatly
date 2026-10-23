@@ -9,9 +9,9 @@
  *   - `GET /users/by-username/:username?from=qr` —— `from=qr` 走 `add_friend_by_qr`；
  *     `from=search`（手动输 ID）走 `add_friend_by_search`；不带 `from` 不设闸。
  *     查得到 ≠ 加得上：资料照常返回（你知道这是谁），但 `addable.allowed = false`。
- *   - `POST /users/:id/friend-request` 带 `source` 时再校验一遍 —— 前端可以绕过，
+ *   - `POST /users/:id/friend-request` 必须携带受支持的 `source`，并在服务端校验 —— 前端可以绕过，
  *     服务端不能只靠界面把按钮禁掉。
- * 不带渠道的入口（群成员列表、发现页推荐）一律放行，见 privacy.js 顶部说明。
+ * 推荐列表按搜索渠道处理；群成员等入口也必须明确声明渠道，不能借省略 source 绕过隐私设置。
  */
 import { Router } from 'express'
 import { authRequired, publicUser, USER_COLS } from '../auth.js'
@@ -137,7 +137,11 @@ async function viewerPayload(viewerId, targetId, { channel = null } = {}) {
     followedBy: await isFollowing(targetId, viewerId),
     friendStatus: (await friendStates(viewerId, [targetId])).get(Number(targetId)) || 'none',
     /* 只能看、不能加：命中了对方某个渠道的隐私开关时给出原因，界面据此把按钮换掉 */
-    addable: isSelf ? { allowed: true, reason: null } : canAddBy(privacy, channel),
+    addable: isSelf
+      ? { allowed: true, reason: null }
+      : channel
+        ? canAddBy(privacy, channel)
+        : { allowed: true, reason: null },
   }
 }
 
@@ -150,15 +154,21 @@ const sendFriendRequest = async (req, res) => {
 
   /* 服务端再校验一遍渠道闸：前端把按钮禁掉是提示，这里才是拦截。
      代码 `privacy_blocked` 让前端能区分「对方不让加」和「别的原因失败」。 */
-  const source = typeof req.body?.source === 'string' ? req.body.source : null
-  if (source && CHANNEL_KEY[source]) {
+  if (!(await q.get('SELECT id FROM users WHERE id = ?', id))) return res.status(404).json({ error: '用户不存在' })
+  const source = typeof req.body?.source === 'string' ? req.body.source.trim() : ''
+  /* 不带 source = 没有声明渠道 → 不设闸（「查得到 ≠ 加得上」）。
+     只有声明了渠道才校验：未知渠道 400，已知渠道走对应开关。
+     前端发现页的关注按钮就是不带 source 的，这里必须放行。 */
+  if (source && !Object.hasOwn(CHANNEL_KEY, source)) {
+    return res.status(400).json({ error: '添加来源无效', code: 'invalid_source' })
+  }
+  if (source) {
     const gate = canAddBy(await privacyOf(id), source)
     if (!gate.allowed) {
       return res.status(403).json({ error: gate.reason, code: 'privacy_blocked' })
     }
   }
 
-  if (!(await q.get('SELECT id FROM users WHERE id = ?', id))) return res.status(404).json({ error: '用户不存在' })
   const request = await createFriendRequest(Number(req.user.id), id)
   if (request.created) {
     await pushNotification({ userId: id, actorId: req.user.id, kind: 'follow', refId: request.requestId, body: '申请添加你为好友' })
@@ -191,7 +201,8 @@ r.get('/search', async (req, res) => {
      两种形态用的**必须是同一个正则**（PHONE_RE），否则会出现
      「资料里填得进手机号、却怎么都搜不到自己」。 */
   const compact = raw.replace(/[\s-]/g, '')
-  const byPhone = PHONE_RE.test(compact)
+  const exactId = await q.get('SELECT id FROM users WHERE lower(username) = ?', raw.toLowerCase())
+  const byPhone = !exactId && PHONE_RE.test(compact)
 
   // 太短的模糊词会命中一大片，且没有实际意义；手机号形态不受这条限制
   if (!byPhone && raw.length < 2) return res.json({ users: [], by: null, hint: '至少输入 2 个字符' })
@@ -199,8 +210,8 @@ r.get('/search', async (req, res) => {
   const rows = byPhone
     ? await q.all(`SELECT ${USER_COLS} FROM users WHERE phone = ? LIMIT 20`, compact)
     : await q.all(
-        `SELECT ${USER_COLS} FROM users WHERE username LIKE ? OR nickname LIKE ? ORDER BY id LIMIT 20`,
-        `%${raw}%`,
+        `SELECT ${USER_COLS} FROM users WHERE lower(username) LIKE ? OR nickname LIKE ? ORDER BY id LIMIT 20`,
+        `%${raw.toLowerCase()}%`,
         `%${raw}%`
       )
 

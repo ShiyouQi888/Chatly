@@ -23,6 +23,7 @@
  * 会**明确标为跳过并计数**，而不是悄悄少跑几条 —— 静默的盲区比红色危险。
  */
 import { q, ready as dbReady } from '../server/src/db.js'
+import { ensureLoggedIn } from './lib/session.mjs'
 
 const API = 'http://127.0.0.1:3002/api/v1'
 const HEALTH = 'http://127.0.0.1:3002/health'
@@ -73,8 +74,12 @@ const AID = A.user.id
 const BID = B.user.id
 
 /* 只做「观察者」的 WS 连接，把收到的事件攒起来 */
-function openWs(token) {
-  const ws = new WebSocket(`ws://127.0.0.1:3002/ws?token=${encodeURIComponent(token)}`)
+async function openWs(token) {
+  /* WS 鉴权已改成一次性 ticket（POST /auth/ws-ticket），不再吃 JWT。 */
+  const t = await req('/auth/ws-ticket', { method: 'POST', token })
+  const ticket = t.data?.ticket
+  if (!ticket) throw new Error('WS ticket 获取失败：' + JSON.stringify(t.data).slice(0, 120))
+  const ws = new WebSocket(`ws://127.0.0.1:3002/ws?ticket=${encodeURIComponent(ticket)}`)
   ws.seen = []
   ws.on('message', (raw) => {
     try {
@@ -103,12 +108,12 @@ try {
   /* ================= ① 本地 presence（不依赖 Redis） ================= */
   console.log('─── ① 本地上下线推送 ───')
   await setVis(true)
-  aWs = openWs(A.token)
+  aWs = await openWs(A.token)
   await waitOpen(aWs)
   await sleep(400)
 
   clearSeen(aWs)
-  bWs = openWs(B.token)
+  bWs = await openWs(B.token)
   await waitOpen(bWs)
   await sleep(800)
   const up = presenceOf(aWs)
@@ -125,7 +130,7 @@ try {
   await setVis(false)
   await sleep(300)
   clearSeen(aWs)
-  bWs = openWs(B.token)
+  bWs = await openWs(B.token)
   await waitOpen(bWs)
   await sleep(900)
   ok(presenceOf(aWs).length === 0, '★ 关掉「在线状态可见」后上线不再推送（不是推一条 online:false）', JSON.stringify(presenceOf(aWs)))
@@ -150,7 +155,7 @@ try {
   )
 
   /* 真正的「不用等重连」：人**在线**时关 → 立刻变灰；再开 → 立刻变亮。 */
-  bWs = openWs(B.token)
+  bWs = await openWs(B.token)
   await waitOpen(bWs)
   await sleep(700)
   clearSeen(aWs)
@@ -203,17 +208,15 @@ try {
       return false
     }
 
-    ok(await waitFor(`!!document.querySelector('.lg-demo-list button') || !!document.querySelector('.tabbar')`), '应用挂载')
-    if (await js(`!!document.querySelector('.lg-demo-list button')`)) {
-      await js(`[...document.querySelectorAll('.lg-demo-list button')].find(x=>x.textContent.includes('陈墨'))?.click()`)
-    }
+    ok(await waitFor(`!!document.querySelector('.lg-card, .login') || !!document.querySelector('.tabbar')`), '应用挂载')
+    await ensureLoggedIn(js)
     ok(await waitFor(`!!document.querySelector('.chat-row')`, 10000), '会话列表已加载')
 
     /* 界面上的圆点是 `.av-online`，判据要落到「林小夏那一行」上，
        不能全页找 `.av-online` —— 别的行也可能有在线的头像。 */
     const dotOfB = `[...document.querySelectorAll('.chat-row')].find(r=>r.textContent.includes('林小夏'))?.querySelector('.av-online')`
 
-    bWs = openWs(B.token)
+    bWs = await openWs(B.token)
     await waitOpen(bWs)
     await sleep(1200)
     ok(await waitFor(`!!(${dotOfB})`, 8000), '★ B 在线时，她的会话行上出现了在线圆点')
@@ -249,7 +252,7 @@ try {
     /* ★ TTL 必须验**真实代码路径写出来的键**。
        一开始我是自己 ZADD 一条再查 TTL —— 那验的是测试自己（当然没 TTL），
        而不是 redis.js 的 touch()。改成先让 B 真的连上。 */
-    bWs = openWs(B.token)
+    bWs = await openWs(B.token)
     await waitOpen(bWs)
     await sleep(700)
     const zcard = await redis.zCard(PKEY(BID))

@@ -8,7 +8,8 @@ import { authRequired } from '../auth.js'
 import { createMessage, getMessage, revokeMessage, memberIds, canSpeak, assertReplyTo, forwardMessages } from '../chat.js'
 import { broadcastToUsers } from '../ws.js'
 import { notifyIncomingMessage } from '../notification.js'
-import { uploadAny as upload, isStaticAssetUrl } from '../upload.js'
+import { uploadAny as upload, uploadVoice, isStaticAssetUrl, looksLikeAudio, PRIVATE_UPLOAD_DIR, removePrivateUpload } from '../upload.js'
+import path from 'node:path'
 import { parseGeoPair } from '../../../shared/geo-math.mjs'
 import { q } from '../db.js'
 import { decryptMessageText } from '../message-crypto.js'
@@ -27,8 +28,12 @@ r.post('/upload', async (req, res, next) => {
     if (denial) return res.status(403).json(denial)
   }
   next()
-}, upload.single('file'), (req, res) => {
+}, (req, res, next) => (req.query.voice === '1' ? uploadVoice : upload).single('file')(req, res, next), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: '没有收到文件' })
+  if (req.query.voice === '1' && !looksLikeAudio(req.file.path)) {
+    removePrivateUpload(req.file.filename)
+    return res.status(400).json({ error: '录音文件格式无效' })
+  }
   res.status(201).json({
     url: `/api/v1/files/private/${req.file.filename}`,
     fileName: req.file.originalname,
@@ -113,7 +118,7 @@ r.get('/search', async (req, res) => {
 
 /* ---------- 发送消息 ---------- */
 r.post('/', async (req, res) => {
-  const { conversationId, kind = 'text', text, fileUrl, fileName, fileSize, replyToId } = req.body || {}
+  const { conversationId, kind = 'text', text, fileUrl, fileName, fileSize, audioDurationMs, replyToId } = req.body || {}
   const cid = Number(conversationId)
   /* 发言门控走 canSpeak（isMember + 禁言），不只查 isMember ——
      否则禁言只是前端的摆设，客户端直接发包就能在禁言群里说话。
@@ -138,6 +143,17 @@ r.post('/', async (req, res) => {
   // javascript: 之类的伪协议在前端 <img src> / window.open 处也都是现成的执行面。
   if (FILE_KINDS.includes(kind) && !isStaticAssetUrl(fileUrl)) {
     return res.status(400).json({ error: '文件地址不合法' })
+  }
+  const isVoiceNote = kind === 'file' && /^voice-note-.*\.(webm|m4a|ogg|opus|wav|mp3)$/i.test(String(fileName || ''))
+  if (isVoiceNote && (!Number.isSafeInteger(Number(audioDurationMs)) || Number(audioDurationMs) < 300 || Number(audioDurationMs) > 60_000)) {
+    return res.status(400).json({ error: '语音时长无效，需在 0.3 秒到 60 秒之间' })
+  }
+  if (isVoiceNote) {
+    const privateFile = /^\/api\/v1\/files\/private\/([^/?]+)$/.exec(String(fileUrl || ''))
+    const filename = privateFile?.[1]
+    if (!filename || path.basename(filename) !== filename || !looksLikeAudio(path.join(PRIVATE_UPLOAD_DIR, filename))) {
+      return res.status(400).json({ error: '语音文件无效或已不存在' })
+    }
   }
 
   let geo = null
@@ -173,6 +189,7 @@ r.post('/', async (req, res) => {
     fileUrl: FILE_KINDS.includes(kind) ? fileUrl : null,
     fileName: FILE_KINDS.includes(kind) ? fileName || null : null,
     fileSize: FILE_KINDS.includes(kind) ? Number(fileSize) || null : null,
+    audioDurationMs: isVoiceNote ? Number(audioDurationMs) : null,
     replyToId: replyTo,
     geo,
   })

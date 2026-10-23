@@ -17,7 +17,25 @@ import net from 'node:net'
 import http from 'node:http'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { spawn } from 'node:child_process'
+
+const HERE = path.dirname(fileURLToPath(import.meta.url))
+export const ROOT = path.resolve(HERE, '../..')
+
+/**
+ * 每次运行都取一个全新的 profile 目录。
+ *
+ * ⚠️ 为什么必须每次换：Chrome 的 `--user-data-dir` 已被别的实例持有时，
+ * 新进程会把 URL 「委托」给那个实例然后自己退出。此时我们连上的调试端口属于
+ * 旧实例，页面停在 `chrome-error://chromewebdata/`，而 `waitAppTarget` 还会
+ * 按 URL 前缀命中这个坏页面 → 最终报出「localStorage 不可写」这种离题万里的错。
+ * 症状极具误导性：curl 打应用端口是 200，前端代码一个字节都没改。
+ */
+export function freshProfile(name) {
+  return path.join(ROOT, '.tmp', `probe-${name}-${process.pid}-${Date.now()}`)
+}
 
 /**
  * 拿一个空闲端口。设了 CDP_PORT 就听它的（方便手工复现）。

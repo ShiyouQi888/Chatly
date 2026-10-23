@@ -14,7 +14,8 @@ import './me-tab.css'
  * 所以这里每一项都必须是三者之一：
  *   ① 真的生效（设备列表：真读后端、真远程退出；修改密码：真校验旧密码、真写库）；
  *   ② 真的存在但这一页改不了（手机号：库里真有，但编辑入口在「编辑资料」）；
- *   ③ 根本不存在 → **禁用并写明原因**（邮箱 / 生物识别 / 二次验证）。
+ *   ③ 尚未接通 → **禁用并写明原因**（生物识别 / 二次验证）。
+ * 邮箱由 selfUser 返回真实绑定地址；邮箱验证码注册和密码登录已接通。
  * 以前这里踩过两个坑，都写在 LESSONS 里：
  *   - 硬编码了一个手机号 `138****6721`（当时库里确实没有这个字段）；
  *   - 「退出登录」只弹了个 `已退出登录 · 原型演示` 的 toast，人根本没退出去。
@@ -85,7 +86,7 @@ export default function SecuritySettings({ onBack, showToast, user }) {
     <div className="sub-scroll">
       {/* 登录方式：只列**库里真的有的**东西。 */}
       <Group title="登录方式">
-        <Row icon={<IconUser size={19} />} label="用户名" value={user?.username || '—'} />
+        <Row icon={<IconUser size={19} />} label="用户 ID" value={user?.username || '—'} sub="可在「我的 → 编辑资料」中修改" />
         {/* 密码：接口已接通（POST /auth/me/password 真校验旧密码、真写新哈希）。
             点这一行打开弹层，不是摆设。 */}
         <Row
@@ -101,15 +102,14 @@ export default function SecuritySettings({ onBack, showToast, user }) {
           label="手机号"
           value={maskPhone(user?.phone) || '未填写'}
           sub={user?.phone ? '在「编辑资料」里修改' : '在「编辑资料」里填写，供他人按号找到你'}
-          last
         />
-      </Group>
-
-      <Group title="未接入" footer="邮箱在数据库里没有对应字段，列出来只会让人以为自己绑过。">
         <Row
+          icon={<IconInfo size={19} />}
           label="邮箱"
-          sub="数据库中没有邮箱字段"
-          right={<span className="tag-off">未接入</span>}
+          value={user?.email ? '已绑定' : '未绑定'}
+          sub={user?.email
+            ? <span style={{ overflowWrap: 'anywhere' }}>{user.email} · 可用于密码登录</span>
+            : '当前账号未绑定邮箱'}
           last
         />
       </Group>

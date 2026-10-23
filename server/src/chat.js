@@ -145,24 +145,76 @@ export async function isMember(conversationId, userId) {
   )
 }
 
-/** 私聊：若两人间已存在则复用，否则新建 */
-export async function ensurePrivate(aId, bId) {
-  const found = await q.get(
-    `SELECT c.id FROM conversations c
-     JOIN conversation_members m1 ON m1.conversation_id = c.id AND m1.user_id = ?
-     JOIN conversation_members m2 ON m2.conversation_id = c.id AND m2.user_id = ?
-     WHERE c.type = 'private'`,
-    aId,
-    bId
-  )
-  if (found) return found.id
+let privatePairSchema
+let privatePairQueue = Promise.resolve()
+async function ensurePrivatePairSchema() {
+  if (!privatePairSchema) {
+    privatePairSchema = q.run(`CREATE TABLE IF NOT EXISTS private_conversation_pairs (
+      user_low INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      user_high INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      conversation_id INTEGER NOT NULL UNIQUE REFERENCES conversations(id) ON DELETE CASCADE,
+      PRIMARY KEY (user_low, user_high),
+      CHECK (user_low < user_high)
+    )`)
+  }
+  return privatePairSchema
+}
 
-  const cid = await insert('INSERT INTO conversations (type, title, owner_id) VALUES (?, ?, ?)', 'private', null, null)
-  const now = Math.floor(Date.now() / 1000)
-  await q.run('INSERT INTO conversation_members (conversation_id, user_id, role) VALUES (?, ?, ?)', cid, aId, 'member')
-  await q.run('INSERT INTO conversation_members (conversation_id, user_id, role) VALUES (?, ?, ?)', cid, bId, 'member')
-  await q.run('UPDATE conversations SET updated_at = ? WHERE id = ?', now, cid)
-  return cid
+/** 私聊：按规范化用户对复用；数据库唯一键保证并发请求也只保留一个会话。 */
+export async function ensurePrivate(aId, bId) {
+  await ensurePrivatePairSchema()
+  const userLow = Math.min(Number(aId), Number(bId))
+  const userHigh = Math.max(Number(aId), Number(bId))
+  const createOrReuse = () => tx(async () => {
+    const mapped = await q.get(
+      'SELECT conversation_id AS conversationId FROM private_conversation_pairs WHERE user_low = ? AND user_high = ?',
+      userLow, userHigh
+    )
+    if (mapped) return Number(mapped.conversationId)
+
+    const legacy = await q.get(
+      `SELECT c.id FROM conversations c
+       JOIN conversation_members m1 ON m1.conversation_id = c.id AND m1.user_id = ?
+       JOIN conversation_members m2 ON m2.conversation_id = c.id AND m2.user_id = ?
+       WHERE c.type = 'private'
+       ORDER BY c.id ASC LIMIT 1`,
+      userLow, userHigh
+    )
+    if (legacy) {
+      await q.run(
+        `INSERT INTO private_conversation_pairs (user_low, user_high, conversation_id) VALUES (?, ?, ?)
+         ON CONFLICT(user_low, user_high) DO NOTHING`,
+        userLow, userHigh, legacy.id
+      )
+      const winner = await q.get(
+        'SELECT conversation_id AS conversationId FROM private_conversation_pairs WHERE user_low = ? AND user_high = ?',
+        userLow, userHigh
+      )
+      return Number(winner.conversationId)
+    }
+
+    const cid = await insert('INSERT INTO conversations (type, title, owner_id) VALUES (?, ?, ?)', 'private', null, null)
+    const now = Math.floor(Date.now() / 1000)
+    await q.run('INSERT INTO conversation_members (conversation_id, user_id, role) VALUES (?, ?, ?)', cid, userLow, 'member')
+    await q.run('INSERT INTO conversation_members (conversation_id, user_id, role) VALUES (?, ?, ?)', cid, userHigh, 'member')
+    await q.run('UPDATE conversations SET updated_at = ? WHERE id = ?', now, cid)
+    const inserted = await q.get(
+      `INSERT INTO private_conversation_pairs (user_low, user_high, conversation_id) VALUES (?, ?, ?)
+       ON CONFLICT(user_low, user_high) DO NOTHING RETURNING conversation_id AS conversationId`,
+      userLow, userHigh, cid
+    )
+    if (inserted) return Number(inserted.conversationId)
+
+    const winner = await q.get(
+      'SELECT conversation_id AS conversationId FROM private_conversation_pairs WHERE user_low = ? AND user_high = ?',
+      userLow, userHigh
+    )
+    await q.run('DELETE FROM conversations WHERE id = ?', cid)
+    return Number(winner.conversationId)
+  })
+  const result = privatePairQueue.then(createOrReuse)
+  privatePairQueue = result.catch(() => {})
+  return result
 }
 
 export async function createGroup(title, memberIds, ownerId) {
@@ -407,6 +459,7 @@ export async function createMessage({
   fileUrl = null,
   fileName = null,
   fileSize = null,
+  audioDurationMs = null,
   replyToId = null,
   geo = null,
   pollId = null,
@@ -419,9 +472,9 @@ export async function createMessage({
   const storedContent = encrypted ? encryptMessageText(content) : content
   const id = await insert(
     `INSERT INTO messages
-       (conversation_id, sender_id, kind, content, content_encrypted, file_url, file_name, file_size, reply_to_id, created_at,
+       (conversation_id, sender_id, kind, content, content_encrypted, file_url, file_name, file_size, audio_duration_ms, reply_to_id, created_at,
         geo_name, geo_address, geo_lat, geo_lng, poll_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     conversationId,
     senderId,
     kind,
@@ -430,6 +483,7 @@ export async function createMessage({
     fileUrl,
     fileName,
     fileSize,
+    audioDurationMs,
     replyToId,
     now,
     geo?.name ?? null,
@@ -446,7 +500,7 @@ export async function getMessage(id) {
   const m = await q.get(
     `SELECT id, conversation_id AS conversationId, sender_id AS senderId, kind,
             content, content_encrypted AS contentEncrypted, burn_at AS burnAt,
-            file_url AS fileUrl, file_name AS fileName, file_size AS fileSize,
+            file_url AS fileUrl, file_name AS fileName, file_size AS fileSize, audio_duration_ms AS audioDurationMs,
             reply_to_id AS replyToId, created_at AS createdAt, revoked_at AS revokedAt,
             geo_name AS geoName, geo_address AS geoAddress, geo_lat AS geoLat, geo_lng AS geoLng,
             poll_id AS pollId
@@ -468,6 +522,7 @@ export async function getMessage(id) {
     fileUrl: m.fileUrl,
     fileName: m.fileName,
     fileSize: m.fileSize,
+    audioDurationMs: m.audioDurationMs == null ? null : Number(m.audioDurationMs),
     /* 位置消息的正文。坐标可能为 null（历史消息 / 只给了名字），
        前端据此决定「只显示名字」还是「能点开地图」—— 别拿 0 当兜底，0,0 是几内亚湾。 */
     geo:

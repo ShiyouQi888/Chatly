@@ -22,6 +22,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import zlib from 'node:zlib'
 import { URL as NodeURL } from 'node:url'
+import { ensureLoggedIn } from './lib/session.mjs'
 
 const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe'
 const API = 'http://127.0.0.1:3002/api/v1'
@@ -367,13 +368,11 @@ window.__savedAvatar = () => {
 async function boot() {
   await js(HELPERS)
   const ready = await waitFor(
-    `!!document.querySelector('.lg-demo-list button') || !!document.querySelector('.chat-list .chat-row')`,
+    `!!document.querySelector('.lg-card, .login') || !!document.querySelector('.chat-list .chat-row')`,
     15000
   )
   if (!ready) throw new Error('登录页和聊天列表都没出现 —— 应用可能没挂载')
-  if (await js(`!!document.querySelector('.lg-demo-list button')`)) {
-    await js(`(() => { const b=[...document.querySelectorAll('.lg-demo-list button')].find(x=>x.textContent.includes('陈墨')); if(b) b.click(); return !!b })()`)
-  }
+  await ensureLoggedIn(js)
   const listed = await waitFor(`!!document.querySelector('.chat-list .chat-row')`, 15000)
   if (!listed) throw new Error('聊天列表没出现')
   await js(HELPERS)

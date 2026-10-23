@@ -25,6 +25,7 @@ export function userPayload(username) {
   const clean = String(username == null ? '' : username)
     .trim()
     .replace(/^@+/, '')
+    .toLowerCase()
   return `${QR_SCHEME}://user/${encodeURIComponent(clean)}`
 }
 
@@ -86,4 +87,5 @@ export function normalizeUsernameInput(text) {
   return String(text == null ? '' : text)
     .trim()
     .replace(/^@+/, '')
+    .toLowerCase()
 }

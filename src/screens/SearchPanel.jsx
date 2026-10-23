@@ -441,7 +441,7 @@ export default function SearchPanel({ onBack, nav }) {
 function PeopleRow({ u, last, busy, onFollow, onSay }) {
   return (
     <div className={`sp-row sp-person ${last ? 'is-last' : ''}`} data-uid={u.id}>
-      <Avatar src={avatarOf(u)} name={u.nickname} size={40} radius={13} online={u.online} />
+      <Avatar src={avatarOf(u)} name={u.nickname} size={40} radius={12} online={u.online} />
       <span className="sp-row-body">
         <b>{u.nickname}</b>
         <em>

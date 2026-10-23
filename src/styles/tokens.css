@@ -2,8 +2,11 @@
   /* ===== 主色：紫蓝渐变 ===== */
   --brand-1: #8b7cf6;
   --brand-2: #6d5df6;
-  --brand-3: #5b6ef5;
-  --brand-grad: linear-gradient(135deg, #9b8cfb 0%, #7b5cf6 45%, #5b6ef5 100%);
+  /* 动作色：白字 6.10:1（旧 #5b6ef5 仅 4.21，不够 AA；CDLS 定为 #5b4bd8） */
+  --brand-3: #5b4bd8;
+  --brand-action: #5b4bd8;
+  /* 承载白字的品牌底一律走这条「安全渐变」：两端均 ≥4.6:1，不再用跨明暗的渐变 */
+  --brand-grad: linear-gradient(135deg, #6d5df6 0%, #5b4bd8 100%);
   --brand-soft: rgba(124, 92, 246, 0.1);
   --brand-soft-2: rgba(124, 92, 246, 0.18);
 
@@ -23,9 +26,13 @@
   /* ===== 文字 ===== */
   --text-1: #16161f;
   --text-2: #4a4a5a;
-  --text-3: #8c8ca0;
-  --text-4: #b4b4c4;
+  /* 三级说明：旧 #8c8ca0 仅 3.08:1，改为 4.8:1（CDLS P0 修复） */
+  --text-3: #6b6b82;
+  /* 四级：仅非文本装饰，禁止用于占位符或任何可读信息（白底对比度不足） */
+  --text-4: #9a9ab0;
   --text-on-brand: #ffffff;
+  /* 链接色：独立于品牌紫（白字 6.5:1） */
+  --link: #4a5a9e;
 
   /* ===== 分隔 / 阴影 ===== */
   --line: rgba(22, 22, 31, 0.07);
@@ -56,6 +63,34 @@
   /* ===== 动效 ===== */
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 140ms;
+  --dur: 200ms;
+  --dur-slow: 300ms;
+
+  /* ===== 间距（4px 基准，仅 11 档；padding/margin/gap 只许用这些） ===== */
+  --space-0: 0;
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 8px;
+  --space-4: 12px;
+  --space-5: 16px;
+  --space-6: 20px;
+  --space-7: 24px;
+  --space-8: 32px;
+  --space-9: 40px;
+  --space-10: 48px;
+
+  /* ===== 层级（消灭散值 z-index） ===== */
+  --z-base: 0;
+  --z-raised: 10;
+  --z-sticky: 20;
+  --z-overlay: 100;
+  --z-modal: 200;
+  --z-toast: 300;
+  --z-tooltip: 400;
+
+  /* ===== 焦点 ===== */
+  --focus-ring: rgba(109, 92, 246, 0.55);
 
   /* ===== 布局 ===== */
   /* 底部导航的最小总高度：包含触控区与设备安全区，实际高度由内容撑开。 */

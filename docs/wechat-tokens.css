@@ -1,0 +1,126 @@
+/* ==========================================================================
+   Chatly · WeChat-style Design Tokens  (docs/wechat-tokens.css)
+   --------------------------------------------------------------------------
+   ⚠️【参考基线 · 品牌色不采用】
+   本文件仅用于研究微信的「标准化方法」。Chatly 正式采用的设计语言是
+   docs/chatly-tokens.css（CDLS）：借微信的结构，用 Chatly 自己的紫蓝品牌。
+   请勿把这里的微信绿 / 暖灰直接用于产品。
+   --------------------------------------------------------------------------
+   依据 Tencent/WeUI 与微信设计语言整理。可直接 import 到一个作用域容器
+   （例如 <div class="wx-theme">）试用，不改动现有 tokens.css。
+   全部为「语义令牌」，业务层禁止再写死 hex。
+   ========================================================================== */
+
+:root,
+.wx-theme {
+  /* ---------- 品牌：绿只表达「确认 / 完成」 ---------- */
+  --wx-brand: #07c160;              /* 微信绿：主按钮、成功、角标 */
+  --wx-brand-pressed: #06ad56;      /* 按压态 */
+  --wx-brand-soft: rgba(7, 193, 96, 0.08);
+  --wx-brand-soft-2: rgba(7, 193, 96, 0.16);
+
+  /* ---------- 功能色：红=危险，黄=提醒，蓝=链接，橙=金额 ---------- */
+  --wx-danger: #fa5151;
+  --wx-warning: #ffc300;
+  --wx-warning-deep: #fa9d3b;
+  --wx-link: #576b95;               /* 所有可点文字链接 */
+  --wx-money: #fa9d3b;              /* 转账 / 红包橙 */
+  --wx-money-grad: linear-gradient(135deg, #fbab53 0%, #f78f2d 100%);
+
+  /* ---------- 中性面：三层，白把舞台让给内容 ---------- */
+  --wx-bg: #ededed;                 /* 页面底 / 聊天背景 */
+  --wx-bg-1: #f7f7f7;               /* 次级容器 / 输入区 */
+  --wx-surface: #ffffff;            /* 卡片 / 主内容面 */
+  --wx-mask: rgba(0, 0, 0, 0.6);    /* 遮罩 */
+
+  /* ---------- 文字：层级全部来自字号与灰度 ---------- */
+  --wx-text-1: #191919;             /* 正文 / 标题 */
+  --wx-text-2: #888888;             /* 次级说明（微信原值） */
+  --wx-text-2-aa: #6e6e6e;          /* AA 合规次级文字（正文级用它） */
+  --wx-text-3: #b2b2b2;             /* 占位符 / 时间戳 */
+  --wx-text-disabled: #c9c9c9;
+  --wx-text-on-brand: #ffffff;
+
+  /* ---------- 分隔线：0.5px 视觉，颜色用透明度 ---------- */
+  --wx-line: rgba(0, 0, 0, 0.1);
+  --wx-line-strong: rgba(0, 0, 0, 0.16);
+
+  /* ---------- 聊天：微信的肌肉记忆 ---------- */
+  --wx-chat-bg: #ededed;
+  --wx-bubble-in: #ffffff;          /* 对方气泡 */
+  --wx-bubble-out: #95ec69;         /* 己方气泡 */
+  --wx-bubble-text: #191919;        /* 气泡文字恒为深色 */
+
+  /* ---------- 图标 ---------- */
+  --wx-icon: #7a7e83;               /* TabBar 未选中 */
+  --wx-icon-active: #07c160;        /* TabBar 选中 */
+
+  /* ---------- 圆角：微信偏「方」，别做成大圆润 ---------- */
+  --wx-r-xs: 4px;                   /* 头像 / 小标签 */
+  --wx-r-sm: 6px;
+  --wx-r-md: 8px;                   /* 按钮 / 输入 / 搜索 */
+  --wx-r-lg: 12px;                  /* 卡片 / 弹窗 */
+  --wx-r-xl: 16px;                  /* 半屏浮层顶角 */
+  --wx-r-full: 999px;
+
+  /* ---------- 间距：4px 基准 ---------- */
+  --wx-space-1: 2px;
+  --wx-space-2: 4px;
+  --wx-space-3: 8px;
+  --wx-space-4: 12px;
+  --wx-space-5: 16px;               /* 页面 / 卡片标准内边距 */
+  --wx-space-6: 20px;
+  --wx-space-7: 24px;
+  --wx-space-8: 32px;
+
+  /* ---------- 字体：系统字优先，不靠字体表达品牌 ---------- */
+  --wx-font: -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC",
+    "Source Han Sans SC", "Microsoft YaHei", sans-serif;
+  --wx-fs-caption: 12px;            /* 角标 / 时间 */
+  --wx-fs-footnote: 14px;           /* 辅助说明 */
+  --wx-fs-body: 17px;               /* 正文基准（微信就是 17） */
+  --wx-fs-title: 17px;              /* 导航 / 会话名 */
+  --wx-fs-heading: 20px;
+  --wx-fs-display: 28px;
+  --wx-lh: 1.41176471;              /* 24 / 17，微信标准行高比 */
+  --wx-fw-regular: 400;
+  --wx-fw-medium: 500;
+  --wx-fw-semibold: 600;            /* 只给关键信息加粗 */
+
+  /* ---------- 布局骨架 ---------- */
+  --wx-navbar-h: 44px;
+  --wx-tabbar-h: 50px;
+  --wx-cell-h: 56px;
+  --wx-cell-px: 16px;
+  --wx-tap-min: 44px;               /* 最小触控目标 */
+
+  /* ---------- 阴影：极简，几乎只有浮层才用 ---------- */
+  --wx-shadow-card: 0 1px 0 rgba(0, 0, 0, 0.04);
+  --wx-shadow-sheet: 0 -4px 24px rgba(0, 0, 0, 0.12);
+
+  /* ---------- 动效 ---------- */
+  --wx-ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --wx-dur-fast: 160ms;
+  --wx-dur: 200ms;
+  --wx-dur-slow: 300ms;
+
+  /* ---------- 焦点（补齐微信原生偏弱的一环） ---------- */
+  --wx-focus-ring: rgba(7, 193, 96, 0.45);
+}
+
+/* 统一焦点环：微信原生几乎无焦点反馈，这里补上，保证键盘可达 */
+.wx-theme :focus-visible {
+  outline: 2px solid var(--wx-focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--wx-r-sm);
+}
+
+/* 尊重系统「减少动态效果」 */
+@media (prefers-reduced-motion: reduce) {
+  .wx-theme *,
+  .wx-theme *::before,
+  .wx-theme *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

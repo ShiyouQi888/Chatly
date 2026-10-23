@@ -121,12 +121,11 @@ export async function privacyOfMany(userIds) {
 
 /**
  * 某个渠道能不能加我。
- * 未知渠道（没传 source）一律**放行** —— 见文件头的说明：不声明渠道的入口
- * 不是「发现」，没有「被找到」的问题。
+ * 未知渠道不由此函数作放行决策；好友申请路由必须先验证 source 属于 CHANNEL_KEY。
  */
 export function canAddBy(privacy, channel) {
   const key = CHANNEL_KEY[channel]
-  if (!key) return { allowed: true, reason: null }
+  if (!key) return { allowed: false, reason: '添加来源无效' }
   if (privacy?.[key] === false) {
     return { allowed: false, reason: `对方关闭了「${CHANNEL_LABEL[channel]}」` }
   }

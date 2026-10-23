@@ -24,6 +24,7 @@ import fs from 'node:fs'
    凡是想「两种驱动都能跑」的自检，回库核对就必须走异步 q。 */
 import { q, ready as dbReady } from '../server/src/db.js'
 import { freePort, waitAppTarget, connectCdp, launchChrome, shoot } from './lib/cdp.mjs'
+import { ensureLoggedIn } from './lib/session.mjs'
 
 const API = 'http://127.0.0.1:3002/api/v1'
 const APP_HOST = 'http://127.0.0.1:5198'
@@ -64,7 +65,11 @@ const wsMod = await import('../server/node_modules/ws/index.js')
 const WebSocket = wsMod.WebSocket || wsMod.default
 const sockets = []
 async function openWs(token) {
-  const ws = new WebSocket(`ws://127.0.0.1:3002/ws?token=${encodeURIComponent(token)}`)
+  /* WS 鉴权已改成一次性 ticket（POST /auth/ws-ticket），不再吃 JWT。 */
+  const t = await req('/auth/ws-ticket', { method: 'POST', token })
+  const ticket = t.data?.ticket
+  if (!ticket) throw new Error('获取 WS ticket 失败：' + JSON.stringify(t.data).slice(0, 120))
+  const ws = new WebSocket(`ws://127.0.0.1:3002/ws?ticket=${encodeURIComponent(ticket)}`)
   await new Promise((res, rej) => {
     ws.on('open', res)
     ws.on('error', rej)
@@ -102,6 +107,7 @@ for (const k of KEYS) {
   original[k] = row ? JSON.parse(row.value) : true
 }
 const followBaseline = !!(await q.get('SELECT 1 FROM follows WHERE follower_id = ? AND followee_id = ?', AID, BID))
+const followBackBaseline = !!(await q.get('SELECT 1 FROM follows WHERE follower_id = ? AND followee_id = ?', BID, AID))
 
 const setFlag = (token, key, value) =>
   req(`/settings/${key}`, { method: 'PUT', token, body: { value } })
@@ -113,11 +119,13 @@ async function restore() {
     const r = await setFlag(B.token, k, original[k])
     if (r.status === 200) restored++
   }
-  if (followBaseline) {
-    await req(`/users/${BID}/follow`, { method: 'POST', token: A.token })
-  } else {
-    await req(`/users/${BID}/follow`, { method: 'DELETE', token: A.token })
+  /* 直接还原双向关注：好友 = 互关，且 POST /follow 现在只建申请、不会补 follows。 */
+  const setFollow = async (follower, followee, on) => {
+    if (on) await q.run('INSERT OR IGNORE INTO follows (follower_id, followee_id) VALUES (?, ?)', follower, followee)
+    else await q.run('DELETE FROM follows WHERE follower_id = ? AND followee_id = ?', follower, followee)
   }
+  await setFollow(AID, BID, followBaseline)
+  await setFollow(BID, AID, followBackBaseline)
   return restored
 }
 
@@ -125,11 +133,15 @@ const searchAs = async (token, keyword) => (await req(`/users/search?q=${encodeU
 const namesIn = (d) => (d.users || []).map((u) => u.username)
 const lookupAs = async (token, username, from) =>
   req(`/users/by-username/${encodeURIComponent(username)}${from ? `?from=${from}` : ''}`, { token })
+/* 关注/加好友现在是「好友申请」模型：POST 只创建 pending 申请，不直接写 follows。
+   互关才等于好友（消息闸就是这么判的）。断言据此检查 pending 申请行。 */
 const followAs = async (token, id, source) =>
-  req(`/users/${id}/follow`, { method: 'POST', token, body: source ? { source } : {} })
-const unfollowAs = (token, id) => req(`/users/${id}/follow`, { method: 'DELETE', token })
+  req(`/users/${id}/friend-request`, { method: 'POST', token, body: source ? { source } : {} })
+const unfollowAs = async () => {
+  await q.run("DELETE FROM friend_requests WHERE requester_id = ? AND recipient_id = ? AND status = 'pending'", AID, BID)
+}
 const followRowExists = async () =>
-  !!(await q.get('SELECT 1 FROM follows WHERE follower_id = ? AND followee_id = ?', AID, BID))
+  !!(await q.get("SELECT 1 FROM friend_requests WHERE requester_id = ? AND recipient_id = ? AND status = 'pending'", AID, BID))
 
 console.log(`\n施动者 chenmo(#${AID}) · 被保护者 linxiaoxia(#${BID}) · 对照 ajie(#${CID})`)
 console.log(`手机号：B=${B_PHONE} C=${C_PHONE}\n`)
@@ -153,10 +165,14 @@ try {
   ok(m1.status === 200 && m1.data.addable?.allowed === true, '手输 ID 路径：可以加', JSON.stringify(m1.data.addable))
 
   const f0 = await followAs(A.token, BID, 'search')
-  ok(f0.status === 200, '带 source=search 关注成功', `status=${f0.status}`)
-  ok((await followRowExists()), '★ 回库确认 follows 里真的多了一行（不是只回了 200）')
+  ok(f0.status === 200, '带 source=search 的加好友返回 200', `status=${f0.status}`)
+  if (f0.data.friendStatus === 'friends') {
+    ok(true, '（A/B 已是好友 → 按设计直接返回 friends，不新建 pending 申请）')
+  } else {
+    ok((await followRowExists()), '★ 回库确认 friend_requests 里真的多了 pending 申请')
+  }
   await unfollowAs(A.token, BID)
-  ok(!(await followRowExists()), '取消关注后那一行真的删掉了')
+  ok(!(await followRowExists()), '取消申请后没有遗留 pending 行')
 
   /* ================= ② add_friend_by_search ================= */
   console.log('\n─── ② 关掉「通过搜索添加」───')
@@ -170,13 +186,13 @@ try {
 
   const f1 = await followAs(A.token, BID, 'search')
   ok(f1.status === 403 && f1.data.code === 'privacy_blocked', '带 source=search 关注 → 403 且标明 privacy_blocked', `${f1.status} ${JSON.stringify(f1.data)}`)
-  ok(!(await followRowExists()), '★ 403 之后回库确认：follows 里没有偷偷写进去')
+  ok(!(await followRowExists()), '★ 403 之后回库确认：friend_requests 里没有偷偷写进去')
   ok(!!f1.data.error && /搜索/.test(f1.data.error), '报错文案写清了是哪个开关', f1.data.error)
 
   const f2 = await followAs(A.token, BID)
-  ok(f2.status === 200, '★ 不带 source 的关注不受影响（拦的是渠道，不是这个人）', `status=${f2.status}`)
-  await unfollowAs(A.token, BID)
-  ok(!(await followRowExists()), '（收尾）那条不带 source 的关注也撤掉了')
+  ok(f2.status === 200, '★ 不带 source 的加好友不受影响（拦的是渠道，不是这个人）', `status=${f2.status}`)
+  await unfollowAs()
+  ok(!(await followRowExists()), '（收尾）那条不带 source 的 pending 申请也撤掉了')
 
   const m2 = await lookupAs(A.token, 'linxiaoxia', 'search')
   ok(m2.status === 200 && m2.data.addable?.allowed === false, '手输 ID 仍能看到是谁，但 addable=false', JSON.stringify(m2.data.addable))
@@ -194,13 +210,13 @@ try {
   ok(/二维码/.test(q3.data.addable?.reason || ''), '原因指向「通过二维码添加」', q3.data.addable?.reason)
   const f3 = await followAs(A.token, BID, 'qr')
   ok(f3.status === 403 && f3.data.code === 'privacy_blocked', '带 source=qr 关注 → 403', `${f3.status}`)
-  ok(!(await followRowExists()), '回库确认没有写入')
+  ok(!(await followRowExists()), '回库确认没有写入 pending 申请')
 
   const plain = await lookupAs(A.token, 'linxiaoxia', null)
   ok(plain.data.addable?.allowed === true, '对照：不带 from 的纯资料查看不设闸', JSON.stringify(plain.data.addable))
   const f4 = await followAs(A.token, BID, 'group')
-  ok(f4.status === 200, '对照：未知渠道（群里点关注）不设闸', `status=${f4.status}`)
-  await unfollowAs(A.token, BID)
+  ok(f4.status === 400 && f4.data.code === 'invalid_source', '未知渠道被拒（invalid_source，不写申请）', `status=${f4.status}`)
+  await unfollowAs()
 
   /* ================= ④ add_friend_by_phone ================= */
   console.log('\n─── ④ 关掉「通过手机号添加」───')
@@ -264,12 +280,9 @@ try {
   /* ================= ⑦ 浏览器：搜索面板「找人」 ================= */
   console.log('\n─── ⑦ 界面：搜索面板「找人」 ───')
   const port = await freePort()
-  const profileDir = 'D:/BS-chat-os/.tmp/chrome-privacy'
-  try {
-    fs.rmSync(profileDir, { recursive: true, force: true })
-  } catch (e) {
-    console.log(`（临时 profile 未能清空，继续复用：${String(e.message).slice(0, 60)}）`)
-  }
+  /* 每次用全新 profile：旧 profile 在 Windows 沙箱里删不掉（safe-delete 拦截），
+     复用又可能带着上轮的坏缓存 / 登录态，导致页面挂不上。 */
+  const profileDir = `D:/BS-chat-os/.tmp/chrome-privacy-${Date.now()}`
   fs.mkdirSync(profileDir, { recursive: true })
   const proc = launchChrome({ url: APP, port, profileDir })
   const issues = []
@@ -301,11 +314,14 @@ try {
       return false
     }
 
-    ok(await waitFor(`!!document.querySelector('.lg-demo-list button') || !!document.querySelector('.tabbar')`), '应用挂载')
-    if (await js(`!!document.querySelector('.lg-demo-list button')`)) {
-      await js(`[...document.querySelectorAll('.lg-demo-list button')].find(x=>x.textContent.includes('陈墨'))?.click()`)
+    /* ensureLoggedIn 自己会等应用挂载/登录页（最多 30s），
+       这里不要再设一个更短的超时（12s 在冷启动 profile 上会误报「应用挂载」失败）。 */
+    try {
+      await ensureLoggedIn(js)
+      ok(!!(await js(`!!document.querySelector('.tabbar')`)), '应用挂载并进入主界面')
+    } catch (e) {
+      ok(false, '应用挂载并进入主界面', e.message)
     }
-    ok(await waitFor(`!!document.querySelector('.tabbar')`, 10000), '登录后进入主界面')
 
     /* 打开搜索面板 */
     await js(`document.querySelector('[aria-label="搜索"]')?.click() || document.querySelector('.chat-search')?.click()`)
@@ -381,6 +397,14 @@ try {
       await sleep(1200)
     }
 
+    /* 好友关系会直接显示「已添加」，看不到「无法加为好友」。
+       这里临时解绑 A/B，测完由 finally 的 restore() 按基线补回双向关注。 */
+    await q.run(
+      'DELETE FROM follows WHERE (follower_id = ? AND followee_id = ?) OR (follower_id = ? AND followee_id = ?)',
+      AID, BID, BID, AID
+    )
+    await sleep(200)
+
     await lookup('linxiaoxia')
     ok(await waitFor(`!!document.querySelector('[data-testid="scan-follow-blocked"]')`, 8000), '★ 对方关掉搜索添加 → 「加好友」变成禁用的「无法加为好友」')
     ok(await js(`!!document.querySelector('[data-testid="scan-follow-reason"]')`), '并把原因写在页面上（不是静默失效）')
@@ -428,7 +452,9 @@ try {
     if (now !== original[k]) bad.push(`${k}: ${original[k]} -> ${now}`)
   }
   ok(bad.length === 0, `收尾：B 的隐私设置已还原（${n}/4 项）`, bad.join('; '))
-  ok((await followRowExists()) === followBaseline, '收尾：A→B 的关注关系回到基线', `${followBaseline} vs ${(await followRowExists())}`)
+  const aToB = !!(await q.get('SELECT 1 FROM follows WHERE follower_id = ? AND followee_id = ?', AID, BID))
+  const bToA = !!(await q.get('SELECT 1 FROM follows WHERE follower_id = ? AND followee_id = ?', BID, AID))
+  ok(aToB === followBaseline && bToA === followBackBaseline, '收尾：双向关注关系回到基线', `A→B ${followBaseline}->${aToB} / B→A ${followBackBaseline}->${bToA}`)
   closeWs()
 }
 

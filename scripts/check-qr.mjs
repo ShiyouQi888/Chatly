@@ -28,6 +28,7 @@ import { freePort, waitAppTarget, connectCdp, launchChrome, shoot } from './lib/
 import { purgeDebris } from './lib/debris.mjs'
 import { encodeQr, decodeQrImageData } from '../src/lib/qr.js'
 import { encodePng, decodePng, qrModulesToRgba } from './lib/png.mjs'
+import { ensureLoggedIn } from './lib/session.mjs'
 
 const API = 'http://127.0.0.1:3002/api/v1'
 const APP_HOST = 'http://127.0.0.1:5198'
@@ -199,7 +200,7 @@ window.__btn = (text) => { const b=[...document.querySelectorAll('.scan-btn,.sca
 const injectHelp = () => js(HELP)
 
 const up = await waitFor(
-  `document.readyState !== 'loading' && (!!document.querySelector('.lg-demo-list button') || !!document.querySelector('.tabbar'))`,
+  `document.readyState !== 'loading' && (!!document.querySelector('.lg-card, .login') || !!document.querySelector('.tabbar'))`,
   30000
 )
 if (!up) throw new Error('应用没挂载')
@@ -259,10 +260,7 @@ const decodeRegion = async (sel, { retries = 2 } = {}) => {
 const ctx = { async close() { cdp.close(); proc.kill() } }
 
 /* ================= 上号 ================= */
-if (await js(`!!document.querySelector('.lg-demo-list button')`)) {
-  await js(`(() => { const b=[...document.querySelectorAll('.lg-demo-list button')].find(x=>x.textContent.includes('陈墨')); if(b) b.click(); return !!b })()`)
-  await waitFor(`!!document.querySelector('.tabbar')`, 15000)
-}
+await ensureLoggedIn(js)
 await sleep(700)
 await injectHelp()
 
@@ -575,9 +573,9 @@ console.log('\n─── G. 无摄像头环境（不带合成设备再起一次�
   await cdp2.send('Page.enable')
   await cdp2.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true })
 
-  await wait2(`!!document.querySelector('.lg-demo-list button') || !!document.querySelector('.tabbar')`, 30000)
-  if (await js2(`!!document.querySelector('.lg-demo-list button')`)) {
-    await js2(`(() => { const b=[...document.querySelectorAll('.lg-demo-list button')].find(x=>x.textContent.includes('陈墨')); if(b) b.click(); return !!b })()`)
+  await wait2(`!!document.querySelector('.lg-card, .login') || !!document.querySelector('.tabbar')`, 30000)
+  if (await js2(`!!document.querySelector('.lg-card, .login')`)) {
+    await ensureLoggedIn(js2)
     await wait2(`!!document.querySelector('.tabbar')`, 15000)
   }
   await sleep(600)

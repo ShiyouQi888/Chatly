@@ -143,7 +143,7 @@ function FileCard({ m, mine }) {
   )
 }
 
-function UploadProgress({ message }) {
+function UploadProgress({ message, onRetry }) {
   if (!message.uploading && !message.uploadFailed) return null
   const progress = Math.max(0, Math.min(100, Number(message.uploadProgress) || 0))
   const label = message.uploadFailed ? '上传失败' : message.uploadStage || '准备上传'
@@ -151,7 +151,9 @@ function UploadProgress({ message }) {
     <div className={`msg-upload-progress ${message.uploadFailed ? 'is-failed' : ''}`}>
       <div className="msg-upload-label">
         <span>{label}</span>
-        {!message.uploadFailed && <span>{progress}%</span>}
+        {message.uploadFailed ? (
+          message.uploadFile && <button type="button" className="msg-upload-retry" onClick={() => onRetry?.(message)}>重试</button>
+        ) : <span>{progress}%</span>}
       </div>
       <div
         className="msg-upload-track"
@@ -373,7 +375,7 @@ function ReadPopover({ msgId, style, peersWithState, onClose }) {
 }
 
 /* ===== 单条消息 ===== */
-function Message({ m, chat, me, peersWithState, readPopMsgId, onLongPress, onOpenImage, onOpenLoc, onOpenRead, polls, onVotePoll, onClosePoll, onOpenPollDetail, onJumpToMessage, flash, favorited, multi, onMultiToggle }) {
+function Message({ m, chat, me, peersWithState, readPopMsgId, onLongPress, onOpenImage, onOpenLoc, onOpenRead, polls, onVotePoll, onClosePoll, onOpenPollDetail, onJumpToMessage, onRetryUpload, flash, favorited, multi, onMultiToggle }) {
   /* ⚠️ mine / canRevoke 必须在 useLongPress **之前**算出来：
      长按回调闭包会引用 canRevoke，而 `const` 声明在 hook 之后的话，
      第一次渲染求值回调时就落在 TDZ 里（`Cannot access 'canRevoke' before initialization`）
@@ -491,7 +493,7 @@ function Message({ m, chat, me, peersWithState, readPopMsgId, onLongPress, onOpe
             缺的时候气泡里会写清「只发了地点名」，不画地图。 */}
         {m.kind === 'location' && <LocationBubble m={m} onOpen={onOpenLoc} />}
 
-        <UploadProgress message={m} />
+        <UploadProgress message={m} onRetry={onRetryUpload} />
 
         {/* 投票消息：详情不在消息体里（服务端只给 pollId），由 store 按 id 批量补拉。
             还没拉到就先画骨架 —— **不能画「0 票」**，那是在撒谎。 */}
@@ -682,8 +684,11 @@ const Composer = forwardRef(function Composer(
   const [text, setText] = useState('')
   const [focus, setFocus] = useState(false)
   const [voiceMode, setVoiceMode] = useState(false)
+  const [voiceCanceling, setVoiceCanceling] = useState(false)
   const { showToast } = useApp()
   const taRef = useRef(null)
+  const voicePointerStartY = useRef(null)
+  const voiceCancelRef = useRef(false)
 
   const submit = () => {
     const t = text.trim()
@@ -791,17 +796,40 @@ const Composer = forwardRef(function Composer(
         {voiceMode ? (
           <button
             type="button"
-            className={`cp-hold-talk ${recording ? 'is-recording' : ''}`}
+            className={`cp-hold-talk ${recording ? 'is-recording' : ''} ${voiceCanceling ? 'is-canceling' : ''}`}
             disabled={disabled}
             aria-label={recording ? '松开发送语音' : '按住说话'}
             onPointerDown={(event) => {
               if (disabled) return
               event.preventDefault()
+              voicePointerStartY.current = event.clientY
+              voiceCancelRef.current = false
+              setVoiceCanceling(false)
               try { event.currentTarget.setPointerCapture(event.pointerId) } catch {}
               onVoiceStart()
             }}
-            onPointerUp={() => onVoiceStop(false)}
-            onPointerCancel={() => onVoiceStop(true)}
+            onPointerMove={(event) => {
+              if (voicePointerStartY.current == null || voiceCancelRef.current) return
+              if (voicePointerStartY.current - event.clientY > 72) {
+                voiceCancelRef.current = true
+                setVoiceCanceling(true)
+              } else {
+                voiceCancelRef.current = false
+                setVoiceCanceling(false)
+              }
+            }}
+            onPointerUp={() => {
+              onVoiceStop(voiceCancelRef.current)
+              voicePointerStartY.current = null
+              voiceCancelRef.current = false
+              setVoiceCanceling(false)
+            }}
+            onPointerCancel={() => {
+              onVoiceStop(true)
+              voicePointerStartY.current = null
+              voiceCancelRef.current = false
+              setVoiceCanceling(false)
+            }}
             onContextMenu={(event) => event.preventDefault()}
             onKeyDown={(event) => {
               if ((event.key === ' ' || event.key === 'Enter') && !event.repeat) {
@@ -817,7 +845,7 @@ const Composer = forwardRef(function Composer(
             }}
             onBlur={() => { if (recording) onVoiceStop(false) }}
           >
-            {recording ? '松开发送' : '按住说话'}
+            {recording ? (voiceCanceling ? '松开取消' : '上滑取消 · 松开发送') : '按住说话'}
           </button>
         ) : (
           <textarea
@@ -954,6 +982,7 @@ export default function ChatRoom({ chat, onBack, jumpTo, onJumped }) {
     closeConversation,
     sendMessage,
     sendAttachment,
+    retryAttachment,
     revokeMessage,
     notifyTyping,
     messagesOf,
@@ -1462,6 +1491,8 @@ export default function ChatRoom({ chat, onBack, jumpTo, onJumped }) {
     }
   }
 
+  const voiceStartedAtRef = useRef(0)
+
   const stopVoiceStream = () => {
     clearTimeout(voiceTimeoutRef.current)
     voiceTimeoutRef.current = null
@@ -1489,7 +1520,12 @@ export default function ChatRoom({ chat, onBack, jumpTo, onJumped }) {
       }
       const candidates = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus']
       const mimeType = candidates.find((type) => MediaRecorder.isTypeSupported?.(type))
-      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
+      let recorder
+      try {
+        recorder = new MediaRecorder(stream, { ...(mimeType ? { mimeType } : {}), audioBitsPerSecond: 32_000 })
+      } catch {
+        recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
+      }
       voiceStreamRef.current = stream
       voiceRecorderRef.current = recorder
       voiceChunksRef.current = []
@@ -1499,11 +1535,13 @@ export default function ChatRoom({ chat, onBack, jumpTo, onJumped }) {
       recorder.onerror = () => {
         showToast('录音失败，请检查麦克风权限')
         voiceCanceledRef.current = true
+        if (recorder.state !== 'inactive') recorder.stop()
         stopVoiceStream()
       }
       recorder.onstop = async () => {
         const blob = new Blob(voiceChunksRef.current, { type: recorder.mimeType || 'audio/webm' })
-        const extension = blob.type.includes('mp4') ? 'm4a' : blob.type.includes('ogg') ? 'ogg' : 'webm'
+        const durationMs = Math.round(performance.now() - voiceStartedAtRef.current)
+        const extension = blob.type.includes('mp4') ? 'm4a' : blob.type.includes('ogg') ? 'ogg' : blob.type.includes('mpeg') ? 'mp3' : 'webm'
         const canceled = voiceCanceledRef.current
         stopVoiceStream()
         voiceCanceledRef.current = false
@@ -1512,8 +1550,12 @@ export default function ChatRoom({ chat, onBack, jumpTo, onJumped }) {
           showToast('没有录到声音')
           return
         }
-        if (blob.size > 20 * 1024 * 1024) {
-          showToast('语音消息超过 20MB，请缩短后重试')
+        if (durationMs < 300) {
+          showToast('语音至少需要录制 0.3 秒')
+          return
+        }
+        if (blob.size > 10 * 1024 * 1024) {
+          showToast('语音消息超过 10MB，请缩短后重试')
           return
         }
         const file = new File([blob], `voice-note-${Date.now()}.${extension}`, { type: blob.type })
@@ -1522,18 +1564,21 @@ export default function ChatRoom({ chat, onBack, jumpTo, onJumped }) {
             conversationId: chat.id,
             kind: 'file',
             file,
+            voice: true,
+            audioDurationMs: Math.min(60_000, durationMs),
           })
         } catch (error) {
           showToast(error.message || '语音发送失败')
         }
       }
       recorder.start(250)
+      voiceStartedAtRef.current = performance.now()
       setRecording(true)
       voiceTimeoutRef.current = setTimeout(() => {
         voiceHoldActiveRef.current = false
         if (recorder.state === 'recording') recorder.stop()
-        showToast('语音录制达到 2 分钟上限，正在发送')
-      }, 120_000)
+        showToast('语音录制达到 60 秒上限，正在发送')
+      }, 60_000)
     } catch (error) {
       voiceHoldActiveRef.current = false
       stopVoiceStream()
@@ -1722,6 +1767,15 @@ export default function ChatRoom({ chat, onBack, jumpTo, onJumped }) {
               onClosePoll={onClosePoll}
               onOpenPollDetail={(pollId) => setPollView(pollId)}
               onJumpToMessage={jumpToMessage}
+              onRetryUpload={async (message) => {
+                try {
+                  const retry = retryAttachment(message)
+                  showToast('已重新开始上传')
+                  await retry
+                } catch (error) {
+                  showToast(error.message || '重试失败')
+                }
+              }}
               /* 用 Number 比较：消息 id 是数字，但从 URL / dataset 拿到的可能是字符串，
                  严格相等一旦不成立，高亮就会**静默**不生效（本轮自检就是这么红的）。 */
               flash={Number(flashId) === Number(it.m.id)}

@@ -1,7 +1,7 @@
 /**
  * WebSocket 网关：鉴权、在线状态、消息实时投递
  *
- * 连接：ws://host/ws?token=<jwt>
+ * 连接：先通过已认证 REST 获取一次性票据，再连接 ws://host/ws?ticket=<opaque-ticket>
  * 下行事件：{ type, payload }
  *   hello          — 连接就绪
  *   message.new    — 新消息
@@ -24,8 +24,8 @@
  * 对一个主打隐私的 App 来说这是白送的泄露。现在收窄到 `peersOf(userId)`。
  */
 import { WebSocketServer } from 'ws'
+import crypto from 'node:crypto'
 import { q } from './db.js'
-import { verifyToken } from './auth.js'
 import { memberIds } from './chat.js'
 import { peersOf } from './profile.js'
 import { privacyOf, onlineVisible } from './privacy.js'
@@ -33,6 +33,41 @@ import { markLocalPresence, publishTo, onRemoteEvent, remotePresent, isEnabled a
 
 /** userId -> Set<WebSocket> */
 const online = new Map()
+let ticketSchemaReady
+
+async function ensureWsTicketSchema() {
+  if (!ticketSchemaReady) {
+    ticketSchemaReady = q.run(`CREATE TABLE IF NOT EXISTS ws_auth_tickets (
+      ticket_hash TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      session_id TEXT NOT NULL,
+      expires_at BIGINT NOT NULL
+    )`)
+  }
+  return ticketSchemaReady
+}
+
+/** Issue a short-lived, single-use credential so the long-lived JWT never enters a URL. */
+export async function issueWsTicket(userId, sessionId) {
+  await ensureWsTicketSchema()
+  const ticket = crypto.randomBytes(32).toString('base64url')
+  const ticketHash = crypto.createHash('sha256').update(ticket).digest('hex')
+  const now = Date.now()
+  await q.run('DELETE FROM ws_auth_tickets WHERE expires_at <= ?', now)
+  await q.run('INSERT INTO ws_auth_tickets (ticket_hash, user_id, session_id, expires_at) VALUES (?, ?, ?, ?)', ticketHash, userId, sessionId, now + 60_000)
+  return ticket
+}
+
+async function consumeWsTicket(ticket) {
+  if (!ticket || typeof ticket !== 'string' || ticket.length > 128) return null
+  await ensureWsTicketSchema()
+  const ticketHash = crypto.createHash('sha256').update(ticket).digest('hex')
+  return q.get(
+    'DELETE FROM ws_auth_tickets WHERE ticket_hash = ? AND expires_at > ? RETURNING user_id AS userId, session_id AS sessionId',
+    ticketHash,
+    Date.now()
+  )
+}
 
 export function attachWs(server) {
   const wss = new WebSocketServer({ server, path: '/ws' })
@@ -80,18 +115,18 @@ export function attachWs(server) {
 
 async function acceptSocket(ws, req) {
     const url = new URL(req.url, 'http://localhost')
-    const payload = verifyToken(url.searchParams.get('token') || '')
-    const session = payload?.sid
-      ? await q.get('SELECT id FROM user_devices WHERE session_id = ? AND user_id = ?', payload.sid, payload.sub)
+    const ticket = await consumeWsTicket(url.searchParams.get('ticket') || '')
+    const session = ticket
+      ? await q.get('SELECT id FROM user_devices WHERE session_id = ? AND user_id = ?', ticket.sessionId, ticket.userId)
       : null
-    if (!payload || !session) {
-      ws.send(JSON.stringify({ type: 'error', payload: { message: 'token 无效' } }))
+    if (!ticket || !session) {
+      ws.send(JSON.stringify({ type: 'error', payload: { message: '连接凭证无效或已过期' } }))
       ws.close(4001, 'unauthorized')
       return
     }
     if (ws.readyState !== 1) return
 
-    const userId = Number(payload.sub)
+    const userId = Number(ticket.userId)
     ws.userId = userId
     ws.deviceId = session.id
     ws.isAlive = true

@@ -3,11 +3,11 @@
   position: absolute;
   inset: 0;
   /* 层级：房间 80 < 弹层 120 < 群设置 130 < 资料页 140 < 头像选择器 150 */
-  z-index: 130;
+  z-index: var(--z-modal);
   display: flex;
   flex-direction: column;
   background: var(--bg);
-  animation: gsIn 0.24s var(--ease) both;
+  animation: gsIn var(--dur) var(--ease) both;
 }
 
 @keyframes gsIn {
@@ -21,8 +21,8 @@
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: calc(var(--safe-top) + 8px) 14px 8px;
+  gap: var(--space-3);
+  padding: calc(var(--safe-top) + var(--space-3)) var(--space-4) var(--space-3);
 }
 
 .gs-head h2 {
@@ -55,39 +55,39 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 4px 16px 20px;
+  padding: var(--space-2) var(--space-5) var(--space-6);
 }
 
 .gs-card {
   background: var(--surface);
   border-radius: var(--r-md);
-  padding: 14px;
-  margin-bottom: 12px;
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
   box-shadow: 0 1px 2px rgba(22, 22, 31, 0.04);
 }
 
 .gs-card-title {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-2);
   font-size: var(--fs-cap);
   font-weight: 600;
   color: var(--text-3);
-  margin-bottom: 11px;
+  margin-bottom: var(--space-4);
 }
 
 .gs-count {
   font-style: normal;
   font-size: var(--fs-micro);
   font-weight: 600;
-  padding: 1px 7px;
+  padding: 0 var(--space-3);
   border-radius: var(--r-full);
   color: var(--brand-2);
   background: var(--brand-soft);
 }
 
 .gs-foot {
-  margin: 14px 0 0;
+  margin: var(--space-4) 0 0;
   text-align: center;
   font-size: var(--fs-micro);
   color: var(--text-4);
@@ -95,7 +95,7 @@
 
 /* ===== 群名片 ===== */
 .gs-card.is-hero {
-  padding: 20px 14px 16px;
+  padding: var(--space-6) var(--space-4) var(--space-5);
   text-align: center;
 }
 
@@ -129,11 +129,11 @@
 }
 
 .gs-title-row {
-  margin-top: 11px;
+  margin-top: var(--space-4);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: var(--space-2);
 }
 
 .gs-name {
@@ -158,19 +158,19 @@
 }
 
 .gs-sub {
-  margin-top: 6px;
+  margin-top: var(--space-2);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-2);
   font-size: var(--fs-cap);
   color: var(--text-3);
 }
 
 .gs-sub i {
   font-style: normal;
-  padding: 1px 8px;
+  padding: 0 var(--space-3);
   border-radius: var(--r-full);
   background: var(--surface-2);
 }
@@ -189,15 +189,15 @@
 }
 
 .gs-ann-time {
-  margin-top: 7px;
+  margin-top: var(--space-3);
   font-size: var(--fs-micro);
   color: var(--text-4);
 }
 
 .gs-ann-acts {
-  margin-top: 10px;
+  margin-top: var(--space-3);
   display: flex;
-  gap: 16px;
+  gap: var(--space-5);
 }
 
 .gs-link {
@@ -215,14 +215,14 @@
 .gs-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 12px 6px;
+  gap: var(--space-4) var(--space-2);
 }
 
 .gs-member {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-2);
   min-width: 0;
 }
 
@@ -242,14 +242,14 @@
 .gs-roles {
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: var(--space-1);
 }
 
 .gs-role {
   font-style: normal;
   font-size: 10px;
   line-height: 1.5;
-  padding: 0 5px;
+  padding: 0 var(--space-2);
   border-radius: var(--r-full);
   color: var(--brand-2);
   background: var(--brand-soft);
@@ -265,7 +265,7 @@
   height: 46px;
   display: grid;
   place-items: center;
-  border-radius: 15px;
+  border-radius: var(--r-md);
   color: var(--text-3);
   background: var(--surface-2);
   border: 1px dashed var(--line-2);
@@ -285,9 +285,9 @@
 .gs-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
   width: 100%;
-  padding: 9px 0;
+  padding: var(--space-3) 0;
   border-top: 1px solid var(--line);
   text-align: left;
 }
@@ -303,7 +303,7 @@
   flex: 0 0 auto;
   display: grid;
   place-items: center;
-  border-radius: 10px;
+  border-radius: var(--r-xs);
   color: var(--brand-2);
   background: var(--brand-soft);
 }
@@ -328,7 +328,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
 }
 
 .gs-row-body b {
@@ -364,7 +364,7 @@
 
 .gs-ann-push {
   flex: 0 0 auto;
-  padding: 8px 10px;
+  padding: var(--space-3) var(--space-3);
   border-radius: var(--r-full);
   background: var(--brand-soft);
   color: var(--brand-2);
@@ -387,7 +387,7 @@
 }
 
 .gs-row.is-poll .gs-row-right {
-  gap: 2px;
+  gap: var(--space-1);
   font-size: var(--fs-micro);
   color: var(--brand-2);
   font-weight: 600;
@@ -414,19 +414,19 @@
 .gfiles-page {
   position: absolute;
   inset: 0;
-  z-index: 5;
+  z-index: var(--z-sticky);
   display: flex;
   flex-direction: column;
   background: var(--bg);
-  animation: gsIn 0.2s var(--ease) both;
+  animation: gsIn var(--dur) var(--ease) both;
 }
 
 .gfiles-head {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
   flex: 0 0 auto;
-  padding: calc(var(--safe-top) + 8px) 16px 12px;
+  padding: calc(var(--safe-top) + var(--space-3)) var(--space-5) var(--space-4);
   border-bottom: 1px solid var(--line);
   background: var(--surface);
 }
@@ -451,7 +451,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
 }
 
 .gfiles-heading h2 {
@@ -483,9 +483,9 @@
 .gfiles-categories {
   display: flex;
   flex: 0 0 auto;
-  gap: 8px;
+  gap: var(--space-3);
   overflow-x: auto;
-  padding: 12px 16px;
+  padding: var(--space-4) var(--space-5);
   scrollbar-width: none;
 }
 
@@ -497,9 +497,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: var(--space-2);
   flex: 0 0 auto;
-  padding: 8px 12px;
+  padding: var(--space-3) var(--space-4);
   border-radius: var(--r-full);
   background: var(--surface);
   color: var(--text-3);
@@ -516,13 +516,13 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 4px 16px calc(24px + var(--safe-bottom));
+  padding: var(--space-2) var(--space-5) calc(var(--space-7) + var(--safe-bottom));
 }
 
 .gfiles-summary {
   display: flex;
   justify-content: space-between;
-  padding: 8px 2px 12px;
+  padding: var(--space-3) var(--space-1) var(--space-4);
   color: var(--text-4);
   font-size: var(--fs-micro);
 }
@@ -537,10 +537,10 @@
 .gfiles-item {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-4);
   width: 100%;
   min-width: 0;
-  padding: 12px;
+  padding: var(--space-4);
   border-bottom: 1px solid var(--line);
   text-align: left;
 }
@@ -570,7 +570,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-2);
 }
 
 .gfiles-file-meta b,
@@ -598,7 +598,7 @@
 }
 
 .gfiles-state {
-  padding: 28px 14px;
+  padding: var(--space-7) var(--space-4);
   color: var(--text-4);
   font-size: var(--fs-sub);
   text-align: center;
@@ -611,8 +611,8 @@
 .gfiles-state.is-error button,
 .gfiles-more {
   display: block;
-  margin: 12px auto 0;
-  padding: 9px 14px;
+  margin: var(--space-4) auto 0;
+  padding: var(--space-3) var(--space-4);
   border-radius: var(--r-full);
   background: var(--brand-soft);
   color: var(--brand-2);
@@ -623,7 +623,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-3);
+  /* 给固定头部留位，属结构偏移，不套 --space-*（最大刻度 48 会压到内容）。 */
   padding-top: 64px;
 }
 
@@ -638,7 +639,7 @@
 }
 
 .gfiles-more-state {
-  padding: 12px;
+  padding: var(--space-4);
   color: var(--text-4);
   text-align: center;
 }
@@ -648,7 +649,7 @@
   right: 16px;
   bottom: calc(18px + var(--safe-bottom));
   left: 16px;
-  padding: 12px;
+  padding: var(--space-4);
   border-radius: var(--r-md);
   background: var(--text-1);
   color: var(--surface);
@@ -659,7 +660,7 @@
 /* ===== 弹层里的表单 ===== */
 .gs-input {
   width: 100%;
-  padding: 11px 13px;
+  padding: var(--space-4) var(--space-4);
   border-radius: var(--r-sm);
   border: 1px solid var(--line-2);
   background: var(--surface-2);
@@ -681,7 +682,7 @@
 }
 
 .gs-hint {
-  margin-top: 8px;
+  margin-top: var(--space-3);
   font-size: var(--fs-micro);
   color: var(--text-4);
 }
@@ -693,7 +694,7 @@
 }
 
 .gs-loading {
-  padding: 18px 0;
+  padding: var(--space-5) 0;
   text-align: center;
   font-size: var(--fs-sub);
   color: var(--text-4);
@@ -701,7 +702,7 @@
 
 .gs-sheet-acts {
   display: flex;
-  gap: 10px;
+  gap: var(--space-3);
 }
 
 .gs-btn {
@@ -741,8 +742,8 @@
 .gs-pick-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 9px 6px;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-2);
   border-radius: var(--r-sm);
   text-align: left;
 }
@@ -756,7 +757,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 0;
 }
 
 .gs-pick-body b {

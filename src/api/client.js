@@ -13,6 +13,12 @@ export const tokenStore = {
   clear: () => localStorage.removeItem(TOKEN_KEY),
 }
 
+export const adminTokenStore = {
+  get: () => localStorage.getItem('chatly.admin.token'),
+  set: (token) => token ? localStorage.setItem('chatly.admin.token', token) : localStorage.removeItem('chatly.admin.token'),
+  clear: () => localStorage.removeItem('chatly.admin.token'),
+}
+
 /** Browser media tags cannot attach Authorization headers; pass the session token only for uploads. */
 export function mediaUrl(url) {
   const value = String(url || '')
@@ -24,7 +30,7 @@ export function mediaUrl(url) {
 
 async function request(path, { method = 'GET', body, raw = false } = {}) {
   const headers = {}
-  const token = tokenStore.get()
+  const token = path.startsWith('/admin/') ? adminTokenStore.get() : tokenStore.get()
   if (token) headers.Authorization = `Bearer ${token}`
   if (body && !raw) headers['Content-Type'] = 'application/json'
 
@@ -43,6 +49,10 @@ async function request(path, { method = 'GET', body, raw = false } = {}) {
   }
 
   if (!res.ok) {
+    if (path.startsWith('/admin/') && data.code === 'ADMIN_SESSION_EXPIRED') {
+      adminTokenStore.clear()
+      window.dispatchEvent(new Event('chatly:admin-session-expired'))
+    }
     const err = new Error(data.error || data.message || `请求失败 (${res.status})`)
     err.status = res.status
     err.code = data.code || null
@@ -92,6 +102,7 @@ export const api = {
   registerPhone: (payload) => request('/auth/register/phone', { method: 'POST', body: payload }),
   registerEmail: (payload) => request('/auth/register/email', { method: 'POST', body: payload }),
   me: () => request('/auth/me'),
+  wsTicket: () => request('/auth/ws-ticket', { method: 'POST' }),
   logout: () => request('/auth/logout', { method: 'POST' }),
 
   /* ---- 资料 ---- */
@@ -221,11 +232,16 @@ export const api = {
   closePoll: (pollId) => request(`/polls/${pollId}/close`, { method: 'POST' }),
 
   /* ---- 运营管理后台（权限均由服务端固定管理员身份与角色再次校验） ---- */
+  adminLogin: (credentials) => request('/admin/login', { method: 'POST', body: credentials }),
+  adminLogout: () => request('/admin/logout', { method: 'POST' }),
   adminOverview: () => request('/admin/overview'),
   adminAnalytics: (days = 7) => request(`/admin/analytics?days=${days}`),
   adminUsers: ({ q = '', status = '', page = 1, limit = 20 } = {}) =>
     request(`/admin/users?q=${encodeURIComponent(q)}&status=${encodeURIComponent(status)}&page=${page}&limit=${limit}`),
   adminUser: (id) => request(`/admin/users/${id}`),
+  adminPrivateConversations: ({ q = '', page = 1, limit = 20 } = {}) =>
+    request(`/admin/private-conversations?q=${encodeURIComponent(q)}&page=${page}&limit=${limit}`),
+  adminReadPrivateMessages: (id, options) => request(`/admin/private-conversations/${id}/messages/read`, { method: 'POST', body: options }),
   adminSetUserStatus: (id, banned, reason = '') =>
     request(`/admin/users/${id}/status`, { method: 'PATCH', body: { banned, reason } }),
   adminMoments: ({ q = '', page = 1, limit = 20 } = {}) =>
@@ -243,8 +259,9 @@ export const api = {
   adminAudit: ({ q = '', page = 1, limit = 50 } = {}) =>
     request(`/admin/audit?q=${encodeURIComponent(q)}&page=${page}&limit=${limit}`),
   adminStaff: () => request('/admin/staff'),
-  adminSetStaffRole: (userId, role) => request('/admin/staff', { method: 'POST', body: { userId, role } }),
-  adminRemoveStaff: (userId) => request(`/admin/staff/${userId}`, { method: 'DELETE' }),
+  adminCreateStaff: (credentials) => request('/admin/staff', { method: 'POST', body: credentials }),
+  adminSetStaffRole: (id, role) => request(`/admin/staff/${id}`, { method: 'PATCH', body: { role } }),
+  adminRemoveStaff: (id) => request(`/admin/staff/${id}`, { method: 'DELETE' }),
   adminUpdateCredentials: (credentials) => request('/admin/credentials', { method: 'POST', body: credentials }),
 
   /* ---- 消息收藏（PRD §9） ----
@@ -388,12 +405,14 @@ export const api = {
     ),
 
   /* ---- 上传 ---- */
-  upload: async (file, { onProgress, conversationId } = {}) => {
-    const image = await compressImage(file, 'chat')
-    const path = conversationId
-      ? `/messages/upload?conversationId=${encodeURIComponent(conversationId)}`
-      : '/messages/upload'
-    return uploadRequest(path, image, onProgress)
+  upload: async (file, { onProgress, conversationId, voice = false } = {}) => {
+    const payload = voice ? file : await compressImage(file, 'chat')
+    const query = new URLSearchParams()
+    if (conversationId) query.set('conversationId', String(conversationId))
+    if (voice) query.set('voice', '1')
+    const queryString = query.toString()
+    const suffix = queryString ? `?${queryString}` : ''
+    return uploadRequest(`/messages/upload${suffix}`, payload, onProgress)
   },
 
   /**
@@ -463,9 +482,9 @@ export const api = {
 }
 
 /** WebSocket 地址：沿用当前页面 origin，走 Vite 的 /ws 代理 */
-export function wsUrl(token) {
+export function wsUrl(ticket) {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${proto}//${location.host}/ws?token=${encodeURIComponent(token)}`
+  return `${proto}//${location.host}/ws?ticket=${encodeURIComponent(ticket)}`
 }
 
 /* ================= 时间格式化 ================= */

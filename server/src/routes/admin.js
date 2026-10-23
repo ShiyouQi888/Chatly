@@ -1,63 +1,57 @@
 /**
- * 运营后台 API。所有路由都要求登录，并再次校验服务端配置的管理员 ID。
- * 私聊消息正文不开放给后台，避免运营权限变成读取私人聊天的入口。
+ * 运营后台 API。独立管理员账号与会话认证，普通用户登录态不能访问。
+ * 私聊查阅使用独立权限并记录查阅原因与访问范围。
  */
 import { Router } from 'express'
-import { authRequired, hashPassword, verifyPassword, selfUser, USER_COLS } from '../auth.js'
-import { q, tx, info, DB_DRIVER } from '../db.js'
+import { hashPassword, verifyPassword } from '../auth.js'
+import { adminRequired, createAdminSession, publicAdmin } from '../admin-auth.js'
+import { authRateLimit } from '../auth-limit.js'
+import { q, insert, tx, info, DB_DRIVER } from '../db.js'
 import { status as redisStatus } from '../redis.js'
 import { removeUpload } from '../upload.js'
 import { revokeDeviceSockets } from '../ws.js'
+import { privateMessageRoutes } from './admin-private-messages.js'
 
 const r = Router()
-r.use(authRequired)
 
 const ROLE_PERMISSIONS = {
-  owner: ['overview', 'analytics', 'users.view', 'users.manage', 'content.moments', 'content.comments', 'support', 'audit', 'system', 'staff.manage'],
+  owner: ['overview', 'analytics', 'users.view', 'users.manage', 'content.moments', 'content.comments', 'messages.private.read', 'support', 'audit', 'system', 'staff.manage'],
   moderator: ['overview', 'analytics', 'content.moments', 'content.comments'],
   support: ['overview', 'analytics', 'users.view', 'users.manage', 'support'],
   analyst: ['overview', 'analytics', 'audit', 'system'],
 }
 const STAFF_ROLES = new Set(['moderator', 'support', 'analyst'])
 
-function configuredAdminAccount() {
-  /* One immutable root account comes from the server environment. The legacy plural
-     variable is read only as a migration fallback, and only its first value is used. */
-  return String(process.env.ADMIN_ACCOUNT || process.env.ADMIN_USER_ID || process.env.ADMIN_USER_IDS || '')
-    .split(',')[0]
-    .trim()
-    .toLowerCase()
-}
+const loginLimit = authRateLimit({
+  limit: 12, windowMs: 15 * 60 * 1000, countFailuresOnly: true,
+  key: (req) => `admin-login:${req.ip}:${String(req.body?.username || '').trim().toLowerCase()}`,
+})
 
-function isConfiguredAdmin(account, user) {
-  if (!account || !user) return false
-  return account === String(user.id) || account === String(user.username || '').trim().toLowerCase()
-}
+r.post('/login', loginLimit, async (req, res) => {
+  const username = String(req.body?.username || '').trim()
+  const password = String(req.body?.password || '')
+  if (!username || !password || username.length > 128 || password.length > 128) return res.status(400).json({ error: '请填写有效的后台账号和密码' })
+  if (!await q.get("SELECT id FROM admin_accounts WHERE role = 'owner'")) {
+    return res.status(503).json({ error: '后台管理员尚未配置，请设置 ADMIN_USERNAME 和 ADMIN_PASSWORD 并重建后端容器' })
+  }
+  const account = await q.get('SELECT * FROM admin_accounts WHERE lower(username) = lower(?)', username)
+  if (!account || !verifyPassword(password, account.password_hash)) return res.status(401).json({ error: '后台账号或密码错误' })
+  if (!Number(account.is_active)) return res.status(403).json({ error: '该后台账号已停用' })
+  const token = await createAdminSession(account.id)
+  await audit(publicAdmin(account), 'admin.login', 'admin_account', account.id)
+  res.json({ token, admin: publicAdmin(account) })
+})
 
-r.use(async (req, res, next) => {
-  const configuredRoot = await q.get(
-    `SELECT root.user_id, admin.username
-     FROM admin_root root JOIN users admin ON admin.id = root.user_id
-     WHERE root.singleton = 1`
-  )
-  const adminAccount = configuredAdminAccount()
-  const isOwner = configuredRoot
-    ? String(configuredRoot.user_id) === String(req.user.id)
-    : isConfiguredAdmin(adminAccount, req.user)
-  const staff = isOwner ? null : await q.get('SELECT role FROM admin_staff WHERE user_id = ?', req.user.id)
-  if (!configuredRoot && !adminAccount) {
-    return res.status(503).json({ error: '尚未初始化固定管理员，请在服务端配置 ADMIN_USERNAME 和 ADMIN_PASSWORD 后重启服务' })
-  }
-  if (!isOwner && !staff) {
-    const configuredUsername = configuredRoot?.username || adminAccount
-    const hint = configuredUsername
-      ? `请退出后使用固定管理员账号 @${configuredUsername} 登录。`
-      : '请检查服务端 ADMIN_USERNAME / ADMIN_PASSWORD 配置并重启后端。'
-    return res.status(403).json({ error: `当前账号 @${req.user.username}（ID ${req.user.id}）没有运营后台权限。${hint}` })
-  }
-  req.adminRole = isOwner ? 'owner' : staff.role
+r.use(adminRequired)
+r.use((req, _res, next) => {
+  req.adminRole = req.admin.role
   req.adminPermissions = ROLE_PERMISSIONS[req.adminRole] || []
   next()
+})
+
+r.post('/logout', async (req, res) => {
+  await q.run('DELETE FROM admin_sessions WHERE token_hash = ?', req.adminSessionHash)
+  res.json({ ok: true })
 })
 
 function requirePermission(permission) {
@@ -70,16 +64,11 @@ function requireOwner(req, res, next) {
   return req.adminRole === 'owner' ? next() : res.status(403).json({ error: '仅超级管理员可以管理后台成员' })
 }
 
-async function audit(adminId, action, targetType, targetId = null, detail = {}) {
+async function audit(admin, action, targetType, targetId = null, detail = {}) {
   await q.run(
-    `INSERT INTO admin_audit_logs (admin_id, action, target_type, target_id, detail, created_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    adminId,
-    action,
-    targetType,
-    targetId,
-    JSON.stringify(detail),
-    Date.now()
+    `INSERT INTO admin_operation_logs (admin_id, admin_username, admin_nickname, action, target_type, target_id, detail, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    admin.id, admin.username, admin.nickname, action, targetType, targetId, JSON.stringify(detail), Date.now()
   )
 }
 
@@ -94,6 +83,8 @@ function limitOf(value, fallback = 20) {
 function groupedRows(rows) {
   return Object.fromEntries(rows.map((row) => [row.day, Number(row.total) || 0]))
 }
+
+r.use('/private-conversations', requirePermission('messages.private.read'), privateMessageRoutes(audit))
 
 r.get('/overview', requirePermission('overview'), async (req, res) => {
   const now = Date.now()
@@ -121,7 +112,7 @@ r.get('/overview', requirePermission('overview'), async (req, res) => {
       feedback24h: Number(recentFeedback?.n) || 0,
     },
     service: { uptimeSeconds: Math.round(process.uptime()), database: dbHealth, redis: redisStatus() },
-    operator: { role: req.adminRole, permissions: req.adminPermissions, username: req.user.username },
+    operator: { ...req.admin, permissions: req.adminPermissions },
     generatedAt: now,
   })
 })
@@ -233,28 +224,22 @@ r.patch('/users/:id/status', requirePermission('users.manage'), async (req, res)
   if (!Number.isSafeInteger(id) || id <= 0 || typeof banned !== 'boolean') {
     return res.status(400).json({ error: '用户或状态参数无效' })
   }
-  if (id === Number(req.user.id) && banned) return res.status(400).json({ error: '不能停用当前管理员账号' })
   const target = await q.get('SELECT id, username FROM users WHERE id = ?', id)
   if (!target) return res.status(404).json({ error: '用户不存在' })
-  const root = await q.get('SELECT user_id FROM admin_root WHERE singleton = 1')
-  if (root && String(root.user_id) === String(target.id) || isConfiguredAdmin(configuredAdminAccount(), target)) {
-    return res.status(403).json({ error: '不能停用后台管理员账号' })
-  }
-  if (await q.get('SELECT user_id FROM admin_staff WHERE user_id = ?', id)) return res.status(403).json({ error: '不能停用后台运营成员账号，请先移除其后台角色' })
   const devices = banned ? await q.all('SELECT id FROM user_devices WHERE user_id = ?', id) : []
   const reason = String(req.body?.reason || '').trim().slice(0, 300)
   const now = Date.now()
   await tx(async () => {
     await q.run(
-      `UPDATE users SET is_banned = ?, ban_reason = ?, banned_at = ?, banned_by = ? WHERE id = ?`,
+      `UPDATE users SET is_banned = ?, ban_reason = ?, banned_at = ?, banned_by = NULL, banned_by_admin = ? WHERE id = ?`,
       banned ? 1 : 0,
       banned ? reason || '运营限制' : null,
       banned ? now : null,
-      banned ? req.user.id : null,
+      banned ? req.admin.id : null,
       id
     )
     if (banned) await q.run('DELETE FROM user_devices WHERE user_id = ?', id)
-    await audit(req.user.id, banned ? 'user.suspend' : 'user.restore', 'user', id, { reason: banned ? reason || '运营限制' : '' })
+    await audit(req.admin, banned ? 'user.suspend' : 'user.restore', 'user', id, { reason: banned ? reason || '运营限制' : '' })
   })
   for (const device of devices) revokeDeviceSockets(id, device.id)
   res.json({ ok: true, id, banned })
@@ -320,7 +305,7 @@ r.delete('/comments/:id', requirePermission('content.comments'), async (req, res
   const reason = String(req.body?.reason || '').trim().slice(0, 300) || '运营审核'
   await tx(async () => {
     await q.run('DELETE FROM moment_comments WHERE id = ?', id)
-    await audit(req.user.id, 'comment.remove', 'comment', id, { momentId: Number(comment.momentId), reason })
+    await audit(req.admin, 'comment.remove', 'comment', id, { momentId: Number(comment.momentId), reason })
   })
   res.json({ ok: true, id })
 })
@@ -334,7 +319,7 @@ r.delete('/moments/:id', requirePermission('content.moments'), async (req, res) 
   const reason = String(req.body?.reason || '').trim().slice(0, 300)
   await tx(async () => {
     await q.run('DELETE FROM moments WHERE id = ?', id)
-    await audit(req.user.id, 'moment.remove', 'moment', id, { reason: reason || '运营审核' })
+    await audit(req.admin, 'moment.remove', 'moment', id, { reason: reason || '运营审核' })
   })
   for (const item of media) removeUpload(item.url)
   res.json({ ok: true, id })
@@ -369,8 +354,8 @@ r.patch('/feedback/:id', requirePermission('support'), async (req, res) => {
   if (!target) return res.status(404).json({ error: '反馈不存在' })
   const handledAt = ['resolved', 'closed'].includes(status) ? Date.now() : null
   await tx(async () => {
-    await q.run('UPDATE feedbacks SET status = ?, handled_by = ?, handled_at = ? WHERE id = ?', status, req.user.id, handledAt, id)
-    await audit(req.user.id, 'feedback.status', 'feedback', id, { status })
+    await q.run('UPDATE feedbacks SET status = ?, handled_by = NULL, handled_by_admin = ?, handled_at = ? WHERE id = ?', status, req.admin.id, handledAt, id)
+    await audit(req.admin, 'feedback.status', 'feedback', id, { status })
   })
   res.json({ ok: true, id, status, handledAt })
 })
@@ -380,14 +365,14 @@ r.get('/audit', requirePermission('audit'), async (req, res) => {
   const limit = limitOf(req.query.limit, 50)
   const query = String(req.query.q || '').trim().slice(0, 80)
   const pattern = `%${query}%`
-  const where = query ? 'WHERE l.action LIKE ? OR l.target_type LIKE ? OR u.username LIKE ? OR u.nickname LIKE ?' : ''
+  const where = query ? 'WHERE l.action LIKE ? OR l.target_type LIKE ? OR l.admin_username LIKE ? OR l.admin_nickname LIKE ?' : ''
   const args = query ? [pattern, pattern, pattern, pattern] : []
-  const count = await q.get(`SELECT COUNT(*) AS n FROM admin_audit_logs l LEFT JOIN users u ON u.id = l.admin_id ${where}`, ...args)
+  const count = await q.get(`SELECT COUNT(*) AS n FROM admin_operation_logs l ${where}`, ...args)
   const rows = await q.all(
     `SELECT l.id, l.admin_id AS adminId, l.action, l.target_type AS targetType,
             l.target_id AS targetId, l.detail, l.created_at AS createdAt,
-            u.username AS adminUsername, u.nickname AS adminNickname
-     FROM admin_audit_logs l LEFT JOIN users u ON u.id = l.admin_id
+            l.admin_username AS adminUsername, l.admin_nickname AS adminNickname
+     FROM admin_operation_logs l
      ${where}
      ORDER BY l.id DESC LIMIT ? OFFSET ?`,
     ...args,
@@ -402,84 +387,85 @@ r.get('/audit', requirePermission('audit'), async (req, res) => {
 })
 
 r.get('/staff', requireOwner, async (_req, res) => {
-  const rows = await q.all(
-    `SELECT s.user_id AS userId, s.role, s.created_at AS createdAt,
-            u.username, u.nickname, u.avatar,
-            creator.username AS createdByUsername
-     FROM admin_staff s
-     JOIN users u ON u.id = s.user_id
-     LEFT JOIN users creator ON creator.id = s.created_by
-     ORDER BY s.created_at DESC`
-  )
-  res.json({ staff: rows.map((row) => ({ ...row, userId: Number(row.userId), createdAt: Number(row.createdAt) })) })
+  const rows = await q.all(`SELECT a.id, a.username, a.nickname, a.role, a.created_at AS createdAt,
+    creator.username AS createdByUsername FROM admin_accounts a
+    LEFT JOIN admin_accounts creator ON creator.id = a.created_by
+    WHERE a.role != 'owner' AND a.is_active = 1 ORDER BY a.created_at DESC`)
+  res.json({ staff: rows.map((row) => ({ ...row, id: Number(row.id), createdAt: Number(row.createdAt) })) })
 })
 
-r.post('/credentials', requireOwner, async (req, res) => {
+r.post('/credentials', async (req, res) => {
   const currentPassword = String(req.body?.currentPassword || '')
   const username = String(req.body?.username || '').trim()
   const newPassword = String(req.body?.newPassword || '')
-  if (!currentPassword || !username || !newPassword) {
-    return res.status(400).json({ error: '请填写当前密码、管理员账号和新密码' })
+  if (!currentPassword || username.length < 2 || username.length > 128 || newPassword.length < 12 || newPassword.length > 128) {
+    return res.status(400).json({ error: '后台账号需为 2 到 128 个字符，密码需为 12 到 128 个字符' })
   }
-  if (username.length < 2 || username.length > 32 || !/^[\p{L}\p{N}._-]+$/u.test(username)) {
-    return res.status(400).json({ error: '账号需为 2 到 32 位字母、数字、点、下划线或短横线' })
+  const current = await q.get('SELECT password_hash FROM admin_accounts WHERE id = ?', req.admin.id)
+  if (!current || !verifyPassword(currentPassword, current.password_hash)) return res.status(401).json({ error: '当前密码不正确' })
+  if (await q.get('SELECT id FROM admin_accounts WHERE lower(username) = lower(?) AND id != ?', username, req.admin.id)) {
+    return res.status(409).json({ error: '这个后台账号已被使用' })
   }
-  if (newPassword.length < 12 || newPassword.length > 128) {
-    return res.status(400).json({ error: '新密码需为 12 到 128 个字符' })
-  }
-  const current = await q.get('SELECT password_hash FROM users WHERE id = ?', req.user.id)
-  if (!current || !verifyPassword(currentPassword, current.password_hash)) {
-    return res.status(401).json({ error: '当前密码不正确' })
-  }
-  const duplicate = await q.get('SELECT id FROM users WHERE lower(username) = lower(?) AND id != ? LIMIT 1', username, req.user.id)
-  if (duplicate) return res.status(409).json({ error: '这个账号已被其他用户使用' })
-  if (username === req.user.username && verifyPassword(newPassword, current.password_hash)) {
-    return res.status(400).json({ error: '新账号和新密码都没有变化' })
-  }
-
+  const passwordHash = hashPassword(newPassword)
   await tx(async () => {
-    await q.run('UPDATE users SET username = ?, password_hash = ? WHERE id = ?', username, hashPassword(newPassword), req.user.id)
-    await audit(req.user.id, 'admin.credentials.update', 'admin_root', req.user.id, { usernameChanged: username !== req.user.username })
+    await q.run('UPDATE admin_accounts SET username = ?, password_hash = ?, updated_at = ? WHERE id = ?', username, passwordHash, Date.now(), req.admin.id)
+    await q.run('DELETE FROM admin_sessions WHERE account_id = ? AND token_hash != ?', req.admin.id, req.adminSessionHash)
+    await audit(req.admin, 'admin.credentials.update', 'admin_account', req.admin.id, { usernameChanged: username !== req.admin.username })
   })
-  const otherDevices = await q.all('SELECT id FROM user_devices WHERE user_id = ? AND id != ?', req.user.id, req.deviceId)
-  await q.run('DELETE FROM user_devices WHERE user_id = ? AND id != ?', req.user.id, req.deviceId)
-  for (const device of otherDevices) revokeDeviceSockets(req.user.id, device.id)
-  const updated = await q.get(`SELECT ${USER_COLS} FROM users WHERE id = ?`, req.user.id)
-  res.json({ ok: true, user: selfUser(updated), revokedDevices: otherDevices.length })
+  res.json({ ok: true, admin: { ...req.admin, username } })
 })
 
 r.post('/staff', requireOwner, async (req, res) => {
-  const userId = Number(req.body?.userId)
+  const username = String(req.body?.username || '').trim()
+  const password = String(req.body?.password || '')
+  const nickname = String(req.body?.nickname || username).trim().slice(0, 40)
   const role = String(req.body?.role || '')
-  if (!Number.isSafeInteger(userId) || userId <= 0) return res.status(400).json({ error: '用户 ID 无效' })
+  if (username.length < 2 || username.length > 128 || password.length < 12 || password.length > 128) return res.status(400).json({ error: '后台账号需为 2 到 128 个字符，初始密码需为 12 到 128 个字符' })
   if (!STAFF_ROLES.has(role)) return res.status(400).json({ error: '运营角色无效' })
-  const target = await q.get('SELECT id, username FROM users WHERE id = ?', userId)
-  if (!target) return res.status(404).json({ error: '用户不存在' })
-  if (isConfiguredAdmin(configuredAdminAccount(), target)) {
-    return res.status(400).json({ error: '该账号已通过超级管理员名单获得权限，无需重复分配角色' })
-  }
-  const now = Date.now()
-  await tx(async () => {
-    await q.run(
-      `INSERT INTO admin_staff (user_id, role, created_by, created_at) VALUES (?, ?, ?, ?)
-       ON CONFLICT(user_id) DO UPDATE SET role = excluded.role, created_by = excluded.created_by, created_at = excluded.created_at`,
-      userId, role, req.user.id, now
-    )
-    await audit(req.user.id, 'staff.role.assign', 'admin_staff', userId, { role })
+  const passwordHash = hashPassword(password)
+  const id = await tx(async () => {
+    const existing = await q.get('SELECT id, is_active FROM admin_accounts WHERE lower(username) = lower(?)', username)
+    if (existing && Number(existing.is_active)) throw Object.assign(new Error('这个后台账号已被使用'), { status: 409 })
+    const now = Date.now()
+    let accountId
+    if (existing) {
+      accountId = existing.id
+      await q.run('UPDATE admin_accounts SET password_hash = ?, nickname = ?, role = ?, is_active = 1, created_by = ?, updated_at = ? WHERE id = ?', passwordHash, nickname, role, req.admin.id, now, accountId)
+      await q.run('DELETE FROM admin_sessions WHERE account_id = ?', accountId)
+    } else {
+      accountId = await insert('INSERT INTO admin_accounts (username, password_hash, nickname, role, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)', username, passwordHash, nickname, role, req.admin.id, now, now)
+    }
+    await audit(req.admin, 'staff.create', 'admin_account', accountId, { role })
+    return accountId
   })
-  res.json({ ok: true, userId, role })
+  res.json({ ok: true, id: Number(id), role })
 })
 
-r.delete('/staff/:userId', requireOwner, async (req, res) => {
-  const userId = Number(req.params.userId)
-  if (!Number.isSafeInteger(userId) || userId <= 0) return res.status(400).json({ error: '用户 ID 无效' })
-  const target = await q.get('SELECT user_id AS userId, role FROM admin_staff WHERE user_id = ?', userId)
+r.delete('/staff/:id', requireOwner, async (req, res) => {
+  const id = Number(req.params.id)
+  if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ error: '后台成员 ID 无效' })
+  const target = await q.get('SELECT id, role FROM admin_accounts WHERE id = ? AND is_active = 1', id)
   if (!target) return res.status(404).json({ error: '后台成员不存在' })
+  if (target.role === 'owner') return res.status(403).json({ error: '不能移除超级管理员' })
   await tx(async () => {
-    await q.run('DELETE FROM admin_staff WHERE user_id = ?', userId)
-    await audit(req.user.id, 'staff.role.remove', 'admin_staff', userId, { role: target.role })
+    await q.run('UPDATE admin_accounts SET is_active = 0, updated_at = ? WHERE id = ?', Date.now(), id)
+    await q.run('DELETE FROM admin_sessions WHERE account_id = ?', id)
+    await audit(req.admin, 'staff.remove', 'admin_account', id, { role: target.role })
   })
-  res.json({ ok: true, userId })
+  res.json({ ok: true, id })
+})
+
+r.patch('/staff/:id', requireOwner, async (req, res) => {
+  const id = Number(req.params.id)
+  const role = String(req.body?.role || '')
+  if (!Number.isSafeInteger(id) || id <= 0 || !STAFF_ROLES.has(role)) return res.status(400).json({ error: '成员或运营角色无效' })
+  await tx(async () => {
+    const target = await q.get("SELECT id FROM admin_accounts WHERE id = ? AND role != 'owner' AND is_active = 1", id)
+    if (!target) throw Object.assign(new Error('后台成员不存在'), { status: 404 })
+    await q.run('UPDATE admin_accounts SET role = ?, updated_at = ? WHERE id = ?', role, Date.now(), id)
+    await audit(req.admin, 'staff.role.update', 'admin_account', id, { role })
+  })
+  res.json({ ok: true, id, role })
 })
 
 export default r

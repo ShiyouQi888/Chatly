@@ -25,6 +25,7 @@ import {
   shoot,
 } from './lib/cdp.mjs'
 import { purgeMessagesAfter, purgeOrphanUploads, maxMessageId } from './lib/debris.mjs'
+import { ensureLoggedIn } from './lib/session.mjs'
 
 const API = 'http://127.0.0.1:3002/api/v1'
 const APP_HOST = 'http://127.0.0.1:5198'
@@ -237,15 +238,10 @@ try {
   await js(`localStorage.removeItem('chatly.token')`)
   await cdp.send('Page.reload')
   const booted = await waitFor(
-    `!!document.querySelector('.lg-demo-list button') || !!document.querySelector('.chat-list .chat-row')`
+    `!!document.querySelector('.lg-card, .login') || !!document.querySelector('.chat-list .chat-row')`
   )
   if (!booted) throw new Error('应用没挂载')
-  if (await js(`!!document.querySelector('.lg-demo-list button')`)) {
-    await js(
-      `(() => { const b=[...document.querySelectorAll('.lg-demo-list button')].find(x=>x.textContent.includes('陈墨')); if(b) b.click(); return !!b })()`
-    )
-    await waitFor(`!!document.querySelector('.tabbar') && !!document.querySelector('.chat-list .chat-row')`, 15000)
-  }
+  await ensureLoggedIn(js)
   await js(HELPERS)
   const peerReady = await waitFor(`[...document.querySelectorAll('.chat-list .chat-row')].some(x=>((x.querySelector('.cr-name')||{}).textContent||'').includes(${JSON.stringify(PEER)}))`, 15000)
   if (!peerReady || !(await js(`window.__openChat(${JSON.stringify(PEER)})`))) throw new Error(`会话「${PEER}」未加载或无法打开`)

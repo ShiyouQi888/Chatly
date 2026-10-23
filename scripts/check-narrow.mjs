@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process'
 import http from 'node:http'
 import fs from 'node:fs'
 import { URL as NodeURL } from 'node:url'
+import { ensureLoggedIn } from './lib/session.mjs'
 
 const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe'
 const PORT = 9414
@@ -98,14 +99,9 @@ const shot = async (n) => {
 await cdp.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 3, mobile: true })
 await sleep(2400)
 
-// 应用现在有登录门：先用演示账号一键登录，否则只会截到登录页
-const loggedIn = await evalJs(`(() => {
-  const b = [...document.querySelectorAll('.lg-demo-list button')].find(x => x.textContent.includes('陈墨'))
-  if (!b) return false
-  b.click(); return true
-})()`)
-if (loggedIn) await sleep(2200)
-console.log('login:', loggedIn ? '已登录演示账号' : '未找到登录按钮（可能已登录）')
+// 应用有登录门：走 API 登录 + 注入 token（登录页已无演示账号列表）
+const loginState = await ensureLoggedIn(evalJs)
+console.log('login:', loginState === 'already' ? '已登录' : '已用 API 登录演示账号')
 
 console.log('viewport 390×844')
 await shot('21-phone-390')

@@ -201,6 +201,7 @@ const migrateAndInspect = async (dbFile) => {
     probe,
     `
 import { db } from ${JSON.stringify(dbjs)}
+import { ensureLoggedIn } from './lib/session.mjs'
 const inspectWith = ${inspectWith.toString()}
 console.log(JSON.stringify(inspectWith(db)))
 `
@@ -606,7 +607,7 @@ const booted = await waitFor(
   `(() => {
      if (location.protocol === 'about:') return false
      if (!document.body || document.body.innerText.trim().length < 2) return false
-     return !!document.querySelector('.lg-demo-list button') || !!document.querySelector('.tabbar')
+     return !!document.querySelector('.lg-card, .login') || !!document.querySelector('.tabbar')
    })()`,
   40000
 )
@@ -643,12 +644,7 @@ const tapAt = async (sel) => {
 }
 
 /* ---- 上号 ---- */
-if (await js(`!!document.querySelector('.lg-demo-list button')`)) {
-  await js(
-    `(() => { const b=[...document.querySelectorAll('.lg-demo-list button')].find(x=>x.textContent.includes('陈墨')); if(b) b.click(); return !!b })()`
-  )
-  await waitFor(`!!document.querySelector('.tabbar')`, 15000)
-}
+await ensureLoggedIn(js)
 await sleep(800)
 await injectHelp()
 

@@ -10,13 +10,14 @@
  * 另有前端内部事件 '@status' 表示连接状态变化。
  */
 import { useEffect, useRef, useState } from 'react'
-import { wsUrl } from '../api/client.js'
+import { api, wsUrl } from '../api/client.js'
 
 let sock = null
 let sockToken = null
 let retry = 0
 let retryTimer = null
 let closedByUs = false
+let pendingToken = null
 
 const listeners = new Set()
 
@@ -34,6 +35,7 @@ function emit(evt) {
 function open(token) {
   // 已有连接且 token 未变 → 复用（React StrictMode 会重复执行 effect）
   if (sock && sockToken === token && (sock.readyState === 0 || sock.readyState === 1)) return
+  if (pendingToken === token) return
 
   if (sock) {
     try {
@@ -45,48 +47,59 @@ function open(token) {
 
   closedByUs = false
   sockToken = token
+  pendingToken = token
 
-  let ws
-  try {
-    ws = new WebSocket(wsUrl(token))
-  } catch (err) {
-    console.error('[ws] 创建失败', err)
-    return
-  }
-  sock = ws
-
-  ws.onopen = () => {
-    retry = 0
-    emit({ type: '@status', payload: { connected: true } })
-  }
-
-  ws.onmessage = (e) => {
-    let msg
+  void (async () => {
+    let ws
     try {
-      msg = JSON.parse(e.data)
-    } catch {
-      return
-    }
-    if (msg && msg.type) emit(msg)
-  }
+      const { ticket } = await api.wsTicket()
+      if (closedByUs || sockToken !== token) return
+      ws = new WebSocket(wsUrl(ticket))
+      sock = ws
 
-  ws.onclose = () => {
-    emit({ type: '@status', payload: { connected: false } })
-    if (closedByUs) return
-    if (sock === ws) sock = null
-    retry = Math.min(retry + 1, 5)
-    const delay = Math.min(700 * 2 ** retry, 8000)
-    clearTimeout(retryTimer)
-    retryTimer = setTimeout(() => open(token), delay)
-  }
+      ws.onopen = () => {
+        retry = 0
+        emit({ type: '@status', payload: { connected: true } })
+      }
 
-  ws.onerror = () => {
-    try {
-      ws.close()
-    } catch {
-      /* noop */
+      ws.onmessage = (e) => {
+        let msg
+        try {
+          msg = JSON.parse(e.data)
+        } catch {
+          return
+        }
+        if (msg && msg.type) emit(msg)
+      }
+
+      ws.onclose = () => {
+        emit({ type: '@status', payload: { connected: false } })
+        if (closedByUs) return
+        if (sock === ws) sock = null
+        retry = Math.min(retry + 1, 5)
+        const delay = Math.min(700 * 2 ** retry, 8000)
+        clearTimeout(retryTimer)
+        retryTimer = setTimeout(() => open(token), delay)
+      }
+
+      ws.onerror = () => {
+        try {
+          ws.close()
+        } catch {
+          /* noop */
+        }
+      }
+    } catch (err) {
+      console.error('[ws] 连接凭证获取失败', err)
+      if (!closedByUs && sockToken === token) {
+        retry = Math.min(retry + 1, 5)
+        clearTimeout(retryTimer)
+        retryTimer = setTimeout(() => open(token), Math.min(700 * 2 ** retry, 8000))
+      }
+    } finally {
+      if (pendingToken === token) pendingToken = null
     }
-  }
+  })()
 }
 
 export function closeSocket() {
@@ -102,6 +115,7 @@ export function closeSocket() {
   }
   sock = null
   sockToken = null
+  pendingToken = null
 }
 
 /** 手动断开（登出时调用，避免继续重连） */

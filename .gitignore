@@ -19,6 +19,8 @@ server/.env
 # 测试与截图脚本的临时产物（CDP profile、探针文件、截图）
 .tmp/
 shots/
+.playwright-cli/
+output/playwright/
 
 # 编辑器 / 系统
 .vscode/

@@ -8,6 +8,7 @@ const localNode = (...parts) => path.join(root, 'node_modules', ...parts)
 const steps = [
   ['JSX / import parse', process.execPath, [path.join(root, 'scripts/check-parse.mjs')]],
   ['Production build', process.execPath, [localNode('vite/bin/vite.js'), 'build']],
+  ['Independent admin authentication', process.execPath, [path.join(root, 'scripts/check-admin-auth.mjs')]],
   ['Core login / announcement / file / permission flows', process.execPath, [path.join(root, 'scripts/check-core-flows.mjs')]],
   ['Backend REST / WebSocket regression', process.execPath, [path.join(root, 'server/test/e2e.mjs')]],
 ]

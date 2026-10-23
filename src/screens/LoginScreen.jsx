@@ -104,7 +104,7 @@ export default function LoginScreen({ onLogin, error: externalError }) {
         </div>
 
         {mode === 'login' ? <>
-          <label className="lg-field"><IconUser size={17} /><input value={identifier} onChange={(event) => setIdentifier(event.target.value)} placeholder="用户名 / 手机号 / 邮箱" autoComplete="username" required /></label>
+          <label className="lg-field"><IconUser size={17} /><input value={identifier} onChange={(event) => setIdentifier(event.target.value)} placeholder="用户 ID / 手机号 / 邮箱" autoComplete="username" required /></label>
           <label className="lg-field"><IconLock size={17} /><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="密码" autoComplete="current-password" required /></label>
         </> : <>
           {registerMethod === 'phone' ? <>

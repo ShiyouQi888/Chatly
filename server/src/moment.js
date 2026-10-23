@@ -14,7 +14,7 @@
  */
 import { q, insert, tx } from './db.js'
 import { publicUser } from './auth.js'
-import { isStaticAssetUrl, uploadExists } from './upload.js'
+import { isStaticAssetUrl, uploadExists, removeUpload } from './upload.js'
 import { parseGeoPair } from '../../shared/geo-math.mjs'
 
 /** 一条动态最多几张图 —— 九宫格是这类产品的通用上限，再多就退化成相册了 */
@@ -534,6 +534,29 @@ export async function createMoment({
   })
 }
 
+async function removeUnreferencedMomentUploads(urls) {
+  const unique = [...new Set((urls || []).filter((url) => isStaticAssetUrl(url) && uploadExists(url)))]
+  const referenceChecks = [
+    'SELECT 1 FROM moment_media WHERE url = ? LIMIT 1',
+    'SELECT 1 FROM messages WHERE file_url = ? LIMIT 1',
+    'SELECT 1 FROM favorites WHERE file_url = ? LIMIT 1',
+    'SELECT 1 FROM feedbacks WHERE screenshot_url = ? LIMIT 1',
+    'SELECT 1 FROM users WHERE avatar = ? OR profile_cover = ? LIMIT 1',
+    'SELECT 1 FROM conversations WHERE avatar = ? LIMIT 1',
+  ]
+  for (const url of unique) {
+    let referenced = false
+    for (const sql of referenceChecks) {
+      const args = sql.includes('avatar = ? OR profile_cover = ?') ? [url, url] : [url]
+      if (await q.get(sql, ...args)) {
+        referenced = true
+        break
+      }
+    }
+    if (!referenced) removeUpload(url)
+  }
+}
+
 /**
  * 改一条动态。只改传进来的字段（局部更新不能把别的冲成 null），
  * 但**媒体是整体替换** —— 单独做「增删某一张」的接口会让前后端都为顺序和 id 打架。
@@ -544,6 +567,9 @@ export async function updateMoment(momentId, userId, patch = {}) {
   if (m.userId !== userId) {
     throw Object.assign(new Error('只能编辑自己发布的动态'), { status: 403 })
   }
+  const oldMediaUrls = patch.media !== undefined
+    ? (await q.all('SELECT url FROM moment_media WHERE moment_id = ?', momentId)).map((row) => row.url)
+    : []
 
   const sets = []
   const args = []
@@ -589,7 +615,7 @@ export async function updateMoment(momentId, userId, patch = {}) {
   }
   const savedCard = patch.card !== undefined ? validateCard(patch.card, { allowPastActivity: true }) : undefined
 
-  return tx(async () => {
+  const updated = await tx(async () => {
     if (sets.length) {
       sets.push('edited_at = ?')
       args.push(Date.now())
@@ -632,6 +658,8 @@ export async function updateMoment(momentId, userId, patch = {}) {
     }
     return true
   })
+  if (patch.media !== undefined) await removeUnreferencedMomentUploads(oldMediaUrls)
+  return updated
 }
 
 /** 删自己的动态。媒体 / 点赞 / 评论靠表上的 ON DELETE CASCADE 一起清掉 */
@@ -641,7 +669,9 @@ export async function deleteMoment(momentId, userId) {
   if (m.userId !== userId) {
     throw Object.assign(new Error('只能删除自己发布的动态'), { status: 403 })
   }
+  const mediaUrls = (await q.all('SELECT url FROM moment_media WHERE moment_id = ?', momentId)).map((row) => row.url)
   await q.run('DELETE FROM moments WHERE id = ?', momentId)
+  await removeUnreferencedMomentUploads(mediaUrls)
   return true
 }
 

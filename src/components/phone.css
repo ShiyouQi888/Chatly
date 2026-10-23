@@ -51,7 +51,7 @@
 /* ===== 底部导航 ===== */
 .tabbar {
   position: relative;
-  z-index: 55;
+  z-index: var(--z-sticky);
   height: auto;
   min-height: var(--tabbar-h);
   display: grid;

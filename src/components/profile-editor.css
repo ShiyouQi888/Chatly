@@ -38,6 +38,18 @@
 }
 
 /* ===== 字段行 ===== */
+.pe-user-id {
+  flex-wrap: wrap;
+}
+
+.pe-user-id small {
+  flex-basis: 100%;
+  color: var(--text-3);
+  font-size: var(--fs-cap);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
 .pe-field {
   display: flex;
   align-items: center;

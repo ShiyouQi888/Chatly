@@ -63,6 +63,40 @@ export const uploadAny = multer({
   },
 })
 
+const VOICE_EXT = /\.(m4a|mp3|ogg|opus|wav|webm)$/i
+export const uploadVoice = multer({
+  storage: privateStorage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const extOk = VOICE_EXT.test(file.originalname || '')
+    const mime = String(file.mimetype || '').toLowerCase()
+    const mimeOk = !mime || mime === 'application/octet-stream' || mime.startsWith('audio/')
+    const ok = extOk && mimeOk
+    cb(ok ? null : badRequest('语音只支持 M4A / MP3 / OGG / WAV / WebM 音频'), ok)
+  },
+})
+
+/** Audio uploads are client supplied; verify the container signature before accepting a voice note. */
+export function looksLikeAudio(filePath) {
+  const ext = String(path.extname(filePath || '')).slice(1).toLowerCase()
+  let fh
+  try {
+    fh = fs.openSync(filePath, 'r')
+    const buf = Buffer.alloc(16)
+    const n = fs.readSync(fh, buf, 0, buf.length, 0)
+    if (ext === 'm4a') return n >= 12 && buf.toString('latin1', 4, 8) === 'ftyp'
+    if (ext === 'webm') return n >= 4 && buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3
+    if (ext === 'ogg' || ext === 'opus') return n >= 4 && buf.toString('latin1', 0, 4) === 'OggS'
+    if (ext === 'wav') return n >= 12 && buf.toString('latin1', 0, 4) === 'RIFF' && buf.toString('latin1', 8, 12) === 'WAVE'
+    if (ext === 'mp3') return n >= 3 && (buf.toString('latin1', 0, 3) === 'ID3' || (buf[0] === 0xff && (buf[1] & 0xe0) === 0xe0))
+    return false
+  } catch {
+    return false
+  } finally {
+    try { fs.closeSync(fh) } catch {}
+  }
+}
+
 /** 头像：只收图片 */
 export const uploadImage = multer({
   storage,
@@ -185,6 +219,17 @@ export function removeUpload(urlPath) {
   if (!full.startsWith(UPLOAD_DIR)) return false
   try {
     fs.unlinkSync(full)
+    return true
+  } catch {
+    return false
+  }
+}
+
+export function removePrivateUpload(filename) {
+  const name = path.basename(String(filename || ''))
+  if (!name || name.startsWith('.') || name !== filename) return false
+  try {
+    fs.unlinkSync(path.join(PRIVATE_UPLOAD_DIR, name))
     return true
   } catch {
     return false

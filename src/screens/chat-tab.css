@@ -11,7 +11,7 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  padding: calc(var(--safe-top) + 4px) 18px 12px;
+  padding: calc(var(--safe-top) + var(--space-2)) var(--space-5) var(--space-4);
   flex: 0 0 auto;
 }
 
@@ -22,7 +22,7 @@
   line-height: 1.05;
   display: inline-flex;
   align-items: flex-start;
-  gap: 2px;
+  gap: var(--space-1);
 }
 
 .brand-dot {
@@ -30,20 +30,20 @@
   height: 6px;
   border-radius: 50%;
   background: var(--brand-2);
-  margin-top: 5px;
+  margin-top: var(--space-2);
 }
 
 .brand-sub {
   font-size: var(--fs-cap);
   color: var(--text-3);
-  margin-top: 3px;
+  margin-top: var(--space-1);
   letter-spacing: 0.01em;
 }
 
 .chat-head-act {
   display: flex;
-  gap: 9px;
-  padding-top: 4px;
+  gap: var(--space-3);
+  padding-top: var(--space-2);
 }
 
 .icon-btn {
@@ -56,7 +56,7 @@
   background: var(--surface);
   color: var(--text-2);
   box-shadow: var(--shadow-sm);
-  transition: transform 0.16s var(--ease);
+  transition: transform var(--dur-fast) var(--ease);
 }
 
 .icon-btn:active {
@@ -81,10 +81,10 @@
 .search-entry {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: var(--space-3);
   width: calc(100% - 36px);
-  margin: 0 18px 15px;
-  padding: 11px 15px;
+  margin: 0 var(--space-5) var(--space-5);
+  padding: var(--space-4) var(--space-5);
   border-radius: var(--r-md);
   background: var(--surface-2);
   color: var(--text-3);
@@ -95,8 +95,8 @@
 /* ===== 状态区 ===== */
 .status-scroll {
   display: flex;
-  gap: 14px;
-  padding: 0 18px 18px;
+  gap: var(--space-4);
+  padding: 0 var(--space-5) var(--space-5);
   overflow-x: auto;
   scroll-snap-type: x proximity;
 }
@@ -105,7 +105,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   flex: 0 0 auto;
   width: 60px;
   scroll-snap-align: start;
@@ -113,10 +113,10 @@
 
 .story-ring {
   position: relative;
-  padding: 2.5px;
+  padding: var(--space-1);
   border-radius: var(--r-lg);
   background: var(--brand-grad);
-  transition: transform 0.16s var(--ease);
+  transition: transform var(--dur-fast) var(--ease);
 }
 
 .story-ring.is-seen {
@@ -155,7 +155,7 @@
 .chat-list {
   background: var(--surface);
   border-radius: var(--r-lg);
-  margin: 0 14px;
+  margin: 0 var(--space-4);
   overflow: hidden;
   box-shadow: var(--shadow-sm);
 }
@@ -163,12 +163,12 @@
 .chat-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-4);
   width: 100%;
-  padding: 12px 14px;
+  padding: var(--space-4) var(--space-4);
   position: relative;
   text-align: left;
-  transition: background 0.16s var(--ease);
+  transition: background var(--dur-fast) var(--ease);
   /* 长按要弹会话操作菜单，所以必须关掉系统自己的长按行为：
      iOS 的 callout 气泡、Android 的文字选择、原生拖拽、以及触摸高亮块。
      （消息行同理，见 chat-room.css 的 .msg。） */
@@ -201,7 +201,7 @@
 .cr-special {
   width: 50px;
   height: 50px;
-  border-radius: 16px;
+  border-radius: var(--r-md);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -221,20 +221,20 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-2);
 }
 
 .cr-top {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--space-3);
 }
 
 .cr-name {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-2);
   font-size: var(--fs-body);
   font-weight: 550;
   color: var(--text-1);
@@ -269,7 +269,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: var(--space-3);
 }
 
 .cr-msg {
@@ -282,7 +282,7 @@
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-2);
 }
 
 .cr-msg.is-mention {
@@ -295,15 +295,15 @@
   font-weight: 600;
   color: #e8799b;
   background: rgba(232, 121, 155, 0.12);
-  padding: 1px 5px;
-  border-radius: 5px;
+  padding: 0 var(--space-2);
+  border-radius: var(--r-xs);
   flex: 0 0 auto;
 }
 
 .cr-meta {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--space-3);
   flex: 0 0 auto;
 }
 
@@ -315,14 +315,14 @@
   text-align: center;
   font-size: var(--fs-micro);
   color: var(--text-4);
-  padding: 20px 0 24px;
+  padding: var(--space-6) 0 var(--space-7);
 }
 
 /* ===== 新建面板 ===== */
 .compose-root {
   position: absolute;
   inset: 0;
-  z-index: 95;
+  z-index: var(--z-modal);
 }
 
 .compose-mask {
@@ -330,7 +330,7 @@
   inset: 0;
   background: rgba(18, 18, 28, 0.28);
   backdrop-filter: blur(2px);
-  animation: fadeIn 0.18s var(--ease) both;
+  animation: fadeIn var(--dur) var(--ease) both;
 }
 
 .compose-panel {
@@ -340,7 +340,7 @@
   width: 216px;
   background: var(--surface);
   border-radius: var(--r-lg);
-  padding: 7px;
+  padding: var(--space-3);
   box-shadow: var(--shadow-lg);
   transform-origin: top right;
 }
@@ -348,12 +348,12 @@
 .compose-item {
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: var(--space-4);
   width: 100%;
-  padding: 10px 11px;
+  padding: var(--space-3) var(--space-4);
   border-radius: var(--r-sm);
   text-align: left;
-  transition: background 0.16s var(--ease);
+  transition: background var(--dur-fast) var(--ease);
 }
 
 .compose-item:active {
@@ -375,7 +375,7 @@
 .compose-text {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 0;
   min-width: 0;
 }
 
@@ -404,7 +404,7 @@
 .nc-root {
   position: absolute;
   inset: 0;
-  z-index: 96;
+  z-index: var(--z-modal);
 }
 
 .nc-mask {
@@ -412,7 +412,7 @@
   inset: 0;
   background: rgba(18, 18, 28, 0.32);
   backdrop-filter: blur(2px);
-  animation: fadeIn 0.18s var(--ease) both;
+  animation: fadeIn var(--dur) var(--ease) both;
 }
 
 .nc-panel {
@@ -425,7 +425,7 @@
   flex-direction: column;
   background: var(--surface);
   border-radius: var(--r-xl) var(--r-xl) 0 0;
-  padding: 10px 16px calc(16px + env(safe-area-inset-bottom));
+  padding: var(--space-3) var(--space-5) calc(var(--space-5) + env(safe-area-inset-bottom));
   box-shadow: 0 -12px 34px -14px rgba(30, 28, 70, 0.3);
 }
 
@@ -433,7 +433,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 0 12px;
+  padding: var(--space-2) 0 var(--space-4);
 }
 
 .nc-head b {
@@ -456,10 +456,10 @@
 .nc-title {
   display: flex;
   align-items: center;
-  padding: 11px 14px;
+  padding: var(--space-4) var(--space-4);
   border-radius: var(--r-md);
   background: var(--surface-2);
-  margin-bottom: 10px;
+  margin-bottom: var(--space-3);
 }
 
 .nc-title input {
@@ -477,14 +477,14 @@
 .nc-err {
   font-size: var(--fs-sub);
   color: #e0455c;
-  padding: 0 2px 8px;
+  padding: 0 var(--space-1) var(--space-3);
 }
 
 .nc-hint {
   font-size: var(--fs-sub);
   color: var(--text-4);
   text-align: center;
-  padding: 22px 0;
+  padding: var(--space-6) 0;
 }
 
 .nc-list {
@@ -493,18 +493,18 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
 }
 
 .nc-user {
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: var(--space-4);
   width: 100%;
-  padding: 8px 6px;
+  padding: var(--space-3) var(--space-2);
   border-radius: var(--r-md);
   text-align: left;
-  transition: background 0.16s var(--ease);
+  transition: background var(--dur-fast) var(--ease);
 }
 
 .nc-user:active {
@@ -520,7 +520,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 0;
 }
 
 .nc-user-t b {
@@ -544,7 +544,7 @@
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  transition: all 0.16s var(--ease);
+  transition: all var(--dur-fast) var(--ease);
 }
 
 .nc-check.is-on {
@@ -553,8 +553,8 @@
 }
 
 .nc-submit {
-  margin-top: 12px;
-  padding: 14px;
+  margin-top: var(--space-4);
+  padding: var(--space-4);
   border-radius: var(--r-md);
   background: var(--brand-grad);
   color: #fff;

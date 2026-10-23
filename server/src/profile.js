@@ -7,6 +7,7 @@
  *   - tags 在 DB 里存 JSON 文本，出参统一转数组
  */
 import { q } from './db.js'
+import { normalizeUserId, validUserId, claimUserId, resolveUserId, userIdTransaction } from './user-ids.js'
 import { publicUser, USER_COLS } from './auth.js'
 import { uploadExists } from './upload.js'
 import { parseGeoPair } from '../../shared/geo-math.mjs'
@@ -51,6 +52,12 @@ export function isCoverUrlValue(v) {
 export function sanitizeProfile(patch = {}) {
   const out = {}
   const errors = []
+
+  if (patch.username !== undefined) {
+    const value = normalizeUserId(patch.username)
+    if (!validUserId(value)) errors.push('用户 ID 需为 2–24 位英文字母或数字，不能包含空格和符号')
+    else out.username = value
+  }
 
   if (patch.nickname !== undefined) {
     const v = String(patch.nickname ?? '').trim()
@@ -191,8 +198,7 @@ export async function readProfile(userId) {
  * 查不到返回 null —— 调用方据此回 404，不要拿 0 当兜底（0 会匹配到别的判断分支）。
  */
 export async function userIdByUsername(username) {
-  const row = await q.get('SELECT id FROM users WHERE username = ?', String(username || '').trim())
-  return row ? Number(row.id) : null
+  return resolveUserId(username)
 }
 
 /**
@@ -204,6 +210,14 @@ export async function userIdByUsername(username) {
  * 调用点只有 routes/auth.js 的两处，都已经是显式塑形。
  */
 export async function updateProfile(userId, fields) {
+  if (fields.username !== undefined) {
+    return userIdTransaction(async () => {
+      await claimUserId(fields.username, userId)
+      const keys = Object.keys(fields)
+      await q.run(`UPDATE users SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`, ...keys.map((k) => fields[k]), userId)
+      return readProfile(userId)
+    })
+  }
   const keys = Object.keys(fields)
   if (keys.length) {
     await q.run(

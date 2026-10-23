@@ -3,7 +3,7 @@
   position: absolute;
   inset: 0;
   /* 也会从群设置页里打开（群设置 130 / 资料页 140），要压在最上面 */
-  z-index: 150;
+  z-index: var(--z-modal);
   display: flex;
   align-items: flex-end;
 }

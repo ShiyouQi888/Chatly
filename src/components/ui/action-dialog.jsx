@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { AlertTriangle, Info } from 'lucide-react'
 import { Button } from './button.jsx'
-import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './alert-dialog.jsx'
+import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './alert-dialog.jsx'
 import { Input } from './input.jsx'
 
 export function ActionDialog({ open, onOpenChange, title, description, requireReason = false, defaultReason = '', confirmLabel = '确认操作', tone, destructive = true, pending = false, onConfirm }) {
@@ -25,7 +25,7 @@ export function ActionDialog({ open, onOpenChange, title, description, requireRe
           </div>
           {requireReason && <label className="op-action-reason"><span className="op-action-reason-label">处理原因 <small>可留空</small></span><Input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="填写原因，记录在操作审计中" autoFocus /></label>}
           <AlertDialogFooter className="op-action-dialog-footer">
-            <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={pending}>取消</Button>
+            <AlertDialogCancel asChild><Button type="button" variant="outline" disabled={pending}>取消</Button></AlertDialogCancel>
             <Button type="submit" variant={actionTone === 'danger' ? 'destructive' : actionTone === 'warning' ? 'warning' : 'default'} loading={pending}>{pending ? '正在处理…' : confirmLabel}</Button>
           </AlertDialogFooter>
         </form>

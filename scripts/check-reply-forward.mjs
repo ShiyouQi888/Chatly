@@ -34,6 +34,7 @@ import { fileURLToPath } from 'node:url'
 import { db, qSync as q } from '../server/src/db.js'
 import { purgeDebris, purgeMessagesAfter, maxMessageId } from './lib/debris.mjs'
 import { freePort, waitAppTarget, connectCdp, launchChrome, shoot } from './lib/cdp.mjs'
+import { ensureLoggedIn } from './lib/session.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.join(HERE, '..')
@@ -269,7 +270,7 @@ const booted = await waitFor(
   `(() => {
      if (location.protocol === 'about:') return false
      if (!document.body || document.body.innerText.trim().length < 2) return false
-     return !!document.querySelector('.lg-demo-list button') || !!document.querySelector('.tabbar')
+     return !!document.querySelector('.lg-card, .login') || !!document.querySelector('.tabbar')
    })()`,
   40000
 )
@@ -280,12 +281,7 @@ if (!booted) {
 await sleep(400)
 await injectHelp()
 
-if (await js(`!!document.querySelector('.lg-demo-list button')`)) {
-  await js(
-    `(() => { const b=[...document.querySelectorAll('.lg-demo-list button')].find(x=>x.textContent.includes('陈墨')); if(b) b.click(); return !!b })()`
-  )
-  await waitFor(`!!document.querySelector('.tabbar')`, 15000)
-}
+await ensureLoggedIn(js)
 await sleep(800)
 await injectHelp()
 

@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Chatly Design Language System (CDLS) v1.0</title>
+<style>
+  :root{
+    --b50:#f3f1fe;--b100:#e6e2fd;--b200:#ccc5fb;--b300:#a99ef5;--b400:#8b7cf6;
+    --b500:#6d5df6;--b600:#5b4bd8;--b700:#4a3cb0;--b800:#392e88;--b900:#2a2166;
+    --action:#5b4bd8;--action-h:#4a3cb0;
+    --bg:#f6f6fa;--bg2:#fbfbfe;--surface:#fff;--surface2:#f0f0f7;--surface3:#e8e8f2;
+    --line:rgba(23,23,31,.08);--line-s:rgba(23,23,31,.14);
+    --t1:#17171f;--t2:#4a4a5a;--t3:#6b6b82;--t4:#9a9ab0;
+    --danger:#c62f42;--success:#1e9e6a;--success-t:#157a57;--warning:#b26b00;--warning-t:#8a5200;--info:#2563a8;--link:#4a5a9e;
+    --cyan:#1e8fa8;--mint:#1e9e6a;--pink:#c2456e;--amber:#b26b00;
+    --r-xs:8px;--r-sm:12px;--r-md:16px;--r-lg:20px;--r-xl:28px;
+    --s2:4px;--s3:8px;--s4:12px;--s5:16px;--s6:20px;--s7:24px;--s8:32px;
+    --font:"Noto Sans SC","Source Han Sans SC","PingFang SC","Microsoft YaHei",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --shadow1:0 1px 2px rgba(23,23,31,.04),0 2px 8px rgba(23,23,31,.04);
+    --shadow2:0 6px 20px rgba(23,23,31,.08);
+    --shadow3:0 16px 40px rgba(23,23,31,.12);
+    --sh-brand:0 8px 24px rgba(91,75,216,.28);
+    --ease:cubic-bezier(.22,1,.36,1);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--t1);font-family:var(--font);font-weight:400;line-height:1.5;-webkit-font-smoothing:antialiased;font-size:15px}
+  .wrap{max-width:1120px;margin:0 auto;padding:48px 28px 80px}
+  header{padding-bottom:34px;border-bottom:1px solid var(--line);margin-bottom:34px}
+  .eyebrow{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--b600);font-weight:600}
+  h1{font-size:36px;font-weight:700;letter-spacing:-.02em;margin-top:10px;line-height:1.2}
+  h1 .grad{background:linear-gradient(120deg,#6d5df6,#5b4bd8 60%,#4a3cb0);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .lede{color:var(--t3);font-size:15px;margin-top:12px;max-width:780px;font-weight:450}
+  .lede b{color:var(--t1);font-weight:600}
+  .principle{margin-top:22px;display:flex;gap:12px;flex-wrap:wrap}
+  .pchip{background:var(--surface);border-radius:var(--r-sm);padding:10px 16px;font-size:14px;box-shadow:var(--shadow1)}
+  .pchip b{color:var(--b600);font-weight:600}
+  h2{font-size:20px;font-weight:600;margin:52px 0 8px;display:flex;align-items:center;gap:10px}
+  h2 .n{color:var(--b300);font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
+  .desc{color:var(--t3);font-size:14px;margin-bottom:20px;font-weight:450;max-width:820px}
+  .card{background:var(--surface);border-radius:var(--r-md);padding:24px;box-shadow:var(--shadow1)}
+  .label{font-size:12px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin:22px 0 12px}
+
+  /* borrow table */
+  .duo{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .duo .box{border-radius:var(--r-md);padding:20px;background:var(--surface);box-shadow:var(--shadow1)}
+  .duo .box.yes{border-top:3px solid var(--b500)}
+  .duo .box.no{border-top:3px solid var(--t4)}
+  .duo h3{font-size:14px;font-weight:600;margin-bottom:12px}
+  .duo ul{list-style:none;display:flex;flex-direction:column;gap:9px}
+  .duo li{font-size:13.5px;color:var(--t2);display:flex;gap:9px;align-items:flex-start;font-weight:450}
+  .duo li::before{content:"";width:6px;height:6px;border-radius:2px;background:var(--b500);margin-top:7px;flex-shrink:0}
+  .duo .no li::before{background:var(--t4)}
+
+  /* swatches */
+  .swatches{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+  .sw{border-radius:var(--r-sm);overflow:hidden;background:var(--surface);box-shadow:var(--shadow1)}
+  .sw .top{height:64px}
+  .sw .meta{padding:10px 12px}
+  .sw .nm{font-size:12.5px;font-weight:600}
+  .sw .hx{font-size:11.5px;color:var(--t3);font-family:ui-monospace,Consolas,monospace;margin-top:2px}
+  .sw .ct{font-size:10.5px;margin-top:5px;color:var(--t3)}
+  .badge{display:inline-block;font-size:10px;font-weight:700;padding:1px 6px;border-radius:99px;line-height:1.7}
+  .badge.ok{background:rgba(30,158,106,.12);color:var(--success-t)}
+  .badge.warn{background:rgba(178,107,0,.12);color:var(--warning-t)}
+  .badge.no{background:rgba(154,154,176,.16);color:var(--t2)}
+
+  /* type */
+  .type-row{display:flex;align-items:baseline;gap:18px;padding:12px 0;border-bottom:1px solid var(--line)}
+  .type-row:last-child{border-bottom:none}
+  .type-row .tag{width:170px;flex-shrink:0;font-size:11.5px;color:var(--t3);font-family:ui-monospace,Consolas,monospace}
+  .type-row .sample{flex:1}
+
+  /* tables */
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line)}
+  th{color:var(--t3);font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+  td.mono{font-family:ui-monospace,Consolas,monospace;color:var(--t3);font-size:12px}
+  tr:last-child td{border-bottom:none}
+
+  /* phones */
+  .phones{display:flex;gap:32px;flex-wrap:wrap;justify-content:center}
+  .phone{width:330px;flex-shrink:0}
+  .phone .frame{width:330px;height:668px;border-radius:40px;background:#0b0b10;padding:9px;box-shadow:0 18px 50px rgba(23,23,31,.2)}
+  .phone .screen{width:100%;height:100%;border-radius:32px;overflow:hidden;background:var(--bg);display:flex;flex-direction:column;position:relative}
+  .phone.dark .screen{background:#0f1014}
+  .phone .cap{text-align:center;font-size:12.5px;color:var(--t3);margin-top:12px}
+  .navbar{height:44px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 12px;border-bottom:1px solid var(--line);position:relative;background:var(--bg2)}
+  .phone.dark .navbar{background:#121319;border-color:rgba(255,255,255,.08)}
+  .navbar .ic{width:24px;height:24px;color:var(--t1);display:flex;align-items:center;justify-content:center}
+  .phone.dark .navbar .ic{color:#ecedf2}
+  .navbar .title{position:absolute;left:50%;transform:translateX(-50%);font-size:17px;font-weight:600}
+  .phone.dark .navbar .title{color:#ecedf2}
+  .chatbody{flex:1;overflow:hidden;padding:14px 12px 0}
+  .tsys{text-align:center;font-size:12px;color:var(--t4);margin:4px 0 16px}
+  .phone.dark .tsys{color:#5e6072}
+  .msg{display:flex;gap:8px;margin-bottom:14px;align-items:flex-start}
+  .msg.out{flex-direction:row-reverse}
+  .ava{width:38px;height:38px;border-radius:13px;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:600;font-size:15px}
+  .bubble{max-width:74%;padding:9px 13px;font-size:15.5px;line-height:1.5;word-break:break-word}
+  .msg.in .bubble{background:var(--surface);color:var(--t1);border-radius:4px 16px 16px 16px;box-shadow:var(--shadow1)}
+  .msg.out .bubble{background:var(--b500);color:#fff;border-radius:16px 4px 16px 16px;box-shadow:var(--sh-brand)}
+  .phone.dark .msg.in .bubble{background:#1e2029;color:#ecedf2;box-shadow:none}
+  .inputbar{height:58px;flex-shrink:0;display:flex;align-items:center;gap:10px;padding:0 10px;border-top:1px solid var(--line);background:var(--bg2)}
+  .phone.dark .inputbar{background:#121319;border-color:rgba(255,255,255,.08)}
+  .inputbar .ib{width:28px;height:28px;color:var(--t2);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .phone.dark .inputbar .ib{color:#a8aabc}
+  .inputbar .field{flex:1;height:36px;background:var(--surface2);border-radius:12px;display:flex;align-items:center;padding:0 12px;color:var(--t4);font-size:14px}
+  .phone.dark .inputbar .field{background:#1e2029;color:#5e6072}
+
+  /* components */
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .comp{background:var(--surface);border-radius:var(--r-md);padding:22px;box-shadow:var(--shadow1)}
+  .comp h3{font-size:14px;font-weight:600;margin-bottom:16px}
+  .comp .s{font-size:11.5px;color:var(--t3);font-weight:400;margin-left:6px}
+  .btnrow{display:flex;flex-direction:column;gap:11px}
+  .btn{height:48px;border-radius:var(--r-sm);font-size:16px;font-weight:500;display:flex;align-items:center;justify-content:center;border:none;font-family:inherit}
+  .btn.primary{background:var(--action);color:#fff;box-shadow:var(--sh-brand)}
+  .btn.primary:active{background:var(--action-h)}
+  .btn.secondary{background:var(--surface);color:var(--t1);border:1px solid var(--line-s)}
+  .btn.danger{background:var(--danger);color:#fff}
+  .btn.ghost{background:transparent;color:var(--link);font-weight:500}
+  .btn.disabled{background:var(--surface3);color:var(--t4)}
+  .celllist{background:var(--surface);border-radius:var(--r-sm);overflow:hidden;box-shadow:var(--shadow1)}
+  .cell{height:56px;display:flex;align-items:center;padding:0 16px;gap:12px;position:relative}
+  .cell::after{content:"";position:absolute;left:52px;right:0;bottom:0;height:1px;background:var(--line)}
+  .cell:last-child::after{display:none}
+  .cell .lb{flex:1;font-size:15px;font-weight:450}
+  .cell .vl{font-size:14px;color:var(--t3)}
+  .cell .chev{width:16px;height:16px;color:var(--t4)}
+  .cell .lead{width:24px;height:24px;color:var(--b600)}
+  .input{height:44px;border-radius:var(--r-sm);background:var(--surface2);display:flex;align-items:center;padding:0 14px;color:var(--t4);font-size:15px}
+  .switch{width:51px;height:31px;border-radius:99px;background:var(--b500);position:relative;flex-shrink:0}
+  .switch::after{content:"";position:absolute;top:2px;left:22px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+  .switch.off{background:var(--surface3)}
+  .switch.off::after{left:2px}
+  .toast{background:rgba(23,23,31,.82);color:#fff;border-radius:var(--r-sm);padding:13px 18px;font-size:14px;text-align:center;max-width:200px;margin:0 auto;box-shadow:var(--shadow2)}
+  .dialog{width:100%;max-width:280px;margin:0 auto;background:var(--surface);border-radius:var(--r-md);overflow:hidden;text-align:center;box-shadow:var(--shadow3)}
+  .dialog .dt{padding:22px 20px 6px;font-size:17px;font-weight:600}
+  .dialog .db{padding:0 20px 20px;font-size:13.5px;color:var(--t3);font-weight:450}
+  .dialog .bs{display:flex;border-top:1px solid var(--line)}
+  .dialog .bs button{flex:1;height:52px;border:none;background:none;font-size:16px;font-family:inherit;color:var(--t1)}
+  .dialog .bs button+button{border-left:1px solid var(--line)}
+  .dialog .bs .pri{color:var(--action);font-weight:600}
+  .dialog .bs .dgr{color:var(--danger)}
+  .avrow{display:flex;align-items:center;gap:18px}
+  .avrow .ava{flex-shrink:0}
+
+  .note{background:var(--surface);border-left:3px solid var(--b500);border-radius:var(--r-sm);padding:15px 18px;font-size:13.5px;color:var(--t2);font-weight:450;box-shadow:var(--shadow1)}
+  .note b{color:var(--t1);font-weight:600}
+  .note.warn{border-left-color:var(--warning)}
+  .note.warn b{color:var(--warning-t)}
+  .stack{display:flex;flex-direction:column;gap:12px}
+
+  footer{margin-top:56px;padding-top:22px;border-top:1px solid var(--line);font-size:12px;color:var(--t3);display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px}
+
+  @media(max-width:900px){
+    .swatches{grid-template-columns:repeat(3,1fr)}
+    .duo,.grid2{grid-template-columns:1fr}
+    .phone{transform:scale(.94);transform-origin:top center}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Design Language System · v1.0</div>
+    <h1>Chatly <span class="grad">Design Language</span></h1>
+    <p class="lede">我们<b>不采用微信的配色</b>，但完整继承它的<b>标准化方法</b>：中性面承载界面、单一强调色只管动作、语义色一色一义、4px 栅格、固定字阶、克制的阴影。品牌与气质回到 Chatly 自己——<b>紫蓝、冷灰、Noto Sans SC 450、柔和圆角</b>。</p>
+    <div class="principle">
+      <div class="pchip"><b>结构</b> · 学微信的纪律</div>
+      <div class="pchip"><b>气质</b> · 是 Chatly 自己</div>
+      <div class="pchip"><b>对比度</b> · 全部 AA 起步</div>
+      <div class="pchip"><b>暗色</b> · 一等公民</div>
+    </div>
+  </header>
+
+  <!-- 00 borrow -->
+  <h2><span class="n">00</span>借与不借</h2>
+  <p class="desc">把「可迁移的方法」和「不可迁移的品牌」分开，是这套系统成立的前提。</p>
+  <div class="duo">
+    <div class="box yes">
+      <h3>继承：微信的标准化结构</h3>
+      <ul>
+        <li>中性面三层承载界面，品牌色只做「动作 / 确认」</li>
+        <li>语义色一色一义：危险/成功/警告/信息 各有专属</li>
+        <li>链接色独立于动作色（链接 ≠ 主按钮）</li>
+        <li>4px 栅格；页面 16 / 单元格 56 / 触控 44</li>
+        <li>固定字阶，层级靠字号与字重，不靠装饰</li>
+        <li>状态齐备：默认 / 悬停 / 按压 / 禁用 / 焦点</li>
+        <li>极简阴影，浮层才有 elevation</li>
+      </ul>
+    </div>
+    <div class="box no">
+      <h3>不借：微信的品牌与色相</h3>
+      <ul>
+        <li>微信绿 #07C160、己方气泡 #95EC69</li>
+        <li>暖灰 #EDEDED / #F7F7F7 的色温</li>
+        <li>红包橙金 #FA9D3B 的专属语义</li>
+        <li>系统字 400 的字体策略（我们用 Noto 450）</li>
+        <li>4px 方角（我们用 8–28 的柔和圆角）</li>
+        <li>几乎为零的阴影（我们用柔和紫调投影）</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 01 brand -->
+  <h2><span class="n">01</span>品牌色阶 · Chatly Violet</h2>
+  <p class="desc">500 是识别色；600 是动作色（白字 6.10:1，按钮底色永远用它）；400 只用于大字与图标（白字 3.33 仅够 3:1）。</p>
+  <div class="swatches">
+    <div class="sw"><div class="top" style="background:#f3f1fe"></div><div class="meta"><div class="nm">brand-50</div><div class="hx">#F3F1FE</div></div></div>
+    <div class="sw"><div class="top" style="background:#e6e2fd"></div><div class="meta"><div class="nm">brand-100</div><div class="hx">#E6E2FD</div></div></div>
+    <div class="sw"><div class="top" style="background:#ccc5fb"></div><div class="meta"><div class="nm">brand-200</div><div class="hx">#CCC5FB</div></div></div>
+    <div class="sw"><div class="top" style="background:#a99ef5"></div><div class="meta"><div class="nm">brand-300</div><div class="hx">#A99EF5</div></div></div>
+    <div class="sw"><div class="top" style="background:#8b7cf6"></div><div class="meta"><div class="nm">brand-400</div><div class="hx">#8B7CF6</div><div class="ct"><span class="badge warn">白字 3.3 · 大字/图标</span></div></div></div>
+    <div class="sw"><div class="top" style="background:#6d5df6"></div><div class="meta"><div class="nm">brand-500 · 识别色</div><div class="hx">#6D5DF6</div><div class="ct"><span class="badge ok">白字 4.62 AA</span></div></div></div>
+    <div class="sw"><div class="top" style="background:#5b4bd8"></div><div class="meta"><div class="nm">brand-600 · 动作色</div><div class="hx">#5B4BD8</div><div class="ct"><span class="badge ok">白字 6.10 AA</span></div></div></div>
+    <div class="sw"><div class="top" style="background:#4a3cb0"></div><div class="meta"><div class="nm">brand-700</div><div class="hx">#4A3CB0</div><div class="ct"><span class="badge ok">白字 8.19</span></div></div></div>
+    <div class="sw"><div class="top" style="background:#392e88"></div><div class="meta"><div class="nm">brand-800</div><div class="hx">#392E88</div></div></div>
+    <div class="sw"><div class="top" style="background:#2a2166"></div><div class="meta"><div class="nm">brand-900</div><div class="hx">#2A2166</div></div></div>
+  </div>
+
+  <!-- 02 neutral + text -->
+  <h2><span class="n">02</span>中性面与文字</h2>
+  <p class="desc">冷灰承载界面（带极淡紫调，与微信暖灰拉开气质）。三级文字全部 ≥4.5:1；第四级仅装饰，禁止承载正文——这是上次审计的硬伤，已按此修正。</p>
+  <div class="swatches" style="margin-bottom:16px">
+    <div class="sw"><div class="top" style="background:#ededed"></div><div class="meta"><div class="nm" style="color:var(--t2);text-decoration:line-through">旧 #EDEDED</div><div class="hx">微信暖灰 · 不采用</div></div></div>
+    <div class="sw"><div class="top" style="background:#f6f6fa;border-bottom:1px solid var(--line)"></div><div class="meta"><div class="nm">bg</div><div class="hx">#F6F6FA</div></div></div>
+    <div class="sw"><div class="top" style="background:#fff;border-bottom:1px solid var(--line)"></div><div class="meta"><div class="nm">surface</div><div class="hx">#FFFFFF</div></div></div>
+    <div class="sw"><div class="top" style="background:#f0f0f7"></div><div class="meta"><div class="nm">surface-2</div><div class="hx">#F0F0F7</div></div></div>
+    <div class="sw"><div class="top" style="background:#e8e8f2"></div><div class="meta"><div class="nm">surface-3</div><div class="hx">#E8E8F2</div></div></div>
+  </div>
+  <div class="card" style="padding:8px 4px">
+    <table>
+      <thead><tr><th>令牌</th><th class="mono">值</th><th class="num">冷灰底</th><th class="num">白底</th><th>用途</th></tr></thead>
+      <tbody>
+        <tr><td>text-1</td><td class="mono">#17171F</td><td style="text-align:right">16.5:1</td><td style="text-align:right">17.8:1</td><td><span class="badge ok">AA</span> 正文/标题</td></tr>
+        <tr><td>text-2</td><td class="mono">#4A4A5A</td><td style="text-align:right">8.1:1</td><td style="text-align:right">8.7:1</td><td><span class="badge ok">AA</span> 次级</td></tr>
+        <tr><td>text-3</td><td class="mono">#6B6B82</td><td style="text-align:right">4.8:1</td><td style="text-align:right">5.2:1</td><td><span class="badge ok">AA</span> 三级说明</td></tr>
+        <tr><td>text-4</td><td class="mono">#9A9AB0</td><td style="text-align:right">2.6:1</td><td style="text-align:right">2.8:1</td><td><span class="badge no">仅非文本装饰</span></td></tr>
+        <tr><td>text-muted</td><td class="mono">#6B6B82</td><td style="text-align:right">4.8:1</td><td style="text-align:right">5.2:1</td><td><span class="badge ok">占位/时间/次要信息</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 03 semantic -->
+  <h2><span class="n">03</span>语义色</h2>
+  <p class="desc">一色一义，互不串用。链接色刻意与品牌紫分开（独立靛蓝），避免「紫色到处都是、看不懂哪里能点」。</p>
+  <div class="swatches">
+    <div class="sw"><div class="top" style="background:#c62f42"></div><div class="meta"><div class="nm">danger</div><div class="hx">#C62F42</div><div class="ct"><span class="badge ok">白字 5.4 AA</span></div></div></div>
+    <div class="sw"><div class="top" style="background:#1e9e6a"></div><div class="meta"><div class="nm">success</div><div class="hx">#1E9E6A</div><div class="ct">文字用 #157A57 · <span class="badge ok">5.3</span></div></div></div>
+    <div class="sw"><div class="top" style="background:#b26b00"></div><div class="meta"><div class="nm">warning</div><div class="hx">#B26B00</div><div class="ct">文字用 #8A5200 · <span class="badge ok">6.4</span></div></div></div>
+    <div class="sw"><div class="top" style="background:#2563a8"></div><div class="meta"><div class="nm">info</div><div class="hx">#2563A8</div><div class="ct"><span class="badge ok">白字 6.1 AA</span></div></div></div>
+    <div class="sw"><div class="top" style="background:#4a5a9e"></div><div class="meta"><div class="nm">link</div><div class="hx">#4A5A9E</div><div class="ct"><span class="badge ok">白字 6.5 AA</span></div></div></div>
+  </div>
+
+  <!-- 04 type -->
+  <h2><span class="n">04</span>字体系统</h2>
+  <p class="desc">Noto Sans SC / 思源黑体，正文 <b>450</b>（Chatly 的签名），标题 600。层级靠字号与字重，不靠颜色堆叠。</p>
+  <div class="card">
+    <div class="type-row"><div class="tag">--cl-fs-display 30/700</div><div class="sample" style="font-size:30px;font-weight:700;letter-spacing:-.01em">连接，更有趣的人</div></div>
+    <div class="type-row"><div class="tag">--cl-fs-heading 24/600</div><div class="sample" style="font-size:24px;font-weight:600">章节标题</div></div>
+    <div class="type-row"><div class="tag">--cl-fs-title 20/600</div><div class="sample" style="font-size:20px;font-weight:600">页面标题 / 弹窗标题</div></div>
+    <div class="type-row"><div class="tag">--cl-fs-subtitle 17/500</div><div class="sample" style="font-size:17px;font-weight:500">会话名 · 列表主文案</div></div>
+    <div class="type-row"><div class="tag">--cl-fs-body 15/450</div><div class="sample" style="font-size:15px;font-weight:450">正文基准 15px，字重 450。今晚老地方见，我提前订位。</div></div>
+    <div class="type-row"><div class="tag">--cl-fs-footnote 14/450</div><div class="sample" style="font-size:14px;font-weight:450;color:var(--t2)">辅助说明 / 次级信息 14px</div></div>
+    <div class="type-row"><div class="tag">--cl-fs-caption 12/450</div><div class="sample" style="font-size:12px;font-weight:450;color:var(--t3)">时间戳 · 角标 12px</div></div>
+    <div class="type-row"><div class="tag">--cl-fs-micro 11/500</div><div class="sample" style="font-size:11px;font-weight:500;color:var(--t3)">微标签 11px（下限）</div></div>
+  </div>
+
+  <!-- 05 spacing / radius / elevation -->
+  <h2><span class="n">05</span>间距 · 圆角 · 层级</h2>
+  <p class="desc">4px 栅格；间距只有 11 档、圆角只有 6 档——有限，才可维护。阴影柔和带紫调，只有浮层才升层。</p>
+  <div class="grid2">
+    <div class="comp">
+      <h3>间距 <span class="s">--cl-space-0..10</span></h3>
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <div style="display:flex;align-items:center;gap:12px"><span style="width:54px;font-size:11.5px;color:var(--t3)">4</span><span style="height:13px;width:4px;background:var(--b500);border-radius:2px"></span></div>
+        <div style="display:flex;align-items:center;gap:12px"><span style="width:54px;font-size:11.5px;color:var(--t3)">8</span><span style="height:13px;width:8px;background:var(--b500);border-radius:2px"></span></div>
+        <div style="display:flex;align-items:center;gap:12px"><span style="width:54px;font-size:11.5px;color:var(--t3)">12</span><span style="height:13px;width:12px;background:var(--b500);border-radius:2px"></span></div>
+        <div style="display:flex;align-items:center;gap:12px"><span style="width:54px;font-size:11.5px;color:var(--t3)">16</span><span style="height:13px;width:16px;background:var(--b500);border-radius:2px"></span></div>
+        <div style="display:flex;align-items:center;gap:12px"><span style="width:54px;font-size:11.5px;color:var(--t3)">24</span><span style="height:13px;width:24px;background:var(--b500);border-radius:2px"></span></div>
+        <div style="display:flex;align-items:center;gap:12px"><span style="width:54px;font-size:11.5px;color:var(--t3)">32</span><span style="height:13px;width:32px;background:var(--b500);border-radius:2px"></span></div>
+      </div>
+    </div>
+    <div class="comp">
+      <h3>圆角 <span class="s">--cl-r-xs..xl</span></h3>
+      <div style="display:flex;flex-wrap:wrap;gap:12px">
+        <div style="text-align:center"><div style="width:54px;height:54px;background:var(--b50);border:1.5px solid var(--b500);border-radius:8px"></div><div style="font-size:10.5px;color:var(--t3);margin-top:5px">8</div></div>
+        <div style="text-align:center"><div style="width:54px;height:54px;background:var(--b50);border:1.5px solid var(--b500);border-radius:12px"></div><div style="font-size:10.5px;color:var(--t3);margin-top:5px">12</div></div>
+        <div style="text-align:center"><div style="width:54px;height:54px;background:var(--b50);border:1.5px solid var(--b500);border-radius:16px"></div><div style="font-size:10.5px;color:var(--t3);margin-top:5px">16</div></div>
+        <div style="text-align:center"><div style="width:54px;height:54px;background:var(--b50);border:1.5px solid var(--b500);border-radius:20px"></div><div style="font-size:10.5px;color:var(--t3);margin-top:5px">20</div></div>
+        <div style="text-align:center"><div style="width:54px;height:54px;background:var(--b50);border:1.5px solid var(--b500);border-radius:28px"></div><div style="font-size:10.5px;color:var(--t3);margin-top:5px">28</div></div>
+      </div>
+      <h3 style="margin-top:22px">阴影 <span class="s">--cl-shadow-1 / 2 / 3</span></h3>
+      <div style="display:flex;gap:14px;margin-top:6px">
+        <div style="width:64px;height:40px;background:#fff;border-radius:10px;box-shadow:var(--shadow1)"></div>
+        <div style="width:64px;height:40px;background:#fff;border-radius:10px;box-shadow:var(--shadow2)"></div>
+        <div style="width:64px;height:40px;background:#fff;border-radius:10px;box-shadow:var(--shadow3)"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 06 phones -->
+  <h2><span class="n">06</span>明 / 暗 双模 · 真机比例</h2>
+  <p class="desc">己方气泡用品牌紫（白字 6.10 AA），对方气泡白底浮起。头像为 Chatly 的圆角方形（squircle），不是圆、也不是微信的方。暗色模式同样一等公民。</p>
+  <div class="phones">
+    <!-- LIGHT -->
+    <div class="phone">
+      <div class="frame"><div class="screen">
+        <div class="navbar">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4l-8 8 8 8"/></svg></div>
+          <div class="title">林小满</div>
+          <div class="ic" style="justify-content:flex-end"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></div>
+        </div>
+        <div class="chatbody">
+          <div class="tsys">10:24</div>
+          <div class="msg in"><div class="ava" style="background:linear-gradient(135deg,#1e8fa8,#2563a8)">林</div><div class="bubble">今晚老地方吃火锅？</div></div>
+          <div class="msg out"><div class="ava" style="background:linear-gradient(135deg,#8b7cf6,#5b4bd8)">我</div><div class="bubble">好，七点见。我提前订位。</div></div>
+          <div class="msg in"><div class="ava" style="background:linear-gradient(135deg,#1e8fa8,#2563a8)">林</div><div class="bubble">记得带上那本设计规范，上次没看完。</div></div>
+          <div class="msg out"><div class="ava" style="background:linear-gradient(135deg,#8b7cf6,#5b4bd8)">我</div><div class="bubble">收到。</div></div>
+        </div>
+        <div class="inputbar">
+          <div class="ib"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0"/><path d="M12 18v3"/></svg></div>
+          <div class="field">输入消息</div>
+          <div class="ib"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><circle cx="9" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1" fill="currentColor" stroke="none"/></svg></div>
+          <div class="ib"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></div>
+        </div>
+      </div></div>
+      <div class="cap">Light · 品牌紫气泡</div>
+    </div>
+    <!-- DARK -->
+    <div class="phone dark">
+      <div class="frame"><div class="screen">
+        <div class="navbar">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4l-8 8 8 8"/></svg></div>
+          <div class="title">林小满</div>
+          <div class="ic" style="justify-content:flex-end"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></div>
+        </div>
+        <div class="chatbody">
+          <div class="tsys">10:24</div>
+          <div class="msg in"><div class="ava" style="background:linear-gradient(135deg,#1e8fa8,#2563a8)">林</div><div class="bubble">今晚老地方吃火锅？</div></div>
+          <div class="msg out"><div class="ava" style="background:linear-gradient(135deg,#8b7cf6,#5b4bd8)">我</div><div class="bubble">好，七点见。我提前订位。</div></div>
+          <div class="msg in"><div class="ava" style="background:linear-gradient(135deg,#1e8fa8,#2563a8)">林</div><div class="bubble">记得带上那本设计规范，上次没看完。</div></div>
+          <div class="msg out"><div class="ava" style="background:linear-gradient(135deg,#8b7cf6,#5b4bd8)">我</div><div class="bubble">收到。</div></div>
+        </div>
+        <div class="inputbar">
+          <div class="ib"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0"/><path d="M12 18v3"/></svg></div>
+          <div class="field">输入消息</div>
+          <div class="ib"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><circle cx="9" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1" fill="currentColor" stroke="none"/></svg></div>
+          <div class="ib"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></div>
+        </div>
+      </div></div>
+      <div class="cap">Dark · 一等公民</div>
+    </div>
+  </div>
+
+  <!-- 07 components -->
+  <h2><span class="n">07</span>组件库</h2>
+  <div class="grid2">
+    <div class="comp">
+      <h3>按钮 <span class="s">高 48 · 圆角 12 · 字 16</span></h3>
+      <div class="btnrow">
+        <button class="btn primary">主操作</button>
+        <button class="btn secondary">次要操作</button>
+        <button class="btn danger">删除 / 危险</button>
+        <button class="btn ghost">文字按钮</button>
+        <button class="btn disabled" disabled>不可用</button>
+      </div>
+      <p style="font-size:12px;color:var(--t3);margin-top:12px;font-weight:450">主按钮底用 brand-600；危险操作只用 danger，绝不用品牌紫。</p>
+    </div>
+    <div class="comp">
+      <h3>单元格 <span class="s">高 56 · 左右 16 · 左缩分隔线</span></h3>
+      <div class="celllist">
+        <div class="cell"><div class="lead"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6"/></svg></div><div class="lb">个人资料</div><div class="vl">林小满</div><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5l7 7-7 7"/></svg></div>
+        <div class="cell"><div class="lead"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 9h16"/></svg></div><div class="lb">账号与安全</div><div class="vl"></div><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5l7 7-7 7"/></svg></div>
+        <div class="cell"><div class="lead"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l7 4v5c0 5-3 7-7 9-4-2-7-4-7-9V7z"/></svg></div><div class="lb">隐私</div><div class="vl"></div><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5l7 7-7 7"/></svg></div>
+      </div>
+    </div>
+    <div class="comp">
+      <h3>输入 / 开关</h3>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div class="input">请输入手机号</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:2px"><span style="font-size:15px;font-weight:450">接收新消息通知</span><span class="switch"></span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:2px"><span style="font-size:15px;font-weight:450">声音与振动</span><span class="switch off"></span></div>
+      </div>
+    </div>
+    <div class="comp">
+      <h3>头像 / 角标 <span class="s">圆角方形 squircle</span></h3>
+      <div class="avrow" style="margin-bottom:18px">
+        <div class="ava" style="width:56px;height:56px;border-radius:18px;background:linear-gradient(135deg,#8b7cf6,#5b4bd8);font-size:22px">林</div>
+        <div class="ava" style="width:44px;height:44px;border-radius:15px;background:linear-gradient(135deg,#1e8fa8,#2563a8);font-size:17px">陈</div>
+        <div class="ava" style="width:36px;height:36px;border-radius:12px;background:linear-gradient(135deg,#c2456e,#a83358);font-size:14px">家</div>
+        <div class="ava" style="width:28px;height:28px;border-radius:9px;background:linear-gradient(135deg,#1e9e6a,#157a57);font-size:12px">组</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:20px">
+        <span style="position:relative;display:inline-flex"><span class="ava" style="width:48px;height:48px;border-radius:16px;background:linear-gradient(135deg,#8b7cf6,#5b4bd8);font-size:18px">文</span><span style="position:absolute;top:-5px;right:-6px;min-width:17px;height:17px;border-radius:99px;background:var(--danger);color:#fff;font-size:10.5px;display:flex;align-items:center;justify-content:center;padding:0 5px;font-weight:600">8</span></span>
+        <span style="position:relative;display:inline-flex"><span class="ava" style="width:48px;height:48px;border-radius:16px;background:linear-gradient(135deg,#1e8fa8,#2563a8);font-size:18px">组</span><span style="position:absolute;top:-3px;right:-3px;width:10px;height:10px;border-radius:99px;background:var(--danger);border:2px solid #fff"></span></span>
+      </div>
+    </div>
+    <div class="comp">
+      <h3>对话框 <span class="s">宽 280 · 圆角 16 · 按钮 52</span></h3>
+      <div class="dialog">
+        <div class="dt">删除该会话？</div>
+        <div class="db">删除后，聊天记录将一并清除且无法恢复。</div>
+        <div class="bs"><button>取消</button><button class="dgr">删除</button></div>
+      </div>
+    </div>
+    <div class="comp">
+      <h3>轻提示 Toast</h3>
+      <div style="padding:18px 0"><div class="toast">已保存到聊天文件</div></div>
+      <p style="font-size:12px;color:var(--t3);font-weight:450">无阻塞反馈，1.5–2s 自动消失；需要决策的用 Dialog。</p>
+    </div>
+  </div>
+
+  <!-- 08 a11y -->
+  <h2><span class="n">08</span>可访问性 · 目标规范</h2>
+  <div class="stack">
+    <div class="note"><b>对比度目标：</b>正文 16.5 / 次级 8.1 / 三级 4.8 / text-muted 4.8 / 动作按钮白字 6.10 / 链接 6.5 / 语义文字 5.0–6.4。text-4（#9a9ab0）仅用于非文本装饰，不用于占位、时间或标签。</div>
+    <div class="note warn"><b>使用边界：</b>brand-400 仅用于通过对比度检查的非文本图标或大字；可读文字达到 4.5:1；动作按钮默认用 brand-600。</div>
+    <div class="note"><b>焦点与触控：</b>目标为统一 <code style="font-family:ui-monospace,Consolas,monospace">:focus-visible</code> 焦点环和 44×44 最小触控区，并尊重 <code style="font-family:ui-monospace,Consolas,monospace">prefers-reduced-motion</code>。此页是规范示例，不表示这些规格都已进入 App。</div>
+  </div>
+
+  <!-- 09 mapping -->
+  <h2><span class="n">09</span>从现有令牌迁移</h2>
+  <p class="desc">下表对照当前运行时令牌与目标名称。间距、层级、动效刻度已有旧命名；配套 CSS 已定义旧名称映射，但尚未导入 App。语义色、text-muted 和完整暗色模式仍需接入。</p>
+  <div class="card" style="padding:8px 4px">
+    <table>
+      <thead><tr><th>现有</th><th>CDLS</th><th class="mono">新值</th><th>变化</th></tr></thead>
+      <tbody>
+        <tr><td>--brand-2 <span class="mono">#6d5df6</span></td><td>--cl-brand-500</td><td class="mono">#6D5DF6</td><td>保留识别色</td></tr>
+        <tr><td>--brand-3 <span class="mono">#5b4bd8</span></td><td>--cl-action</td><td class="mono">#5B4BD8</td><td>当前动作色已与规范一致</td></tr>
+        <tr><td>--bg <span class="mono">#f7f7fb</span></td><td>--cl-bg</td><td class="mono">#F6F6FA</td><td>微调</td></tr>
+        <tr><td>--text-3 <span class="mono">#6b6b82</span></td><td>--cl-text-3</td><td class="mono">#6B6B82</td><td>当前三级文字已满足 AA</td></tr>
+        <tr><td>--text-4 <span class="mono">#9a9ab0</span></td><td>--cl-text-4</td><td class="mono">#9A9AB0</td><td>仅非文本装饰；可读文字迁至 text-muted</td></tr>
+        <tr><td>--r-lg 22</td><td>--cl-r-lg</td><td class="mono">20px</td><td>回到 4px 网格</td></tr>
+        <tr><td>--font 450</td><td>--cl-font / --cl-fw-body</td><td class="mono">Noto Sans SC 450</td><td>保留签名</td></tr>
+        <tr><td>--space-* / --z-* / --dur-*</td><td>--cl-space-* / --cl-z-* / --cl-dur-*</td><td class="mono">映射</td><td>刻度已存在，逐步统一命名</td></tr>
+        <tr><td>（缺失）</td><td>--cl-danger / success / warning / info</td><td class="mono">新增</td><td>补齐 App 语义色</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <footer>
+    <span>Chatly Design Language System v1.0 ｜ 借的是微信的标准化，用的是 Chatly 的紫蓝与 450</span>
+    <span>令牌：docs/chatly-tokens.css　规范：docs/DESIGN-SYSTEM-CHATLY.md</span>
+    <span>实施状态：目标规范。App 运行时代码尚未加载 docs/chatly-tokens.css。</span>
+  </footer>
+</div>
+</body>
+</html>

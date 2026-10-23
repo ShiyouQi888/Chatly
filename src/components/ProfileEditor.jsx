@@ -33,6 +33,7 @@ export default function ProfileEditor({ open, onClose, onSaved, showToast }) {
   const { user, updateProfile, uploadAvatar } = useAuth()
 
   const [nickname, setNickname] = useState('')
+  const [username, setUsername] = useState('')
   const [bio, setBio] = useState('')
   const [gender, setGender] = useState(null)
   const [birthday, setBirthday] = useState('')
@@ -62,6 +63,7 @@ export default function ProfileEditor({ open, onClose, onSaved, showToast }) {
   useEffect(() => {
     if (!open || !user) return
     setNickname(user.nickname || '')
+    setUsername(user.username || '')
     setBio(user.bio || '')
     setGender(user.gender || null)
     setBirthday(user.birthday || '')
@@ -172,6 +174,7 @@ export default function ProfileEditor({ open, onClose, onSaved, showToast }) {
 
   const dirty =
     !!avatarDraft ||
+    username !== (user?.username || '') ||
     nickname.trim() !== (user?.nickname || '') ||
     bio.trim() !== (user?.bio || '') ||
     (gender || null) !== (user?.gender || null) ||
@@ -185,6 +188,10 @@ export default function ProfileEditor({ open, onClose, onSaved, showToast }) {
     tags.join(',') !== (Array.isArray(user?.tags) ? user.tags : []).join(',')
 
   const save = async () => {
+    if (!/^[a-z0-9]{2,24}$/.test(username)) {
+      showToast('用户 ID 需为 2–24 位英文字母或数字，不能包含空格和符号')
+      return
+    }
     const name = nickname.trim()
     if (!name) {
       showToast('昵称不能为空')
@@ -197,6 +204,7 @@ export default function ProfileEditor({ open, onClose, onSaved, showToast }) {
     setSaving(true)
     try {
       const fields = {
+        ...(username !== user.username ? { username } : {}),
         nickname: name,
         bio: bio.trim(),
         gender: gender || null,
@@ -256,6 +264,13 @@ export default function ProfileEditor({ open, onClose, onSaved, showToast }) {
           <button type="button" className="pe-avatar-text" onClick={() => setPickerOpen(true)}>
             更换头像
           </button>
+        </div>
+
+        <div className="pe-field pe-user-id">
+          <label htmlFor="pe-id">用户 ID</label>
+          <input id="pe-id" value={username} maxLength={24} autoCapitalize="none" autoCorrect="off" spellCheck={false}
+            onChange={(e) => setUsername(e.target.value.toLowerCase())} aria-describedby="pe-id-help" disabled={saving} />
+          <small id="pe-id-help">2–24 位英文字母或数字，大写自动转小写；好友关系和聊天记录不受影响。</small>
         </div>
 
         <div className="pe-field">
