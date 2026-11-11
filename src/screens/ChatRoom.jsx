@@ -9,7 +9,7 @@ import React, {
 } from 'react'
 import { useApp } from '../store/AppContext.jsx'
 import { useChat, avatarOf } from '../store/ChatStore.jsx'
-import { api, formatDayLabel, mediaUrl } from '../api/client.js'
+import { api, formatDayLabel, formatDayOnly, mediaUrl } from '../api/client.js'
 import { Avatar, ActionMenu, Sheet, Switch } from '../components/ui.jsx'
 import EmojiPanel, { isEmojiSticker } from '../components/EmojiPanel.jsx'
 import MediaViewer, { VideoBubble, isVideoMessage } from '../components/MediaViewer.jsx'
@@ -40,6 +40,7 @@ import {
   IconTrash,
   IconClose,
   IconCheck,
+  IconChecks,
   IconImage,
   IconFolder,
   IconLocate,
@@ -332,11 +333,31 @@ function ReadReceipt({ m, peersWithState, open, onOpen }) {
   const readers = peersWithState.filter((p) => p.readCursor >= m.id)
   const unreaders = peersWithState.filter((p) => p.readCursor < m.id)
   const allRead = readers.length === total
+  const solo = total === 1
 
+  /* 单聊：一个双勾 + 两个字就够了。
+     以前单聊也画一排 15px 小头像，缩到那个尺寸只剩几个色块，看着像加载失败；
+     而「谁读了」在只有两个人的会话里本来就只有一个答案。 */
+  if (solo) {
+    return (
+      <button
+        type="button"
+        className={`read-tag ${allRead ? 'is-all' : 'is-none'} ${open ? 'is-open' : ''}`}
+        onClick={(e) => onOpen(m.id, e.currentTarget, m.mine)}
+        aria-label={`${allRead ? '已读' : '未读'}，点击查看详情`}
+        aria-expanded={open}
+      >
+        <IconChecks size={14} className="rt-check" />
+        <span className="rt-label">{allRead ? '已读' : '未读'}</span>
+      </button>
+    )
+  }
+
+  /* 群聊保留「已读的人排前面 + 未读置灰 + 最多 3 个再收 +N」：
+     这里「谁还没读」是真信息，去掉反而要每次点开弹层才知道。 */
   const MAX = 3
   const shown = [...readers, ...unreaders].slice(0, MAX)
   const rest = total - shown.length
-
   const label = allRead ? '全部已读' : readers.length === 0 ? '未读' : `${readers.length}/${total} 已读`
 
   return (
@@ -438,7 +459,7 @@ function CallBubble({ m, mine, onRedial }) {
 }
 
 /* ===== 单条消息 ===== */
-function Message({ m, chat, me, peersWithState, readPopMsgId, onLongPress, onOpenImage, onOpenLoc, onOpenRead, polls, onVotePoll, onClosePoll, onOpenPollDetail, onRedialCall, onJumpToMessage, onRetryUpload, flash, favorited, multi, onMultiToggle }) {
+function Message({ m, chat, me, peersWithState, readPopMsgId, first, last, meta, onLongPress, onOpenImage, onOpenLoc, onOpenRead, polls, onVotePoll, onClosePoll, onOpenPollDetail, onRedialCall, onJumpToMessage, onRetryUpload, flash, favorited, multi, onMultiToggle }) {
   /* ⚠️ mine / canRevoke 必须在 useLongPress **之前**算出来：
      长按回调闭包会引用 canRevoke，而 `const` 声明在 hook 之后的话，
      第一次渲染求值回调时就落在 TDZ 里（`Cannot access 'canRevoke' before initialization`）
@@ -468,7 +489,7 @@ function Message({ m, chat, me, peersWithState, readPopMsgId, onLongPress, onOpe
        `data-mid` 是**数字消息 id**，从群设置跳过来时靠它定位这一行
        （乐观消息的 data-id 会是 tmp-xxx，不能用来定位）。 */
     <div
-      className={`msg ${mine ? 'is-mine' : ''} ${flash ? 'is-flash' : ''} ${selected ? 'is-selected' : ''} ${multi?.on ? 'is-multiable' : ''}`}
+      className={`msg ${mine ? 'is-mine' : ''} ${first ? 'is-first' : ''} ${last ? 'is-last' : ''} ${meta ? 'is-meta' : ''} ${flash ? 'is-flash' : ''} ${selected ? 'is-selected' : ''} ${multi?.on ? 'is-multiable' : ''}`}
       data-id={m.id}
       data-mid={typeof m.id === 'number' ? m.id : ''}
       data-kind={m.kind}
@@ -487,12 +508,18 @@ function Message({ m, chat, me, peersWithState, readPopMsgId, onLongPress, onOpe
       )}
       {/* 头像统一放在 msg-col 之前，位置由 flex 方向决定：
           对方行不镜像 → 头像在左；我方行 row-reverse → 头像被排到最右。
-          （若把头像写在 msg-col 之后，row-reverse 会把它翻到左边，两边头像会都挤在左侧。） */}
-      <Avatar src={m.av} name={mine ? me?.nickname : m.sender || chat.name} size={32} radius={10} />
+          **我方不显示头像**（WhatsApp / Telegram / 微信都是这个口径）：
+          自己的消息靠右 + 品牌色气泡已经足够区分，多一个头像只是白占宽度。
+          对方头像只出现在一组消息的最后一条，其余用等宽占位保持左对齐 ——
+          连续三条消息挂三个相同的头像，看起来像三件独立的事。 */}
+      {!mine && (last
+        ? <Avatar src={m.av} name={m.sender || chat.name} size={34} radius={11} />
+        : <span className="msg-av-slot" aria-hidden="true" />)}
 
       <div className="msg-col">
-        {/* 昵称只在群聊显示：单聊能看出是谁，无需重复 */}
-        {!mine && chat.type === 'group' && m.sender && <span className="msg-sender">{m.sender}</span>}
+        {/* 昵称只在群聊显示，且只在一组的**第一条**显示：连续消息每行都挂一次昵称，
+            会把一段连贯的话切成若干条公告。 */}
+        {!mine && first && chat.type === 'group' && m.sender && <span className="msg-sender">{m.sender}</span>}
 
         {m.quote && (
           /* 引用块可点击 → 跳到被引用的那条消息（复用收藏/投票那套跳转：翻页 + 滚动 + 高亮）。
@@ -584,19 +611,23 @@ function Message({ m, chat, me, peersWithState, readPopMsgId, onLongPress, onOpe
           </div>
         )}
 
-        <span className="msg-foot">
-          {m.failed && <em className="msg-failed" aria-label="发送失败">!</em>}
-          {m.pending && <em>发送中</em>}
-          {!m.pending && !m.failed && <em>{m.time}</em>}
-          {mine && !m.pending && !m.failed && (
-            <ReadReceipt
-              m={m}
-              peersWithState={peersWithState}
-              open={readPopMsgId === m.id}
-              onOpen={onOpenRead}
-            />
-          )}
-        </span>
+        {/* 时间 / 已读只在**一组消息的最后一条**出现。以前每条都挂，
+            一屏十条消息就有十对重复时间戳，把对话切得支离破碎。 */}
+        {meta && (
+          <span className="msg-foot">
+            {m.failed && <em className="msg-failed" aria-label="发送失败">!</em>}
+            {m.pending && <em>发送中</em>}
+            {!m.pending && !m.failed && <em>{m.time}</em>}
+            {mine && !m.pending && !m.failed && (
+              <ReadReceipt
+                m={m}
+                peersWithState={peersWithState}
+                open={readPopMsgId === m.id}
+                onOpen={onOpenRead}
+              />
+            )}
+          </span>
+        )}
       </div>
     </div>
   )
@@ -1703,17 +1734,48 @@ export default function ChatRoom({ chat, onBack, jumpTo, onJumped }) {
     }
   }
 
-  /* ---------- 渲染列表（插入日期分隔） ---------- */
+  /* ---------- 渲染列表（插入日期分隔 + 连续消息分组） ----------
+     为什么要分组：不分组时每条消息下面都挂一行「12:32 全部已读」，
+     10 条消息就有 10 对重复的时间戳，一屏只能放 6 条；而且连续同一个人说话时
+     每条都重复头像和昵称，视觉上像 10 条独立事件而不是一段对话。
+     规则沿用主流 IM：同一发送者、同一天、间隔 3 分钟内 → 归为一组，
+     组内只留气泡，头像 / 昵称 / 时间 / 已读只在组末（或组首）出现一次。 */
   const rendered = useMemo(() => {
+    const GROUP_WINDOW = 3 * 60 * 1000
+    /* 卡片类消息（投票 / 图片 / 视频 / 文件 / 位置 / 通话）**各自成组**：
+       把一条文字和一张投票卡并进同一组，卡片会没有尾巴、紧贴文字，
+       看起来像被粘在上一句话上。它们的信息密度本来就和一句话不同。 */
+    const CARD_KINDS = new Set(['poll', 'image', 'video', 'file', 'location', 'call'])
+    const isCard = (m) => CARD_KINDS.has(m?.kind)
+    const msgs = list || []
     const out = []
     let lastDay = ''
-    for (const m of list || []) {
+    for (let i = 0; i < msgs.length; i++) {
+      const m = msgs[i]
       const day = new Date(m.createdAt).toDateString()
-      if (day !== lastDay) {
+      const dayStart = day !== lastDay
+      if (dayStart) {
         lastDay = day
         out.push({ t: 'day', key: `d-${m.id}`, ts: m.createdAt })
       }
-      out.push({ t: 'msg', key: m.id, m })
+      const prev = msgs[i - 1]
+      const next = msgs[i + 1]
+      const sameDayPrev = prev && !dayStart && new Date(prev.createdAt).toDateString() === day
+      const sameDayNext = next && new Date(next.createdAt).toDateString() === day
+      const joinable = !isCard(m)
+      const first = !(joinable && prev && sameDayPrev && !isCard(prev) && prev.senderId === m.senderId && m.createdAt - prev.createdAt <= GROUP_WINDOW)
+      const last = !(joinable && next && sameDayNext && !isCard(next) && next.senderId === m.senderId && next.createdAt - m.createdAt <= GROUP_WINDOW)
+      /* 时间 / 已读默认跟着「组末」走 —— 但如果下一条是**自己刚发的卡片**，
+         就把这一行让给卡片（否则一条文字 + 一张投票卡会各挂一行「12:32 3 人未读」，
+         同一秒的两条消息写了两遍）。
+         ⚠️ 这里不能简单用「下一条不是自己就算组末」：分组窗口是 3 分钟、
+            这个判断窗口如果取 5 分钟，3–5 分钟间隔的两组会出现
+            「有尾巴、有头像、却没有时间和回执」的真空状态。 */
+      const META_WINDOW = 5 * 60 * 1000
+      const nextIsOwnCard = next && sameDayNext && next.senderId === m.senderId &&
+        next.createdAt - m.createdAt <= META_WINDOW && isCard(next)
+      const meta = last && !nextIsOwnCard
+      out.push({ t: 'msg', key: m.id, m, first, last, meta })
     }
     return out
   }, [list])
@@ -1850,11 +1912,14 @@ export default function ChatRoom({ chat, onBack, jumpTo, onJumped }) {
 
         {rendered.map((it) =>
           it.t === 'day' ? (
-            <DayDivider key={it.key} text={formatDayLabel(it.ts)} />
+            <DayDivider key={it.key} text={formatDayOnly(it.ts)} />
           ) : (
             <Message
               key={it.key}
               m={it.m}
+              first={it.first}
+              last={it.last}
+              meta={it.meta}
               chat={chat}
               me={me}
               peersWithState={peersWithState}

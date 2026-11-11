@@ -24,6 +24,7 @@ import path from 'node:path'
 import { URL as NodeURL } from 'node:url'
 import { purgeDebris } from './lib/debris.mjs'
 import { ensureLoggedIn } from './lib/session.mjs'
+import { db } from '../server/src/db.js'
 
 const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe'
 const API = 'http://127.0.0.1:3002/api/v1'
@@ -122,7 +123,15 @@ async function sendAsMe(convId, text) {
    所以先灌够条数，让短视口下必然出现滚动条。 */
 const seededC = []
 for (let i = 1; i <= 6; i++) seededC.push(await sendAsMe(gc.id, `翻转探针 ${i}`))
-console.log(`「${GROUP_C}」已灌入 ${seededC.length} 条我方消息（id ${seededC[0].id}–${seededC[seededC.length - 1].id}）`)
+/* 消息分组之后，6 条连发会被并成**一组**，只有最后一条带收据；
+   而场景 C 要的是「每条都独立、且收据能贴到内容区顶部」。
+   把时间戳按 4 分钟一档拉开（> 3 分钟的分组窗口），它们就各自成组了。 */
+{
+  const setTs = db.prepare('UPDATE messages SET created_at = ? WHERE id = ?')
+  const base = Date.now() - seededC.length * 4 * 60 * 1000
+  seededC.forEach((m, i) => setTs.run(base + i * 4 * 60 * 1000, Number(m.id)))
+}
+console.log(`「${GROUP_C}」已灌入 ${seededC.length} 条我方消息（id ${seededC[0].id}–${seededC[seededC.length - 1].id}，时间戳已拉开成独立组）`)
 
 /* ================= CDP ================= */
 const jget = (p) =>
@@ -309,8 +318,20 @@ window.__myRow = (text) => {
   return [...rows].reverse().find(r => r.textContent.includes(text)) || null
 }
 /* 一次读全：标签文案 + 头像总数 + 置灰数 + 逐个置灰位序（同一快照，自洽） */
+/* 消息分组后，时间与回执只出现在「连续自己发的最后一条」上。
+   断言针对的是这一段话的结果，所以本行没有回执就往后找同组末条。 */
+window.__groupTail = (row) => {
+  if (!row) return null
+  if (row.querySelector('.read-tag')) return row
+  let n = row.nextElementSibling
+  while (n && n.classList.contains('msg') && n.classList.contains('is-mine')) {
+    if (n.querySelector('.read-tag')) return n
+    n = n.nextElementSibling
+  }
+  return null
+}
 window.__receipt = (text) => {
-  const row = window.__myRow(text); if (!row) return null
+  const row = window.__groupTail(window.__myRow(text)); if (!row) return null
   const tag = row.querySelector('.read-tag'); if (!tag) return null
   const avs = [...tag.querySelectorAll('.rt-av')]
   return {
@@ -322,7 +343,7 @@ window.__receipt = (text) => {
   }
 }
 window.__clickReceipt = (text) => {
-  const row = window.__myRow(text); if (!row) return false
+  const row = window.__groupTail(window.__myRow(text)); if (!row) return false
   const tag = row.querySelector('.read-tag'); if (!tag) return false
   tag.click(); return true
 }
@@ -508,7 +529,15 @@ try {
   await sleep(500)
   const scrolled = await js(`(() => {
     const s = document.querySelector('.room-scroll'); if (!s) return null
-    s.scrollTop = 0
+    /* 直接 scrollTop = 0 在「消息刚好一屏」时会停在贴底位置，第一条收据仍在下方。
+       改成把收据本身滚到滚动区顶部 —— 这才是「上方空间不足」的真实触发条件。 */
+    const tag = document.querySelector('.msg.is-mine .read-tag')
+    if (tag) {
+      /* 手动算滚动量，别用 scrollIntoView：它会把整页（含外层容器）一起滚，
+         滚动区的 scrollTop 反而不一定变到最大。 */
+      const delta = tag.getBoundingClientRect().top - s.getBoundingClientRect().top
+      s.scrollTop = Math.min(s.scrollHeight, s.scrollTop + delta - 2)
+    } else s.scrollTop = 0
     return { scrollTop: s.scrollTop, scrollHeight: s.scrollHeight, clientHeight: s.clientHeight }
   })()`)
   await sleep(500)

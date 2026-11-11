@@ -503,18 +503,29 @@ export function formatRelative(ts) {
   return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`
 }
 
-/** 消息分组用的日期标签 */
-export function formatDayLabel(ts) {
+/**
+ * 只要「哪一天」（今天 / 昨天 / 2026/8/11）。
+ *
+ * 聊天里的日期分隔**不带时间**：下面第一条消息自己就写着 12:32，
+ * 分隔条再写一遍就是同一句话出现两次。
+ */
+export function formatDayOnly(ts) {
   const d = new Date(Number(ts))
   const now = new Date()
   const sameDay = (a, b) =>
     a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
 
-  if (sameDay(d, now)) return `今天 ${formatTime(ts)}`
+  if (sameDay(d, now)) return '今天'
   const y = new Date(now)
   y.setDate(y.getDate() - 1)
-  if (sameDay(d, y)) return `昨天 ${formatTime(ts)}`
-  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${formatTime(ts)}`
+  if (sameDay(d, y)) return '昨天'
+  if (d.getFullYear() === now.getFullYear()) return `${d.getMonth() + 1}/${d.getDate()}`
+  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`
+}
+
+/** 日期 + 时间（群公告时间戳这类需要精确到分钟的场合用） */
+export function formatDayLabel(ts) {
+  return `${formatDayOnly(ts)} ${formatTime(ts)}`
 }
 
 /** 动态用的相对时间：「刚刚 / N 分钟前 / N 小时前 / 昨天 HH:mm / M/D」 */

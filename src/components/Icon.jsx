@@ -413,6 +413,15 @@ export const IconCheck = (p) => (
   </S>
 )
 
+/* 双勾 = 已读回执。比「小头像簇」更适合放在时间行里：
+   头像缩到 15px 之后只剩几个彩色方块，看起来像加载失败的图片。 */
+export const IconChecks = (p) => (
+  <S {...p}>
+    <path d="m2.4 12.6 3.9 3.9L14 7.2" />
+    <path d="m10.2 15.5 1 1 7.8-9.2" />
+  </S>
+)
+
 export const IconLogout = (p) => (
   <S {...p}>
     <path d="M14.4 4.6h2.4a2.4 2.4 0 0 1 2.4 2.4v10a2.4 2.4 0 0 1-2.4 2.4h-2.4" />

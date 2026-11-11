@@ -125,7 +125,9 @@
   cursor: not-allowed;
 }
 
-/* ===== 滚动区 ===== */
+/* ===== 滚动区 =====
+   gap 交给消息自己控制（组内 2px / 组间 14px）——
+   统一 16px 会让连续三条短消息之间空得像三件事，一屏只能放 6 条。 */
 .room-scroll {
   flex: 1;
   min-height: 0;
@@ -135,7 +137,7 @@
   padding: var(--space-4);
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: 0;
   background: var(--chat-canvas);
 }
 
@@ -198,6 +200,7 @@
 
 .day-div {
   align-self: center;
+  margin: 18px 0 4px;
   font-size: var(--fs-micro);
   color: var(--text-3);
   background: var(--chat-control);
@@ -216,7 +219,9 @@
 .msg {
   /* 时间行占位高度：msg-col 底部留白，避免与下一条消息重叠。
      18px 是为了容纳已读回执里的 15px 小头像（见 .read-tag）。 */
-  --msg-foot-h: 18px;
+  --msg-foot-h: 16px;
+  /* 组内紧凑、组间留白：连续消息读起来是一段话，换人说话才是新段落 */
+  margin-top: 2px;
   display: flex;
   /* 头像顶对齐：群聊时与昵称顶部齐平，单聊时与气泡顶部齐平（微信/Telegram 惯例）。
      长消息时头像不会沉到气泡底部。 */
@@ -262,12 +267,40 @@
   max-width: min(78%, calc(100% - 46px));
   min-width: 0;
   align-items: flex-start;
-  /* 为下方绝对定位的时间行预留空间，避免与下一条消息重叠 */
-  padding-bottom: var(--msg-foot-h);
+  /* 只有一组消息的**最后一条**需要给时间行留位置；
+     组内其余消息不留，否则每条底部都多出一段空白，节奏全散。 */
+  padding-bottom: 0;
 }
+
+/* 一组里的第一条：与上一组拉开距离 */
+.msg.is-first { margin-top: 8px; }
+
+/* 只有真正显示时间/已读的那条才需要底部占位（is-meta，见 ChatRoom 的分组逻辑） */
+.msg.is-meta .msg-col { padding-bottom: var(--msg-foot-h); }
+
+/* 组内非末条用等宽空槽占住头像位置，保证气泡左边缘整齐 */
+.msg-av-slot {
+  width: 34px;
+  flex: 0 0 34px;
+}
+
+/* 组内消息不画气泡尾巴：一串消息每条形一个尖角，看起来像一排锯齿。
+   只在组末保留尾角，视觉上「这一组话说到这儿结束」。 */
+.msg:not(.is-last) .bubble { border-radius: var(--r-lg); }
 
 .msg.is-mine .msg-col {
   align-items: flex-end;
+}
+
+/* 卡片类消息（投票 / 位置 / 文件 / 图片 / 视频）要更宽：
+   78% 是给文字气泡定的，套到投票卡片上会把选项挤成两行。
+   直接用行上的 data-kind，不必再给组件加类名。 */
+.msg[data-kind="poll"] .msg-col,
+.msg[data-kind="location"] .msg-col,
+.msg[data-kind="file"] .msg-col,
+.msg[data-kind="image"] .msg-col,
+.msg[data-kind="video"] .msg-col {
+  max-width: min(86%, calc(100% - 46px));
 }
 
 /* 从群设置「跳到这条投票」时高亮一下。
@@ -302,7 +335,9 @@
 }
 
 .bubble {
-  padding: var(--space-3) var(--space-4);
+  /* 12/16 的留白在 16px 字号下偏松，短消息会变成一个胖方块；
+     主流 IM 的气泡内边距在 8–12px 之间（Telegram 约 8/12）。 */
+  padding: 10px 14px;
   border-radius: var(--r-lg) var(--r-lg) var(--r-lg) var(--r-tail);
   background: var(--chat-in-bg);
   box-shadow: var(--chat-incoming-shadow);
@@ -329,6 +364,9 @@
   color: var(--chat-outgoing-text);
   box-shadow: var(--chat-outgoing-shadow);
 }
+
+/* 我方组内消息同样去掉尾角（特异性要压过上面那条带 is-mine 的规则） */
+.msg.is-mine:not(.is-last) .bubble { border-radius: var(--r-lg); }
 
 /* 时间 / 已读：绝对定位在气泡下方，左右各自贴外缘 */
 .msg-foot {
