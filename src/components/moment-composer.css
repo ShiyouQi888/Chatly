@@ -50,14 +50,14 @@
 
 .mc-send {
   flex: 0 0 auto;
-  height: 34px;
+  min-height: 44px;
   padding: 0 16px;
   border-radius: var(--r-full);
   font-size: var(--fs-sub);
   font-weight: 650;
-  color: #fff;
+  color: var(--text-on-brand);
   background: var(--brand-grad);
-  box-shadow: 0 6px 16px -8px rgba(107, 92, 246, 0.9);
+  box-shadow: none;
 }
 
 .mc-send:disabled {
@@ -70,13 +70,13 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 14px 16px 24px;
+  padding: 16px 16px 24px;
 }
 
 .mc-textarea {
   width: 100%;
   min-height: 116px;
-  padding: 12px 14px;
+  padding: 12px 16px;
   border-radius: var(--r-md);
   border: 1px solid var(--line-2);
   background: var(--surface);
@@ -128,49 +128,10 @@
 }
 
 .mc-video-meta {
-  margin-top: 6px;
+  margin-top: 8px;
   font-size: var(--fs-micro);
   color: var(--text-4);
   font-variant-numeric: tabular-nums;
-}
-
-.mc-vrow {
-  margin-top: 10px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.mc-vpick {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 34px;
-  padding: 0 13px;
-  border-radius: var(--r-full);
-  font-size: var(--fs-sub);
-  font-weight: 550;
-  color: var(--brand-2);
-  background: var(--brand-soft);
-}
-
-.mc-vpick:active {
-  filter: brightness(0.96);
-}
-
-/* 已经有图片了就选不了视频 —— 禁用要有样子，不是「点了没反应」 */
-.mc-vpick:disabled {
-  color: var(--text-4);
-  background: var(--surface-2);
-  cursor: not-allowed;
-}
-
-.mc-vrow em {
-  font-style: normal;
-  font-size: var(--fs-micro);
-  color: var(--text-4);
-  line-height: 1.5;
 }
 
 .mc-cell-del {
@@ -186,38 +147,17 @@
   background: rgba(10, 10, 16, 0.55);
 }
 
-.mc-cell.is-add {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  border: 1px dashed var(--line-2);
-  color: var(--text-3);
-  background: var(--surface);
-}
-
-.mc-cell.is-add em {
-  font-style: normal;
-  font-size: var(--fs-micro);
-}
-
-.mc-cell.is-add:active {
-  color: var(--brand-2);
-  background: var(--brand-soft);
-}
-
 /* ===== 字段 ===== */
 .mc-field {
   margin-top: 12px;
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
   padding: 0 13px;
   height: 46px;
   border-radius: var(--r-md);
   background: var(--surface);
-  box-shadow: 0 1px 2px rgba(22, 22, 31, 0.04);
+  box-shadow: none;
 }
 
 .mc-field-ic {
@@ -291,26 +231,26 @@
 
 .mc-loc-clear {
   flex: 0 0 auto;
-  width: 30px;
-  height: 30px;
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
   border-radius: var(--r-full);
   background: var(--surface);
   color: var(--text-3);
-  box-shadow: 0 1px 2px rgba(22, 22, 31, 0.04);
+  box-shadow: none;
 }
 
 /* ===== 可见范围 ===== */
 .mc-sec {
-  margin-top: 18px;
+  margin-top: 20px;
 }
 
 .mc-sec h4 {
   font-size: var(--fs-cap);
   font-weight: 600;
   color: var(--text-3);
-  margin-bottom: 9px;
+  margin-bottom: 8px;
 }
 
 .mc-scopes {
@@ -328,7 +268,7 @@
   border-radius: var(--r-md);
   text-align: left;
   background: var(--surface);
-  box-shadow: 0 1px 2px rgba(22, 22, 31, 0.04);
+  box-shadow: none;
 }
 
 .mc-scope b {
@@ -362,7 +302,7 @@
   display: grid;
   place-items: center;
   border-radius: var(--r-full);
-  color: #fff;
+  color: var(--text-on-brand);
   background: var(--brand-grad);
 }
 
@@ -375,7 +315,7 @@
 
 .mc-card-type {
   min-width: 0;
-  padding: 10px 6px;
+  padding: 12px 8px;
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--surface);
@@ -392,9 +332,9 @@
 .mc-card-editor {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   margin-top: 10px;
-  padding: 14px;
+  padding: 16px;
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--surface);
@@ -403,7 +343,7 @@
 .mc-card-label {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   color: var(--text-3);
   font-size: var(--fs-micro);
 }
@@ -414,7 +354,7 @@
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
-  padding: 10px 11px;
+  padding: 12px 12px;
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
   background: var(--bg);
@@ -465,7 +405,7 @@
 }
 
 .mc-card {
-  margin-top: 10px;
+  margin-top: 12px;
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: var(--r-md);
@@ -479,7 +419,7 @@
 }
 
 .mc-card p {
-  margin: 6px 0 0;
+  margin: 8px 0 0;
   color: var(--text-3);
   font-size: var(--fs-micro);
   line-height: 1.5;
@@ -489,7 +429,7 @@
 .mc-card-poll-options {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 8px;
   margin-top: 10px;
 }
 
@@ -559,7 +499,7 @@
 .mc-card-link::after {
   content: '打开链接 ↗';
   display: block;
-  margin-top: 10px;
+  margin-top: 12px;
   color: var(--brand-2);
   font-size: var(--fs-micro);
 }
@@ -580,8 +520,264 @@
 }
 
 .mc-hint {
-  margin-top: 10px;
+  margin-top: 12px;
   font-size: var(--fs-micro);
   color: var(--text-4);
   line-height: 1.6;
+}
+
+/* 内容输入、媒体入口和预览收进同一张输入卡。 */
+.mc-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mc-compose-box {
+  overflow: hidden;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
+}
+
+.mc-compose-box:focus-within {
+  border-color: var(--brand-2);
+  box-shadow: 0 0 0 3px var(--brand-soft);
+}
+
+.mc-compose-box .mc-textarea {
+  display: block;
+  min-height: 116px;
+  padding: 14px 14px 10px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  resize: vertical;
+}
+
+.mc-compose-box .mc-textarea:focus {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.mc-compose-tools {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-top: 1px solid var(--line);
+}
+
+.mc-attach-action {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: var(--brand-soft);
+  color: var(--brand-2);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background var(--dur-fast), border-color var(--dur-fast), color var(--dur-fast);
+}
+
+.mc-attach-action:hover:not(:disabled),
+.mc-attach-action.is-selected {
+  border-color: var(--brand-2);
+  background: var(--brand-soft);
+}
+
+.mc-attach-action:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.mc-attach-action:disabled:not(.is-selected) {
+  background: var(--surface-2);
+  color: var(--text-4);
+  cursor: not-allowed;
+}
+
+.mc-attach-action em {
+  color: inherit;
+  font-size: 10px;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+.mc-compose-count {
+  margin-left: auto;
+  color: var(--text-4);
+  font-size: var(--fs-micro);
+  font-variant-numeric: tabular-nums;
+}
+
+.mc-compose-limits {
+  margin: -2px 12px 10px;
+  color: var(--text-4);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.mc-compose-box .mc-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  max-width: 280px;
+  margin: 0;
+  padding: 0 12px 12px;
+}
+
+.mc-compose-box .mc-video {
+  margin: 0;
+  padding: 0 12px 12px;
+}
+
+.mc-compose-box .mc-video-box {
+  overflow: hidden;
+  border-radius: var(--r-sm);
+}
+
+.mc-compose-box .mc-video-meta {
+  margin-bottom: 0;
+}
+
+/* 次要发布字段合并到一个可展开的设置区，默认只露出当前范围摘要。 */
+.mc-settings-toggle {
+  display: flex;
+  width: 100%;
+  min-height: 56px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text-1);
+  text-align: left;
+}
+
+.mc-settings-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  place-items: center;
+  border-radius: var(--r-sm);
+  background: var(--brand-soft);
+  color: var(--brand-2);
+}
+
+.mc-settings-copy {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 2px;
+}
+
+.mc-settings-copy b {
+  font-size: var(--fs-sub);
+  font-weight: 600;
+}
+
+.mc-settings-copy em {
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: var(--fs-micro);
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mc-settings-chevron {
+  flex: 0 0 auto;
+  color: var(--text-3);
+  transition: transform var(--dur-fast);
+}
+
+.mc-settings-chevron.is-open {
+  transform: rotate(90deg);
+}
+
+.mc-settings-panel {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  animation: mcSettingsIn 160ms ease-out both;
+}
+
+@keyframes mcSettingsIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.mc-settings-panel .mc-field,
+.mc-settings-panel .mc-loc {
+  margin-top: 0;
+}
+
+.mc-settings-panel .mc-sec {
+  margin-top: 8px;
+}
+
+.mc-settings-panel .mc-sec h4 {
+  margin-bottom: 8px;
+}
+
+.mc-settings-panel .mc-scopes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.mc-settings-panel .mc-scope {
+  min-height: 62px;
+  padding: 9px 28px 9px 9px;
+  border: 1px solid transparent;
+}
+
+.mc-settings-panel .mc-scope em {
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.mc-settings-panel .mc-scope i {
+  right: 7px;
+  width: 18px;
+  height: 18px;
+}
+
+.mc-settings-panel .mc-card-type {
+  min-height: 40px;
+  padding-block: 8px;
+}
+
+.mc-attach-action:focus-visible,
+.mc-settings-toggle:focus-visible {
+  outline: 2px solid var(--brand-2);
+  outline-offset: 2px;
+}
+
+.mc-body > .mc-err,
+.mc-body > .mc-hint {
+  margin-top: 0;
+}
+
+@media (max-width: 360px) {
+  .mc-compose-tools { gap: 4px; padding-inline: 8px; }
+  .mc-attach-action { gap: 4px; padding-inline: 7px; }
+  .mc-settings-panel { padding: 10px; }
+  .mc-settings-panel .mc-scope { padding-left: 7px; font-size: 10px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mc-compose-box,
+  .mc-attach-action,
+  .mc-settings-chevron { transition: none; }
+  .mc-settings-panel { animation: none; }
 }

@@ -68,7 +68,7 @@
 /* ===== 头部 ===== */
 .up-hero {
   position: relative;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
 .up-cover {
@@ -76,7 +76,17 @@
   height: 118px;
   border-radius: var(--r-lg);
   overflow: hidden;
-  background: linear-gradient(150deg, #b6a7fb, #7b5cf6 55%, #5b6ef5);
+  background: var(--brand-grad);
+}
+
+/* 与本人主页封面一致，底部柔和过渡到当前主题背景。 */
+.up-cover::after {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 56%, var(--bg) 100%);
+  content: '';
+  pointer-events: none;
 }
 
 /* 对方设置的主页背景（公开资料的一部分，和头像同性质）。
@@ -100,14 +110,14 @@
 .up-cover-a {
   width: 138px;
   height: 138px;
-  right: -34px;
+  right: -36px;
   top: -48px;
 }
 
 .up-cover-b {
   width: 92px;
   height: 92px;
-  left: -26px;
+  left: -28px;
   bottom: -40px;
   background: rgba(255, 255, 255, 0.14);
 }
@@ -122,7 +132,7 @@
 }
 
 .up-idcard h3 {
-  margin-top: 9px;
+  margin-top: 8px;
   font-size: var(--fs-h1);
   font-weight: 700;
   color: var(--text-1);
@@ -132,7 +142,7 @@
   margin-top: 4px;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   font-size: var(--fs-cap);
   color: var(--text-3);
 }
@@ -140,7 +150,7 @@
 .up-uid i {
   font-style: normal;
   font-size: var(--fs-micro);
-  padding: 1px 7px;
+  padding: 1px 8px;
   border-radius: var(--r-full);
   color: var(--text-3);
   background: var(--surface-2);
@@ -152,7 +162,7 @@
 }
 
 .up-bio {
-  margin-top: 9px;
+  margin-top: 8px;
   font-size: var(--fs-sub);
   color: var(--text-2);
   line-height: 1.6;
@@ -162,29 +172,29 @@
 .up-card {
   background: var(--surface);
   border-radius: var(--r-md);
-  padding: 4px 14px;
+  padding: 4px 16px;
   margin-bottom: 12px;
-  box-shadow: 0 1px 2px rgba(22, 22, 31, 0.04);
+  box-shadow: none;
 }
 
 .up-card.is-block {
-  padding: 14px;
+  padding: 16px;
 }
 
 .up-card-title {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   font-size: var(--fs-cap);
   font-weight: 600;
   color: var(--text-3);
-  margin-bottom: 11px;
+  margin-bottom: 12px;
 }
 
 .up-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   padding: 10px 0;
   border-bottom: 1px solid var(--line);
 }
@@ -197,11 +207,11 @@
   width: 30px;
   height: 30px;
   flex: 0 0 auto;
-  border-radius: 10px;
+  border-radius: var(--r-md);
   display: grid;
   place-items: center;
   color: var(--brand-2);
-  background: rgba(124, 92, 246, 0.1);
+  background: var(--brand-soft);
 }
 
 .up-row em {
@@ -217,7 +227,7 @@
   min-width: 0;
   display: flex;
   align-items: baseline;
-  gap: 7px;
+  gap: 8px;
   font-size: var(--fs-sub);
   font-weight: 550;
   color: var(--text-1);
@@ -244,8 +254,8 @@
   align-items: center;
   background: var(--surface);
   border-radius: var(--r-md);
-  padding: 14px 0;
-  box-shadow: 0 1px 2px rgba(22, 22, 31, 0.04);
+  padding: 16px 0;
+  box-shadow: none;
 }
 
 .up-stats > div {
@@ -253,7 +263,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
 }
 
 .up-stats b {
@@ -275,7 +285,7 @@
 }
 
 .up-foot {
-  margin: 14px 0 0;
+  margin: 16px 0 0;
   text-align: center;
   font-size: var(--fs-micro);
   color: var(--text-4);
@@ -284,7 +294,7 @@
 /* ===== 底部动作 ===== */
 .up-acts {
   flex: 0 0 auto;
-  padding: 10px 16px max(14px, env(safe-area-inset-bottom));
+  padding: 12px 16px max(16px, env(safe-area-inset-bottom));
   background: var(--surface);
   box-shadow: 0 -1px 0 var(--line);
 }
@@ -296,12 +306,12 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
+  gap: 8px;
   font-size: var(--fs-body);
   font-weight: 650;
-  color: #fff;
+  color: var(--text-on-brand);
   background: var(--brand-grad);
-  box-shadow: 0 8px 20px -10px rgba(107, 92, 246, 0.9);
+  box-shadow: none;
 }
 
 .up-msg:active {

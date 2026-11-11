@@ -29,7 +29,7 @@ class MainActivity : ComponentActivity() {
                 val showBottomBar = currentRoute in listOf(
                     Screen.Chat.route,
                     Screen.Moments.route,
-                    Screen.Discover.route,
+                    Screen.Contacts.route,
                     Screen.Me.route
                 )
 
@@ -75,11 +75,6 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                         composable(Screen.Moments.route) { MomentsScreen() }
-                        composable(Screen.Discover.route) {
-                            DiscoverScreen(
-                                onScanClick = { navController.navigate("scan") }
-                            )
-                        }
                         composable(Screen.Me.route) {
                             MeScreen(
                                 onSettingsClick = { navController.navigate("settings") },

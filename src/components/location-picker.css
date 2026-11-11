@@ -9,7 +9,7 @@
   z-index: var(--z-modal);
   display: flex;
   flex-direction: column;
-  background: var(--bg);
+  background: var(--chat-canvas);
   animation: lpIn 0.22s var(--ease) both;
 }
 
@@ -26,8 +26,9 @@
   align-items: center;
   gap: 8px;
   padding: calc(var(--safe-top) + 8px) 12px 10px;
-  background: var(--surface);
-  box-shadow: 0 1px 0 var(--line);
+  background: var(--chat-chrome);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--chat-divider);
 }
 
 .lp-bar h2 {
@@ -64,7 +65,7 @@
 
 .lp-send:disabled {
   background: var(--surface-2);
-  color: var(--text-4);
+  color: var(--text-3);
   box-shadow: none;
 }
 
@@ -72,7 +73,7 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 12px 14px 20px;
+  padding: 12px 16px 20px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -87,9 +88,9 @@
 
 .lp-locating {
   position: absolute;
-  left: 10px;
+  left: 12px;
   bottom: 10px;
-  padding: 4px 10px;
+  padding: 4px 12px;
   border-radius: var(--r-full);
   background: rgba(22, 22, 31, 0.62);
   backdrop-filter: blur(8px);
@@ -123,7 +124,7 @@
 }
 
 .lp-search input::placeholder {
-  color: var(--text-4);
+  color: var(--text-3);
 }
 
 .lp-redo {
@@ -140,7 +141,7 @@
 /* 降级说明 / 出错原因：说清是哪一步挂了，别只说「失败」 */
 .lp-notice {
   flex: 0 0 auto;
-  padding: 9px 12px;
+  padding: 8px 12px;
   border-radius: var(--r-sm);
   background: var(--brand-soft);
   color: var(--text-2);
@@ -154,14 +155,14 @@
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .lp-row {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   padding: 10px 12px;
   border-radius: var(--r-md);
   background: var(--surface);
@@ -234,7 +235,7 @@
 }
 
 .lp-cur-tag {
-  padding: 2px 7px;
+  padding: 2px 8px;
   border-radius: var(--r-full);
   background: var(--brand-soft-2);
   color: var(--brand-2);
@@ -248,12 +249,12 @@
   display: grid;
   place-items: center;
   border-radius: var(--r-full);
-  background: var(--brand-2);
-  color: #fff;
+  background: var(--brand-grad);
+  color: var(--text-on-brand);
 }
 
 .lp-empty {
-  padding: 18px 12px;
+  padding: 20px 12px;
   text-align: center;
   font-size: var(--fs-sub);
   color: var(--text-3);

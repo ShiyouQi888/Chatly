@@ -10,6 +10,7 @@ import { createMessage, isMember, memberIds, canSpeak, assertReplyTo } from '../
 import { broadcastToUsers } from '../ws.js'
 import { createPoll, viewPoll, viewPollsByIds, pollConversations, listPolls, votePoll, closePoll } from '../poll.js'
 import { privateMessageGate } from '../friends.js'
+import { notifyMessagePush } from '../message-push.js'
 
 const r = Router()
 r.use(authRequired)
@@ -109,6 +110,8 @@ r.post('/', async (req, res) => {
   })
 
   broadcastToUsers(await memberIds(cid), 'message.new', { message })
+  /* 投票消息也是一条真消息：离线成员需要知道群里发起了投票。 */
+  void notifyMessagePush({ conversationId: cid, senderId: req.user.id, message })
   res.status(201).json({ message, poll: created.poll })
 })
 

@@ -103,6 +103,13 @@ export const api = {
   registerEmail: (payload) => request('/auth/register/email', { method: 'POST', body: payload }),
   me: () => request('/auth/me'),
   wsTicket: () => request('/auth/ws-ticket', { method: 'POST' }),
+  voiceCallIceConfig: () => request('/calls/ice-config'),
+  /** 通话记录（只回元数据，不含任何媒体地址）。before 传上一页的 nextBefore */
+  voiceCalls: ({ limit = 30, before = 0 } = {}) =>
+    request(`/calls?limit=${limit}${before ? `&before=${before}` : ''}`),
+  pushConfig: () => request('/push/config'),
+  savePushSubscription: (subscription) => request('/push/subscription', { method: 'PUT', body: subscription }),
+  deletePushSubscription: (endpoint) => request('/push/subscription', { method: 'DELETE', body: { endpoint } }),
   logout: () => request('/auth/logout', { method: 'POST' }),
 
   /* ---- 资料 ---- */
@@ -364,28 +371,12 @@ export const api = {
   rejectFriendRequest: (id) => request(`/users/friend-requests/${id}/reject`, { method: 'POST' }),
   cancelFriendRequest: (id) => request(`/users/friend-requests/${id}`, { method: 'DELETE' }),
 
-  /* ---- 发现页 ---- */
-  /** 推荐用户。tag 为空=全部；排序由后端按「共同群聊 > 共同兴趣 > 同城」给 */
-  discoverUsers: ({ tag = '', limit = 20, offset = 0 } = {}) => {
-    const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) })
-    if (tag) qs.set('tag', tag)
-    return request(`/discover/recommend?${qs}`)
-  },
-  /** 附近的人：默认按资料地区匹配；双方都明确分享城市后才显示城市中心点估算距离 */
-  discoverNearby: (limit = 20) => request(`/discover/nearby?limit=${limit}`),
-  /** 兴趣标签聚合（人数 + 我是否选了这个标签） */
-  discoverTags: () => request('/discover/tags'),
-  /** 可加入的公开兴趣群（会过滤掉我已经在里面的） */
-  discoverGroups: () => request('/discover/groups'),
+  /* ---- 社群（群聊聚合） ----
+     只返回公开群（`discoverable = 1`）且我不在里面的那些；
+     我加入的群直接用会话列表，不重复请求。 */
+  communities: ({ limit = 20 } = {}) => request(`/communities?limit=${limit}`),
   /** 加入公开群。非公开群会被 403 挡下（不是邀请制） */
-  joinGroup: (groupId) => request(`/discover/groups/${groupId}/join`, { method: 'POST' }),
-  /** 尚未开始、且当前用户有权查看的动态活动 */
-  discoverActivities: (limit = 20) => request(`/discover/activities?limit=${limit}`),
-  /** 仅由公开动态聚合的话题榜 */
-  discoverTopics: () => request('/discover/topics'),
-  viewDiscoverTopic: (topic) => request(`/discover/topics/${encodeURIComponent(topic)}/view`, { method: 'POST' }),
-  discoverTopicMoments: (topic, limit = 20) =>
-    request(`/discover/topics/${encodeURIComponent(topic)}/moments?limit=${limit}`),
+  joinCommunity: (groupId) => request(`/communities/${groupId}/join`, { method: 'POST' }),
 
   /* ---- 位置 ----
      这两条都只是「转发给服务端」——key 在服务端，前端不认识腾讯那套接口。

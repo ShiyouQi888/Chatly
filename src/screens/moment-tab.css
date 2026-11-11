@@ -184,8 +184,8 @@
   gap: var(--space-4);
   padding: var(--space-4) var(--space-4);
   border-radius: var(--r-md);
-  background: linear-gradient(120deg, rgba(155, 140, 251, 0.1), rgba(91, 110, 245, 0.06));
-  border: 1px solid rgba(124, 92, 246, 0.14);
+  background: linear-gradient(120deg, var(--brand-soft), transparent);
+  border: 1px solid var(--brand-soft-2);
 }
 
 .mc-cover {
@@ -193,7 +193,7 @@
   height: 40px;
   border-radius: var(--r-sm);
   background: var(--brand-grad);
-  color: #fff;
+  color: var(--text-on-brand);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -227,7 +227,7 @@
   height: 32px;
   border-radius: var(--r-full);
   background: var(--brand-grad);
-  color: #fff;
+  color: var(--text-on-brand);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -342,7 +342,7 @@
   height: 30px;
   border-radius: var(--r-full);
   background: var(--brand-grad);
-  color: #fff;
+  color: var(--text-on-brand);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -385,7 +385,7 @@
   width: 20px;
   height: 20px;
   border-radius: var(--r-full);
-  background: rgba(124, 92, 246, 0.18);
+  background: var(--brand-soft-2);
   color: var(--brand-2);
   display: flex;
   align-items: center;
@@ -444,7 +444,7 @@
   padding: var(--space-5);
   border-radius: var(--r-md);
   background: var(--brand-grad);
-  color: #fff;
+  color: var(--text-on-brand);
   font-size: var(--fs-body);
   font-weight: 650;
   box-shadow: var(--shadow-brand);

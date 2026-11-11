@@ -12,7 +12,7 @@
 
 /* 列表卡片用 flex gap 排版（不加 margin），详情页的网格有 margin-top —— 对齐它 */
 .md-card .mm-video {
-  margin-top: 11px;
+  margin-top: 12px;
 }
 
 /* 列表里的视频别顶满整张卡片宽度：左右留一点，视觉上更像「一条内容」而不是横幅 */

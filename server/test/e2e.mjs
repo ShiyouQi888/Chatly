@@ -26,9 +26,17 @@ async function login(username) {
   return r.json()
 }
 
-function connect(token) {
+async function connect(token) {
+  /* WS 不接受长期 JWT（会落进代理访问日志），必须先用 REST 换一次性票据。
+     票据 60 秒过期、只能消费一次 —— 所以每条连接都要现换，不能复用。 */
+  const t = await fetch(`${BASE}/api/v1/auth/ws-ticket`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!t.ok) throw new Error(`ws-ticket ${t.status}`)
+  const { ticket } = await t.json()
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(`${WS}?token=${token}`)
+    const ws = new WebSocket(`${WS}?ticket=${encodeURIComponent(ticket)}`)
     const inbox = []
     ws.onmessage = (e) => inbox.push(JSON.parse(e.data))
     ws.onopen = () => resolve({ ws, inbox })
@@ -64,8 +72,12 @@ const api = async (token, path, init = {}) => {
   const { purgeDebris, purgeMessagesAfter, maxMessageId, purgeOrphanUploads } = await import(
     '../../scripts/lib/debris.mjs'
   )
-  purgeDebris({ quiet: true })
-  const msgBaseline = maxMessageId()
+  /* ⚠️ 这几个清理函数**都是 async**，必须 await。
+     曾经这里漏了 await：`maxMessageId()` 返回的是一个 Promise，
+     `Number(Promise)` 得到 NaN → 基线变成 0 → `DELETE FROM messages WHERE id > 0`
+     把演示库的聊天记录整表清空。症状不是报错，而是「消息凭空消失」。 */
+  await purgeDebris({ quiet: true })
+  const msgBaseline = await maxMessageId()
 
   // 1. 登录
   const a = await login('chenmo')
@@ -412,10 +424,12 @@ const api = async (token, path, init = {}) => {
   /* 本轮建的「联调群」也删干净。
      ⚠️ 不能用 DELETE /conversations/:id —— 那个接口是「退出成员」，会话行还在，
      历次跑下来演示库里攒了一堆同名孤儿群。所以这里直接删库。 */
-  const purged = purgeDebris({ quiet: true })
-  // 按基线删本轮消息，而不是只删记住 id 的那几条 —— 撤回留下的空行最容易漏
-  const roundN = purgeMessagesAfter(msgBaseline)
-  purgeOrphanUploads({ quiet: true })
+  const purged = await purgeDebris({ quiet: true })
+  /* 按基线删本轮消息，而不是只删记住 id 的那几条 —— 撤回留下的空行最容易漏。
+     基线为 0 说明库本来就是空的（或基线没取到），这时**什么都不删**：
+     空库没有「本轮之前」可言，宁可留几条测试消息，也不要再清一次库。 */
+  const roundN = msgBaseline > 0 ? await purgeMessagesAfter(msgBaseline) : 0
+  await purgeOrphanUploads({ quiet: true })
   console.log(
     `已清理自检残留：${purged.conversations} 个会话 / ${purged.messages} 条消息，另删掉本轮产生的 ${roundN} 条消息`
   )

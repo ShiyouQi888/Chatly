@@ -17,7 +17,7 @@ if (!quick) {
   const suites = [
     'e2e-realtime', 'check-group', 'check-media', 'check-reply-forward', 'check-poll',
     'check-favorite', 'check-longpress', 'check-privacy', 'check-presence', 'check-driver',
-    'check-me', 'check-profile', 'check-discover', 'check-video', 'check-moment', 'check-geo',
+    'check-me', 'check-profile', 'check-community', 'check-call', 'check-push', 'check-video', 'check-moment', 'check-geo',
     'check-qr', 'check-readreceipt', 'check-emoji', 'check-scroll', 'check-align',
     'check-narrow', 'check-console', 'audit-ui',
   ]

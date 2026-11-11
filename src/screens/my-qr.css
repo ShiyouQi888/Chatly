@@ -1,6 +1,6 @@
 /* ===== 我的二维码 ===== */
 .myqr {
-  padding: 10px 18px 0;
+  padding: 12px 20px 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -10,9 +10,9 @@
 .myqr-card {
   width: 100%;
   background: var(--surface);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   box-shadow: var(--shadow-md);
-  padding: 22px 18px 18px;
+  padding: 24px 20px 20px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -22,7 +22,7 @@
 /* 取景角：4 个绝对定位的 L 形，纯装饰（不是可点区域） */
 .myqr-figure {
   position: relative;
-  padding: 14px;
+  padding: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -74,7 +74,7 @@
 .myqr-user {
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 12px;
   max-width: 100%;
 }
 
@@ -103,19 +103,19 @@
 .myqr-hint {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-size: var(--fs-cap);
   color: var(--text-3);
   background: var(--surface-2);
   border-radius: var(--r-full);
-  padding: 7px 13px;
+  padding: 8px 12px;
   text-align: center;
 }
 
 .myqr-acts {
   width: 100%;
   display: flex;
-  gap: 10px;
+  gap: 12px;
 }
 
 .myqr-btn {
@@ -125,7 +125,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
+  gap: 8px;
   font-size: var(--fs-sub);
   font-weight: 550;
   color: var(--text-1);

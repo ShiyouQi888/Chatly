@@ -36,7 +36,7 @@
  * ## 修在出参上，不修在 SQL 上 —— 为什么
  *
  * 第一版是「给混合大小写的别名补双引号」（`AS userId` → `AS "userId"`）。
- * 它**错**了，而且错得很典型：`discover.js` 里有一句
+ * 它**错**了，而且错得很典型：曾有这样一句查询
  *   `SELECT … (SELECT COUNT(*) …) AS memberCount … WHERE memberCount > 0`
  * —— 别名在**同一个查询体里被引用了一次**。别名带上引号之后，
  * 后面那个未加引号的引用被折叠成 `membercount`，两边**对不上**了：
@@ -268,7 +268,7 @@ function collectAliases(sql) {
  * 把 PG 返回的行**键名还原成 SQL 里写的原始大小写** —— 让两种驱动返回同样的形状。
  *
  * 为什么必须在出参上做、而不是改 SQL：见文件头「修在出参上，不修在 SQL 上」。
- * 简而言之，`discover.js` 有一句 `… AS memberCount … WHERE memberCount > 0`，
+ * 简而言之，曾有这样一句 `… AS memberCount … WHERE memberCount > 0`，
  * 给别名加引号会让查询体里的引用对不上。
  *
  * 没命中任何别名时**原样返回同一个数组**（不复制）—— 绝大多数查询走的是这条快路。

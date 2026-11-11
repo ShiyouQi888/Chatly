@@ -25,7 +25,7 @@
   align-items: center;
   justify-content: center;
   border: 0;
-  border-radius: 11px;
+  border-radius: var(--r-md);
   color: var(--text-2);
   background: transparent;
 }
@@ -39,7 +39,7 @@
 
 .friend-requests-head .fr-add {
   width: auto;
-  gap: 5px;
+  gap: 4px;
   padding: 0 10px;
   color: var(--brand-2);
   background: var(--brand-soft);
@@ -49,7 +49,7 @@
 
 .fr-tabs {
   display: flex;
-  gap: 22px;
+  gap: 24px;
   padding: 0 18px;
   border-bottom: 1px solid var(--line, rgba(20, 24, 40, .08));
   background: var(--surface, #fff);
@@ -60,7 +60,7 @@
   min-height: 46px;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   border: 0;
   color: var(--text-3);
   background: none;
@@ -85,11 +85,11 @@
 
 .fr-tabs i {
   min-width: 17px;
-  padding: 1px 5px;
-  border-radius: 99px;
-  color: #fff;
-  background: #f05268;
-  font-size: 10px;
+  padding: 1px 4px;
+  border-radius: var(--r-full);
+  color: var(--on-danger);
+  background: var(--danger-action);
+  font-size: 11px;
   font-style: normal;
   text-align: center;
 }
@@ -103,7 +103,7 @@
 .fr-row {
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 12px;
   min-height: 76px;
   border-bottom: 1px solid var(--line, rgba(20, 24, 40, .07));
 }
@@ -134,40 +134,40 @@
 .fr-actions {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
 }
 
 .fr-actions button,
 .fr-cancel {
-  min-height: 32px;
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 4px;
   padding: 0 10px;
   border: 0;
-  border-radius: 9px;
-  font-size: 11px;
-  font-weight: 650;
+  border-radius: var(--r-xs);
+  font-size: var(--fs-micro);
+  font-weight: 600;
 }
 
 .fr-accept {
-  color: #fff;
-  background: var(--brand-2);
+  color: var(--text-on-brand);
+  background: var(--brand-grad);
 }
 
 .fr-reject,
 .fr-cancel {
   color: var(--text-2);
-  background: var(--surface-2, #eceef4);
+  background: var(--input);
 }
 
 .fr-error {
   display: flex;
   justify-content: space-between;
-  gap: 10px;
+  gap: 12px;
   padding: 12px;
-  color: #d84c5d;
+  color: var(--danger-ink);
   font-size: 13px;
 }
 

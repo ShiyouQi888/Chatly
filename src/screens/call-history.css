@@ -1,0 +1,83 @@
+/* 通话记录页 —— 与「我的收藏 / 稍后看」同一套列表语言 */
+.call-history { padding: var(--space-1) 0 var(--space-6); }
+
+.ch-filters { display: flex; gap: var(--space-2); padding: var(--space-1) 0 var(--space-4); }
+.ch-filter {
+  min-height: 32px;
+  padding: 0 var(--space-4);
+  border-radius: var(--r-full);
+  background: var(--input);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+.ch-filter.is-on { background: var(--brand-grad); color: var(--text-on-brand); }
+
+.ch-list {
+  padding: 0 var(--space-3);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.ch-row { display: flex; align-items: center; gap: var(--space-2); border-bottom: 1px solid var(--line); }
+.ch-row:last-child { border-bottom: 0; }
+.ch-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 66px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  text-align: left;
+}
+.ch-main:disabled { opacity: .6; }
+.ch-dir { width: 18px; height: 18px; flex: 0 0 18px; display: grid; place-items: center; color: var(--text-3); }
+.ch-row.is-missed .ch-dir { color: var(--danger-ink); }
+.ch-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ch-text b {
+  overflow: hidden;
+  color: var(--text-1);
+  font-size: var(--fs-list);
+  font-weight: 550;
+  line-height: var(--lh-list);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ch-text small {
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.ch-row.is-missed .ch-text small { color: var(--danger-ink); }
+.ch-time { flex: 0 0 auto; color: var(--text-3); font-size: 11px; }
+
+.ch-redial {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--brand-2);
+}
+.ch-redial:active { background: var(--input); }
+.ch-redial:disabled { opacity: .45; }
+
+.ch-state { margin: var(--space-7) 0; color: var(--text-3); text-align: center; font-size: 13px; }
+.ch-state.is-error { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); }
+.ch-state button { min-height: 44px; color: var(--brand-2); font-size: 13px; font-weight: 650; }
+.ch-more {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin-top: var(--space-4);
+  color: var(--brand-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+.ch-more:disabled { opacity: .5; }
+.ch-foot { padding: var(--space-5) 0 0; color: var(--text-3); text-align: center; font-size: 11px; }

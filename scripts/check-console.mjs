@@ -200,8 +200,8 @@ const loginState = await ensureLoggedIn(js)
 await waitFor(`!!document.querySelector('.chat-list .chat-row')`)
 console.log(`  登录态：${loginState === 'already' ? '已登录' : '已用 API 登录演示账号'}`)
 
-// 依次访问四个 Tab
-for (const [i, name] of ['聊天', '动态', '发现', '我'].entries()) {
+// 依次访问五个 Tab（顺序与底栏一致）
+for (const [i, name] of ['聊天', '通讯录', '动态', '社群', '我'].entries()) {
   await js(`(() => { const t=[...document.querySelectorAll('.tabbar .tab')][${i}]; if(t) t.click(); return true })()`)
   await sleep(1100)
   console.log(`  已访问 Tab：${name}`)
@@ -210,7 +210,7 @@ for (const [i, name] of ['聊天', '动态', '发现', '我'].entries()) {
 /* 资料编辑 + 头像选择器：这一片 DOM 最容易踩雷 ——
    头像按钮里套相机角标、预设网格是 12 个 button、日期是原生 date input、
    隐藏 file input 参与受控流程。都点开确认一遍不冒 React 告警。 */
-await js(`(() => { const t=[...document.querySelectorAll('.tabbar .tab')][3]; if(t) t.click(); return true })()`)
+await js(`(() => { const t=[...document.querySelectorAll('.tabbar .tab')][4]; if(t) t.click(); return true })()`)
 await sleep(800)
 if (await js(`!!document.querySelector('.me-editbtn')`)) {
   await js(`document.querySelector('.me-editbtn').click()`)

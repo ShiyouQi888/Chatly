@@ -20,8 +20,8 @@ import VideoPlayer, { fmtTime } from './VideoPlayer.jsx'
 import LocationPicker from './LocationPicker.jsx'
 import {
   IconClose,
-  IconPlus,
   IconTrash,
+  IconImage,
   IconTag,
   IconLocate,
   IconVideo,
@@ -71,6 +71,7 @@ export default function MomentComposer({ open, editing, defaultVisibility = 'pub
   const [locGeo, setLocGeo] = useState(null) // { lat, lng } | null
   const [locOpen, setLocOpen] = useState(false)
   const [visibility, setVisibility] = useState('public')
+  const [advancedOpen, setAdvancedOpen] = useState(false)
   const [media, setMedia] = useState([]) // { url, fileName, fileSize, kind, width, height, duration }
   const [card, setCard] = useState(null) // { kind, data }
   const [busy, setBusy] = useState(false)
@@ -107,6 +108,7 @@ export default function MomentComposer({ open, editing, defaultVisibility = 'pub
     setLocOpen(false)
     /* 编辑保留原可见范围；新建用「我 → 隐私设置」里的默认范围 */
     setVisibility(editing ? editing.visibility || 'public' : defaultVisibility)
+    setAdvancedOpen(Boolean(editing))
     setMedia((editing?.media || []).map((m) => ({ ...m, kind: m.kind || 'image' })))
     setCard(editing?.card ? {
       kind: editing.card.kind,
@@ -123,6 +125,10 @@ export default function MomentComposer({ open, editing, defaultVisibility = 'pub
   if (!open) return null
 
   const hasVideo = media.some((m) => m.kind === 'video')
+  const imageCount = media.filter((m) => m.kind === 'image').length
+  const activeScope = SCOPES.find((scope) => scope.v === visibility)
+  const cardLabel = card?.kind === 'poll' ? '投票' : card?.kind === 'activity' ? '活动' : card?.kind === 'link' ? '链接卡片' : ''
+  const optionSummary = [activeScope?.label, topic.trim() && `#${topic.trim()}`, location.trim(), cardLabel].filter(Boolean).join(' · ')
 
   /** 格式：体积是死的（服务端还有一道），时长得读元数据才知道 */
   const addImages = async (fileList) => {
@@ -160,7 +166,7 @@ export default function MomentComposer({ open, editing, defaultVisibility = 'pub
       return
     }
     if (media.length) {
-      setErr('视频和图片不能混发 —— 先把下面的媒体删掉')
+      setErr('视频和图片不能混发 —— 请先移除已选图片')
       return
     }
     if (f.size > VIDEO_MAX_BYTES) {
@@ -289,63 +295,79 @@ export default function MomentComposer({ open, editing, defaultVisibility = 'pub
       </header>
 
       <div className="mc-body no-scrollbar">
-        <textarea
-          className="mc-textarea"
-          rows={5}
-          value={content}
-          placeholder="分享此刻的想法…"
-          onChange={(e) => setContent(limitCodePoints(e.target.value, CONTENT_MAX))}
-        />
+        <section className="mc-compose-box" aria-label="动态内容">
+          <textarea
+            className="mc-textarea"
+            rows={5}
+            value={content}
+            placeholder="分享此刻的想法…"
+            onChange={(e) => setContent(limitCodePoints(e.target.value, CONTENT_MAX))}
+          />
 
-        {/* 媒体：真实上传的结果，不是本地预览 —— 发布失败不会留下孤儿文件 */}
-        {hasVideo ? (
-          <div className="mc-video">
-            {media.map((m, i) => (
-              <div key={m.url + i} className="mc-video-box">
-                {/* 发布前能直接试播：不给 onOpen，VideoPlayer 就原地播 */}
-                <VideoPlayer src={mediaUrl(m.url)} width={m.width} height={m.height} duration={m.duration} />
-                <button type="button" className="mc-cell-del" aria-label="移除视频" onClick={() => setMedia([])}>
-                  <IconTrash size={13} />
-                </button>
-              </div>
-            ))}
-            <p className="mc-video-meta">
-              {media[0]?.duration ? `${fmtTime(media[0].duration)} · ` : ''}
-              {fmtBytes(media[0]?.fileSize)}
-              {media[0]?.width && media[0]?.height ? ` · ${media[0].width}×${media[0].height}` : ''}
-            </p>
+          {/* 已选媒体与添加入口共用输入框容器，图片 / 视频都留在内容区内。 */}
+          {hasVideo ? (
+            <div className="mc-video">
+              {media.map((m, i) => (
+                <div key={m.url + i} className="mc-video-box">
+                  <VideoPlayer src={mediaUrl(m.url)} width={m.width} height={m.height} duration={m.duration} />
+                  <button type="button" className="mc-cell-del" aria-label="移除视频" onClick={() => setMedia([])}>
+                    <IconTrash size={13} />
+                  </button>
+                </div>
+              ))}
+              <p className="mc-video-meta">
+                {media[0]?.duration ? `${fmtTime(media[0].duration)} · ` : ''}
+                {fmtBytes(media[0]?.fileSize)}
+                {media[0]?.width && media[0]?.height ? ` · ${media[0].width}×${media[0].height}` : ''}
+              </p>
+            </div>
+          ) : imageCount > 0 ? (
+            <div className="mc-grid">
+              {media.map((m, i) => (
+                <div key={m.url + i} className="mc-cell">
+                  <img src={mediaUrl(m.url)} alt={m.fileName || '配图'} />
+                  <button
+                    type="button"
+                    className="mc-cell-del"
+                    aria-label={`删除第 ${i + 1} 张`}
+                    onClick={() => setMedia((list) => list.filter((_, j) => j !== i))}
+                  >
+                    <IconTrash size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="mc-compose-tools">
+            <button
+              type="button"
+              className="mc-attach-action"
+              onClick={() => fileRef.current?.click()}
+              disabled={busy || hasVideo || imageCount >= MAX_MEDIA}
+              aria-label={hasVideo ? '不能添加图片，请先移除已选视频' : imageCount >= MAX_MEDIA ? `图片已达上限，共 ${MAX_MEDIA} 张` : `添加图片，已选 ${imageCount} 张`}
+            >
+              <IconImage size={16} />
+              <span>图片</span>
+              <em>{imageCount}/{MAX_MEDIA}</em>
+            </button>
+            <button
+              type="button"
+              className={`mc-attach-action${hasVideo ? ' is-selected' : ''}`}
+              onClick={() => videoRef.current?.click()}
+              disabled={busy || media.length > 0}
+              aria-label={hasVideo ? '已选择视频' : imageCount ? '不能添加视频，请先移除已选图片' : '选择视频'}
+              aria-pressed={hasVideo}
+              title={`最多 1 个视频 · ${fmtBytes(VIDEO_MAX_BYTES)} 内 · ${VIDEO_MAX_SEC / 60} 分钟内`}
+            >
+              <IconVideo size={16} />
+              <span>{hasVideo ? '已选视频' : '视频'}</span>
+            </button>
+            <span className="mc-compose-count">{[...content].length}/{CONTENT_MAX}</span>
           </div>
-        ) : (
-          <div className="mc-grid">
-            {media.map((m, i) => (
-              <div key={m.url + i} className="mc-cell">
-                <img src={mediaUrl(m.url)} alt={m.fileName || '配图'} />
-                <button
-                  type="button"
-                  className="mc-cell-del"
-                  aria-label={`删除第 ${i + 1} 张`}
-                  onClick={() => setMedia((list) => list.filter((_, j) => j !== i))}
-                >
-                  <IconTrash size={13} />
-                </button>
-              </div>
-            ))}
-            {media.length < MAX_MEDIA && (
-              <button
-                type="button"
-                className="mc-cell is-add"
-                onClick={() => fileRef.current?.click()}
-                disabled={busy}
-                aria-label="添加图片"
-              >
-                <IconPlus size={22} sw={2.2} />
-                <em>
-                  {media.length}/{MAX_MEDIA}
-                </em>
-              </button>
-            )}
-          </div>
-        )}
+          <p className="mc-compose-limits">最多 9 张图片，或 1 个视频（80 MB / 3 分钟内）</p>
+        </section>
+
         <input
           ref={fileRef}
           type="file"
@@ -354,10 +376,9 @@ export default function MomentComposer({ open, editing, defaultVisibility = 'pub
           hidden
           onChange={(e) => {
             addImages(e.target.files)
-            e.target.value = '' // 允许连续选同一批文件
+            e.target.value = ''
           }}
         />
-        {/* 视频单独一个 input：不带 multiple，一次只能选一个（服务端也只收 1 个） */}
         <input
           ref={videoRef}
           type="file"
@@ -369,142 +390,122 @@ export default function MomentComposer({ open, editing, defaultVisibility = 'pub
           }}
         />
 
-        <div className="mc-vrow">
-          <button
-            type="button"
-            className="mc-vpick"
-            onClick={() => videoRef.current?.click()}
-            disabled={busy || media.length > 0}
-            aria-label="选择视频"
-          >
-            <IconVideo size={16} />
-            {hasVideo ? '已选 1 个视频' : '选一个视频'}
-          </button>
-          <em>
-            {media.length > 0 && !hasVideo
-              ? '已选图片，视频与图片不能混发'
-              : `最多 ${MAX_VIDEO} 个 · ${fmtBytes(VIDEO_MAX_BYTES)} 内 · ${VIDEO_MAX_SEC / 60} 分钟内`}
-          </em>
-        </div>
-
-        <div className="mc-field">
-          <span className="mc-field-ic">
-            <IconTag size={16} />
+        <button
+          type="button"
+          className="mc-settings-toggle"
+          aria-expanded={advancedOpen}
+          onClick={() => setAdvancedOpen((value) => !value)}
+        >
+          <span className="mc-settings-icon"><IconTag size={16} /></span>
+          <span className="mc-settings-copy">
+            <b>发布设置</b>
+            <em>{optionSummary || '选择可见范围，添加话题、位置或卡片'}</em>
           </span>
-          <input
-            value={topic}
-            placeholder="话题，例如：周末出逃"
-            onChange={(e) => setTopic(limitCodePoints(e.target.value, TOPIC_MAX))}
-          />
-        </div>
+          <IconChevron className={`mc-settings-chevron${advancedOpen ? ' is-open' : ''}`} size={16} />
+        </button>
 
-        {/* 位置：走**共用**的「选位置」面板（和聊天发位置同一套），
-            这样「附近有哪些地方」「没配 key 怎么降级」在两处一定是一致的。
-            面板里也支持手动输入地点名 —— 手输的没有坐标，卡片上会写明。 */}
-        <div className="mc-loc">
-          <button
-            type="button"
-            className={`mc-field is-tap ${location ? 'is-set' : ''}`}
-            onClick={() => setLocOpen(true)}
-            data-testid="mc-loc-pick"
-          >
-            <span className="mc-field-ic">
-              <IconLocate size={16} />
-            </span>
-            <span className="mc-loc-body">
-              {location ? <b>{location}</b> : <em>定位（可留空）</em>}
-              {location && <em>{locGeo ? '带坐标，可在地图上看' : '只有地点名，不带坐标'}</em>}
-            </span>
-            <IconChevron size={15} />
-          </button>
-          {location && (
-            <button
-              type="button"
-              className="mc-loc-clear"
-              aria-label="清除位置"
-              onClick={() => {
-                setLocation('')
-                setLocGeo(null)
-              }}
-            >
-              <IconClose size={15} />
-            </button>
-          )}
-        </div>
+        {advancedOpen && (
+          <section className="mc-settings-panel" id="mc-advanced-settings" aria-label="更多发布设置">
+            <div className="mc-field">
+              <span className="mc-field-ic"><IconTag size={16} /></span>
+              <input
+                value={topic}
+                placeholder="话题，例如：周末出逃"
+                aria-label="添加话题"
+                onChange={(e) => setTopic(limitCodePoints(e.target.value, TOPIC_MAX))}
+              />
+            </div>
 
-        <div className="mc-sec">
-          <h4>可见范围</h4>
-          <div className="mc-scopes">
-            {SCOPES.map((s) => (
+            <div className="mc-loc">
               <button
-                key={s.v}
                 type="button"
-                className={`mc-scope ${visibility === s.v ? 'is-on' : ''}`}
-                onClick={() => setVisibility(s.v)}
-                aria-pressed={visibility === s.v}
+                className={`mc-field is-tap ${location ? 'is-set' : ''}`}
+                onClick={() => setLocOpen(true)}
+                data-testid="mc-loc-pick"
               >
-                <b>{s.label}</b>
-                <em>{s.desc}</em>
-                {visibility === s.v && (
-                  <i>
-                    <IconCheck size={12} sw={3} />
-                  </i>
-                )}
+                <span className="mc-field-ic"><IconLocate size={16} /></span>
+                <span className="mc-loc-body">
+                  {location ? <b>{location}</b> : <em>定位（可留空）</em>}
+                  {location && <em>{locGeo ? '带坐标，可在地图上看' : '只有地点名，不带坐标'}</em>}
+                </span>
+                <IconChevron size={15} />
               </button>
-            ))}
-          </div>
-        </div>
+              {location && (
+                <button
+                  type="button"
+                  className="mc-loc-clear"
+                  aria-label="清除位置"
+                  onClick={() => { setLocation(''); setLocGeo(null) }}
+                >
+                  <IconClose size={15} />
+                </button>
+              )}
+            </div>
 
-        <div className="mc-sec">
-          <h4>添加卡片（选填）</h4>
-          <div className="mc-card-types">
-            <button type="button" className={`mc-card-type ${card?.kind === 'poll' ? 'is-on' : ''}`} onClick={() => chooseCard('poll')} aria-pressed={card?.kind === 'poll'}>
-              投票
-            </button>
-            <button type="button" className={`mc-card-type ${card?.kind === 'activity' ? 'is-on' : ''}`} onClick={() => chooseCard('activity')} aria-pressed={card?.kind === 'activity'}>
-              活动
-            </button>
-            <button type="button" className={`mc-card-type ${card?.kind === 'link' ? 'is-on' : ''}`} onClick={() => chooseCard('link')} aria-pressed={card?.kind === 'link'}>
-              链接卡片
-            </button>
-          </div>
-          {card?.kind === 'poll' && (
-            <div className="mc-card-editor">
-              <label className="mc-card-label">投票问题<input value={card.data.question} placeholder="你更喜欢哪种？" onChange={(e) => updateCard('question', limitCodePoints(e.target.value, 120))} /></label>
-              <div className="mc-card-options">
-                {card.data.options.map((option, index) => (
-                  <div className="mc-card-option" key={index}>
-                    <input aria-label={`选项 ${index + 1}`} value={option} placeholder={`选项 ${index + 1}`} onChange={(e) => updateCard('options', card.data.options.map((x, i) => i === index ? limitCodePoints(e.target.value, 60) : x))} />
-                    {card.data.options.length > 2 && <button type="button" onClick={() => updateCard('options', card.data.options.filter((_, i) => i !== index))} aria-label={`删除选项 ${index + 1}`}>移除</button>}
-                  </div>
+            <div className="mc-sec">
+              <h4>可见范围</h4>
+              <div className="mc-scopes">
+                {SCOPES.map((scope) => (
+                  <button
+                    key={scope.v}
+                    type="button"
+                    className={`mc-scope ${visibility === scope.v ? 'is-on' : ''}`}
+                    onClick={() => setVisibility(scope.v)}
+                    aria-pressed={visibility === scope.v}
+                  >
+                    <b>{scope.label}</b>
+                    <em>{scope.desc}</em>
+                    {visibility === scope.v && <i><IconCheck size={12} sw={3} /></i>}
+                  </button>
                 ))}
               </div>
-              {card.data.options.length < 6 && <button type="button" className="mc-card-add" onClick={() => updateCard('options', [...card.data.options, ''])}>＋ 添加选项</button>}
-              <label className="mc-card-check"><input type="checkbox" checked={card.data.multi} onChange={(e) => updateCard('multi', e.target.checked)} /> 允许多选</label>
             </div>
-          )}
-          {card?.kind === 'activity' && (
-            <div className="mc-card-editor">
-              <label className="mc-card-label">活动名称<input value={card.data.title} placeholder="周末一起去徒步" onChange={(e) => updateCard('title', limitCodePoints(e.target.value, 100))} /></label>
-              <label className="mc-card-label">开始时间<input type="datetime-local" value={card.data.startsAt} onChange={(e) => updateCard('startsAt', e.target.value)} /></label>
-              <label className="mc-card-label">活动地点<input value={card.data.location} placeholder="填写集合地点（选填）" onChange={(e) => updateCard('location', limitCodePoints(e.target.value, 120))} /></label>
-              <label className="mc-card-label">活动说明<textarea value={card.data.description} placeholder="补充活动安排（选填）" onChange={(e) => updateCard('description', limitCodePoints(e.target.value, 500))} /></label>
-            </div>
-          )}
-          {card?.kind === 'link' && (
-            <div className="mc-card-editor">
-              <label className="mc-card-label">链接地址<input type="url" value={card.data.url} placeholder="https://example.com" onChange={(e) => updateCard('url', limitCodePoints(e.target.value, 2048))} /></label>
-              <label className="mc-card-label">卡片标题<input value={card.data.title} placeholder="给链接起个标题" onChange={(e) => updateCard('title', limitCodePoints(e.target.value, 120))} /></label>
-              <label className="mc-card-label">链接简介<textarea value={card.data.description} placeholder="简单介绍这个链接（选填）" onChange={(e) => updateCard('description', limitCodePoints(e.target.value, 300))} /></label>
-            </div>
-          )}
-        </div>
 
+            <div className="mc-sec">
+              <h4>添加卡片（选填）</h4>
+              <div className="mc-card-types">
+                <button type="button" className={`mc-card-type ${card?.kind === 'poll' ? 'is-on' : ''}`} onClick={() => chooseCard('poll')} aria-pressed={card?.kind === 'poll'}>投票</button>
+                <button type="button" className={`mc-card-type ${card?.kind === 'activity' ? 'is-on' : ''}`} onClick={() => chooseCard('activity')} aria-pressed={card?.kind === 'activity'}>活动</button>
+                <button type="button" className={`mc-card-type ${card?.kind === 'link' ? 'is-on' : ''}`} onClick={() => chooseCard('link')} aria-pressed={card?.kind === 'link'}>链接卡片</button>
+              </div>
+              {card?.kind === 'poll' && (
+                <div className="mc-card-editor">
+                  <label className="mc-card-label">投票问题<input value={card.data.question} placeholder="你更喜欢哪种？" onChange={(e) => updateCard('question', limitCodePoints(e.target.value, 120))} /></label>
+                  <div className="mc-card-options">
+                    {card.data.options.map((option, index) => (
+                      <div className="mc-card-option" key={index}>
+                        <input aria-label={`选项 ${index + 1}`} value={option} placeholder={`选项 ${index + 1}`} onChange={(e) => updateCard('options', card.data.options.map((value, i) => i === index ? limitCodePoints(e.target.value, 60) : value))} />
+                        {card.data.options.length > 2 && <button type="button" onClick={() => updateCard('options', card.data.options.filter((_, i) => i !== index))} aria-label={`删除选项 ${index + 1}`}>移除</button>}
+                      </div>
+                    ))}
+                  </div>
+                  {card.data.options.length < 6 && <button type="button" className="mc-card-add" onClick={() => updateCard('options', [...card.data.options, ''])}>＋ 添加选项</button>}
+                  <label className="mc-card-check"><input type="checkbox" checked={card.data.multi} onChange={(e) => updateCard('multi', e.target.checked)} /> 允许多选</label>
+                </div>
+              )}
+              {card?.kind === 'activity' && (
+                <div className="mc-card-editor">
+                  <label className="mc-card-label">活动名称<input value={card.data.title} placeholder="周末一起去徒步" onChange={(e) => updateCard('title', limitCodePoints(e.target.value, 100))} /></label>
+                  <label className="mc-card-label">开始时间<input type="datetime-local" value={card.data.startsAt} onChange={(e) => updateCard('startsAt', e.target.value)} /></label>
+                  <label className="mc-card-label">活动地点<input value={card.data.location} placeholder="填写集合地点（选填）" onChange={(e) => updateCard('location', limitCodePoints(e.target.value, 120))} /></label>
+                  <label className="mc-card-label">活动说明<textarea value={card.data.description} placeholder="补充活动安排（选填）" onChange={(e) => updateCard('description', limitCodePoints(e.target.value, 500))} /></label>
+                </div>
+              )}
+              {card?.kind === 'link' && (
+                <div className="mc-card-editor">
+                  <label className="mc-card-label">链接地址<input type="url" value={card.data.url} placeholder="https://example.com" onChange={(e) => updateCard('url', limitCodePoints(e.target.value, 2048))} /></label>
+                  <label className="mc-card-label">卡片标题<input value={card.data.title} placeholder="给链接起个标题" onChange={(e) => updateCard('title', limitCodePoints(e.target.value, 120))} /></label>
+                  <label className="mc-card-label">链接简介<textarea value={card.data.description} placeholder="简单介绍这个链接（选填）" onChange={(e) => updateCard('description', limitCodePoints(e.target.value, 300))} /></label>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
         {err && <p className="mc-err">{err}</p>}
         {/* 说清楚取消的代价：图是选中时就传上去了，取消不会去删服务器上的文件。
             与其含糊带过，不如写出来 —— 这些文件由 cleanup 脚本按「无人引用」回收。 */}
         <p className="mc-hint">
-          {[...content].length}/{CONTENT_MAX} · 图片 / 视频选中即上传，取消后由清理脚本回收
+          图片 / 视频选中即上传，取消后由清理脚本回收
         </p>
       </div>
 

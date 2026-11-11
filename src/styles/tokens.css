@@ -1,73 +1,119 @@
 :root {
-  /* ===== 主色：紫蓝渐变 ===== */
-  --brand-1: #8b7cf6;
-  --brand-2: #6d5df6;
-  /* 动作色：白字 6.10:1（旧 #5b6ef5 仅 4.21，不够 AA；CDLS 定为 #5b4bd8） */
-  --brand-3: #5b4bd8;
-  --brand-action: #5b4bd8;
-  /* 承载白字的品牌底一律走这条「安全渐变」：两端均 ≥4.6:1，不再用跨明暗的渐变 */
-  --brand-grad: linear-gradient(135deg, #6d5df6 0%, #5b4bd8 100%);
-  --brand-soft: rgba(124, 92, 246, 0.1);
-  --brand-soft-2: rgba(124, 92, 246, 0.18);
+  /* Brand palette. Theme selection updates the primary and action colors. */
+  --primary: var(--brand-2);
+  --primary-end: var(--brand-3);
+  --on-primary: #ffffff;
+  --brand-1: var(--primary);
+  --brand-ink-light: #5b4bd8;
+  --brand-ink-dark: #a69eff;
+  --brand-2: var(--brand-ink-light);
+  --brand-3: var(--primary-end);
+  --brand-action: var(--primary-end);
+  --brand-grad: linear-gradient(135deg, var(--primary) 0%, var(--primary-end) 100%);
+  --brand-soft: rgba(109, 93, 246, 0.14);
+  --brand-soft-2: rgba(109, 93, 246, 0.2);
+  --brand-pulse: rgba(109, 93, 246, 0.45);
+  --brand-pulse-clear: rgba(109, 93, 246, 0);
+  --accent: var(--primary);
 
-  /* ===== 强调色 ===== */
-  --accent-cyan: #39c9f5;
-  --accent-mint: #34d3a6;
-  --accent-pink: #f97ca8;
-  --accent-amber: #ffb43f;
+  /* Status colors are independent of the selected brand theme. */
+  --cyan: #39c9f5;
+  --mint: #34d3a6;
+  --pink: #f97ca8;
+  --amber: #ffb43f;
+  --accent-cyan: var(--cyan);
+  --accent-mint: var(--mint);
+  --accent-pink: var(--pink);
+  --accent-amber: var(--amber);
 
-  /* ===== 背景 / 表面 ===== */
-  --bg: #f7f7fb;
+  /* Light surfaces and text. Keep the legacy aliases during migration. */
+  --canvas: #f7f7fb;
+  --bg: var(--canvas);
   --bg-warm: #fbfaff;
   --surface: #ffffff;
-  --surface-2: #f2f2f8;
-  --surface-glass: rgba(255, 255, 255, 0.72);
-
-  /* ===== 文字 ===== */
-  --text-1: #16161f;
-  --text-2: #4a4a5a;
-  /* 三级说明：旧 #8c8ca0 仅 3.08:1，改为 4.8:1（CDLS P0 修复） */
-  --text-3: #6b6b82;
-  /* 四级：仅非文本装饰，禁止用于占位符或任何可读信息（白底对比度不足） */
-  --text-4: #9a9ab0;
-  --text-on-brand: #ffffff;
-  /* 链接色：独立于品牌紫（白字 6.5:1） */
+  --input: #f0f0f6;
+  --surface-2: var(--input);
+  --surface-3: #e6e6f0;
+  --surface-glass: rgba(255, 255, 255, 0.82);
+  --text-1: #1a1a2e;
+  --text-2: #55556b;
+  --text-3: #6f6f86;
+  --text-4: #b5b5c6;
+  --text-on-brand: var(--on-primary);
   --link: #4a5a9e;
+  --danger: #e5484d;
+  --danger-ink: #b42336;
+  --danger-soft: rgba(229, 72, 77, 0.1);
+  --danger-action: #b42336;
+  --on-danger: #ffffff;
+  --warning-ink: #805b00;
+  --warning-soft: rgba(255, 180, 63, 0.14);
+  --info-ink: #24627a;
+  --info-soft: rgba(57, 201, 245, 0.16);
 
-  /* ===== 分隔 / 阴影 ===== */
-  --line: rgba(22, 22, 31, 0.07);
-  --line-2: rgba(22, 22, 31, 0.12);
-  --shadow-sm: 0 1px 2px rgba(22, 22, 31, 0.04), 0 2px 8px rgba(22, 22, 31, 0.04);
-  --shadow-md: 0 4px 16px rgba(22, 22, 31, 0.08);
-  --shadow-lg: 0 12px 32px rgba(22, 22, 31, 0.12);
-  --shadow-brand: 0 6px 20px rgba(109, 93, 246, 0.32);
+  /* Chat semantic colors. */
+  --chat-canvas: var(--canvas);
+  --chat-bg: var(--canvas);
+  --chat-surface: var(--surface);
+  --chat-control: var(--input);
+  --chat-input: var(--input);
+  --chat-chrome: var(--surface-glass);
+  --chat-divider: var(--line);
+  --chat-muted: var(--text-3);
+  --chat-selection: var(--brand-soft);
+  --chat-outgoing: var(--brand-grad);
+  --chat-out-bg: var(--brand-grad);
+  --chat-outgoing-text: var(--on-primary);
+  --chat-outgoing-shadow: var(--shadow-brand);
+  --chat-out-text: var(--on-primary);
+  --chat-in-bg: var(--surface);
+  --chat-in-text: var(--text-1);
+  --chat-incoming-shadow: var(--e1);
 
-  /* ===== 圆角 ===== */
+  /* E0 is flat content on a surface; only E1 and E2 cast shadows. */
+  --line: #ececf3;
+  --line-2: #dddde8;
+  --line-strong: #c9c9d8;
+  --e1: 0 1px 2px rgba(26, 26, 46, 0.06);
+  --e2: 0 8px 24px rgba(26, 26, 46, 0.1);
+  --shadow-sm: none;
+  --shadow-md: var(--e1);
+  --shadow-lg: var(--e2);
+  --shadow-brand: none;
+
+  /* Shape scale from the design system. */
   --r-xs: 8px;
-  --r-sm: 12px;
-  --r-md: 16px;
-  --r-lg: 22px;
-  --r-xl: 28px;
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 18px;
+  --r-tail: 6px;
   --r-full: 999px;
 
-  /* ===== 字号 ===== */
+  /* Role-based type scale; all roles follow the user's font-size setting. */
   --font-scale: 1;
-  --fs-display: calc(30px * var(--font-scale));
-  --fs-h1: calc(22px * var(--font-scale));
-  --fs-h2: calc(17px * var(--font-scale));
+  --fs-display: calc(28px * var(--font-scale));
+  --fs-h1: calc(28px * var(--font-scale));
+  --fs-h2: calc(20px * var(--font-scale));
+  --fs-list: calc(16px * var(--font-scale));
   --fs-body: calc(15px * var(--font-scale));
-  --fs-sub: calc(13.5px * var(--font-scale));
-  --fs-cap: calc(12px * var(--font-scale));
+  --fs-sub: calc(13px * var(--font-scale));
+  --fs-cap: calc(13px * var(--font-scale));
   --fs-micro: calc(11px * var(--font-scale));
+  --lh-display: 1.286;
+  --lh-section: 1.4;
+  --lh-list: 1.5;
+  --lh-body: 1.467;
+  --lh-sub: 1.385;
+  --lh-micro: 1.273;
 
-  /* ===== 动效 ===== */
-  --ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
-  --dur-fast: 140ms;
-  --dur: 200ms;
-  --dur-slow: 300ms;
-
-  /* ===== 间距（4px 基准，仅 11 档；padding/margin/gap 只许用这些） ===== */
+  /* 4pt spacing grid. --space-1 remains a 2px optical adjustment for legacy micro-gaps. */
+  --space-unit: 4px;
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-6: 24px;
+  --s-8: 32px;
   --space-0: 0;
   --space-1: 2px;
   --space-2: 4px;
@@ -79,8 +125,14 @@
   --space-8: 32px;
   --space-9: 40px;
   --space-10: 48px;
+  --space-11: 64px;
 
-  /* ===== 层级（消灭散值 z-index） ===== */
+  /* Animation, elevation, and layout. */
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur: 200ms;
+  --dur-slow: 320ms;
   --z-base: 0;
   --z-raised: 10;
   --z-sticky: 20;
@@ -88,17 +140,50 @@
   --z-modal: 200;
   --z-toast: 300;
   --z-tooltip: 400;
-
-  /* ===== 焦点 ===== */
-  --focus-ring: rgba(109, 92, 246, 0.55);
-
-  /* ===== 布局 ===== */
-  /* 底部导航的最小总高度：包含触控区与设备安全区，实际高度由内容撑开。 */
-  --tabbar-h: 58px;
+  --focus-ring: rgba(109, 93, 246, 0.55);
   --tabbar-h: max(58px, calc(56px + env(safe-area-inset-bottom, 0px)));
-  /* 顶部留白：真机由系统状态栏占位，桌面预览需要显式留出 */
-  --safe-top: 14px;
+  --safe-top: max(14px, env(safe-area-inset-top, 0px));
+  --font: "Noto Sans SC", "PingFang SC", system-ui, "Microsoft YaHei", sans-serif;
+}
 
-  --font: "Noto Sans SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei",
-    -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+/* Dark mode applies only to the Chatly client. The admin console owns its palette. */
+html[data-app="chat"][data-color-mode="dark"] {
+  color-scheme: dark;
+  --canvas: #101018;
+  --bg: var(--canvas);
+  --bg-warm: #101018;
+  --surface: #1a1a26;
+  --input: #242434;
+  --surface-2: var(--input);
+  --surface-3: #303044;
+  --surface-glass: rgba(26, 26, 38, 0.88);
+  --chat-surface: var(--input);
+  --chat-in-bg: var(--input);
+  --brand-2: var(--brand-ink-dark);
+  --text-1: #f2f2f8;
+  --text-2: #c4c4d4;
+  --text-3: #9a9ab0;
+  --text-4: #68687c;
+  --link: #b2b6ff;
+  --danger: #ff7278;
+  --danger-ink: #ff858b;
+  --danger-soft: rgba(255, 114, 120, 0.14);
+  --danger-action: #b42336;
+  --on-danger: #ffffff;
+  --warning-ink: #f5c86c;
+  --warning-soft: rgba(255, 180, 63, 0.16);
+  --info-ink: #83d8ef;
+  --info-soft: rgba(57, 201, 245, 0.16);
+  --line: #2a2a3a;
+  --line-2: #3a3a4d;
+  --line-strong: #4c4c60;
+  --e1: 0 1px 2px rgba(0, 0, 0, 0.24);
+  --e2: 0 8px 24px rgba(0, 0, 0, 0.36);
+  --shadow-md: var(--e1);
+  --shadow-lg: var(--e2);
+  --focus-ring: rgba(160, 151, 255, 0.72);
+}
+
+html[data-app="chat"][data-color-mode="light"] {
+  color-scheme: light;
 }

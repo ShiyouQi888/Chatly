@@ -14,7 +14,7 @@ import conversationRoutes from './routes/conversations.js'
 import messageRoutes from './routes/messages.js'
 import userRoutes from './routes/users.js'
 import momentRoutes from './routes/moments.js'
-import discoverRoutes from './routes/discover.js'
+import communityRoutes from './routes/community.js'
 import geoRoutes from './routes/geo.js'
 import pollRoutes from './routes/polls.js'
 import favoriteRoutes from './routes/favorites.js'
@@ -25,6 +25,8 @@ import devicesRoutes from './routes/devices.js'
 import feedbackRoutes from './routes/feedback.js'
 import notificationRoutes from './routes/notifications.js'
 import statusRoutes from './routes/statuses.js'
+import callRoutes from './routes/calls.js'
+import pushRoutes from './routes/push.js'
 import adminRoutes from './routes/admin.js'
 import { bootstrapAdmin } from './admin-bootstrap.js'
 import { bootstrapUserIds } from './user-ids.js'
@@ -92,7 +94,7 @@ app.use('/api/v1/conversations', conversationRoutes)
 app.use('/api/v1/messages', messageRoutes)
 app.use('/api/v1/users', userRoutes)
 app.use('/api/v1/moments', momentRoutes)
-app.use('/api/v1/discover', discoverRoutes)
+app.use('/api/v1/communities', communityRoutes)
 app.use('/api/v1/geo', geoRoutes)
 app.use('/api/v1/polls', pollRoutes)
 app.use('/api/v1/favorites', favoriteRoutes)
@@ -103,6 +105,8 @@ app.use('/api/v1/devices', devicesRoutes)
 app.use('/api/v1/feedback', feedbackRoutes)
 app.use('/api/v1/notifications', notificationRoutes)
 app.use('/api/v1/statuses', statusRoutes)
+app.use('/api/v1/calls', callRoutes)
+app.use('/api/v1/push', pushRoutes)
 app.use('/api/v1/admin', adminRoutes)
 
 /* ---------- 404 / 错误 ---------- */

@@ -44,7 +44,12 @@ import {
   IconFolder,
   IconLocate,
   IconChevron,
+  IconPhone,
+  IconCallIn,
+  IconCallOut,
 } from '../components/Icon.jsx'
+import { useVoiceCall } from '../store/VoiceCallStore.jsx'
+import { callMediaLabel, callText } from '../lib/call.js'
 import UserProfile from './UserProfile.jsx'
 import GroupSettings from './GroupSettings.jsx'
 import GroupFilesPage from './GroupFilesPage.jsx'
@@ -53,7 +58,7 @@ import './chat-room.css'
 const REVOKE_WINDOW = 2 * 60 * 1000
 
 /* ===== 顶部 ===== */
-function Header({ chat, onBack, onInfo, onProfile, onGroup, typing, connected }) {
+function Header({ chat, onBack, onInfo, onProfile, onGroup, onVoiceCall, voiceCallActive, typing, connected }) {
   const sub = typing
     ? '正在输入…'
     : chat.type === 'group'
@@ -91,6 +96,32 @@ function Header({ chat, onBack, onInfo, onProfile, onGroup, typing, connected })
       </div>
 
       <div className="rh-act">
+        {chat.type === 'private' && (
+          <>
+            <button
+              type="button"
+              className="rh-btn"
+              aria-label="语音通话"
+              title="语音通话"
+              data-testid="call-audio"
+              disabled={!connected || voiceCallActive}
+              onClick={() => onVoiceCall('audio')}
+            >
+              <IconPhone size={19} />
+            </button>
+            <button
+              type="button"
+              className="rh-btn"
+              aria-label="视频通话"
+              title="视频通话"
+              data-testid="call-video"
+              disabled={!connected || voiceCallActive}
+              onClick={() => onVoiceCall('video')}
+            >
+              <IconVideo size={19} />
+            </button>
+          </>
+        )}
         <button type="button" className="rh-btn" aria-label="会话设置" onClick={() => onInfo()}>
           <IconMore size={19} />
         </button>
@@ -374,8 +405,40 @@ function ReadPopover({ msgId, style, peersWithState, onClose }) {
   )
 }
 
+/* ===== 通话记录气泡 =====
+ * 一次通话不是「一句话」，所以不套文字气泡：左侧一枚媒体图标，中间是类型 + 结果，
+ * 右侧是回拨。未接 / 被拒的用警示色 —— 这类记录的价值就在于「你错过了」。
+ */
+function CallBubble({ m, mine, onRedial }) {
+  const media = m.callMedia === 'video' ? 'video' : 'audio'
+  const missed = m.callState === 'missed' || m.callState === 'declined' || m.callState === 'cancelled'
+  return (
+    <button
+      type="button"
+      className={`call-bubble ${mine ? 'is-mine' : ''} ${missed ? 'is-missed' : ''}`}
+      onClick={onRedial}
+      data-testid="call-msg"
+      data-state={m.callState || 'ended'}
+      aria-label={`${callMediaLabel(media)}，${callText(m)}，点击回拨`}
+      title="点击回拨"
+    >
+      <span className="cb-ic" aria-hidden="true">
+        {media === 'video' ? <IconVideo size={17} /> : <IconPhone size={17} />}
+        <i className={`cb-dir is-${mine ? 'out' : 'in'}`} aria-hidden="true">
+          {mine ? <IconCallOut size={10} /> : <IconCallIn size={10} />}
+        </i>
+      </span>
+      <span className="cb-text">
+        <b>{callMediaLabel(media)}</b>
+        <small>{callText(m)}</small>
+      </span>
+      <span className="cb-redial" aria-hidden="true"><IconPhone size={15} /></span>
+    </button>
+  )
+}
+
 /* ===== 单条消息 ===== */
-function Message({ m, chat, me, peersWithState, readPopMsgId, onLongPress, onOpenImage, onOpenLoc, onOpenRead, polls, onVotePoll, onClosePoll, onOpenPollDetail, onJumpToMessage, onRetryUpload, flash, favorited, multi, onMultiToggle }) {
+function Message({ m, chat, me, peersWithState, readPopMsgId, onLongPress, onOpenImage, onOpenLoc, onOpenRead, polls, onVotePoll, onClosePoll, onOpenPollDetail, onRedialCall, onJumpToMessage, onRetryUpload, flash, favorited, multi, onMultiToggle }) {
   /* ⚠️ mine / canRevoke 必须在 useLongPress **之前**算出来：
      长按回调闭包会引用 canRevoke，而 `const` 声明在 hook 之后的话，
      第一次渲染求值回调时就落在 TDZ 里（`Cannot access 'canRevoke' before initialization`）
@@ -388,8 +451,10 @@ function Message({ m, chat, me, peersWithState, readPopMsgId, onLongPress, onOpe
      绑了 onContextMenu，于是图片 / 视频 / 文件 / 位置 / 投票消息**长按毫无反应**，
      而且那还是右键（手机上根本没有）。现在整行都能长按，五种消息形态一致。 */
   const longPress = useLongPress(() => onLongPress?.(m, canRevoke), {
-    /* 多选模式下不需要菜单：那时点整行是「选中/取消」 */
-    disabled: !!multi?.on || m.revoked,
+    /* 多选模式下不需要菜单：那时点整行是「选中/取消」。
+       通话记录也不弹菜单：回复 / 复制 / 收藏 / 转发 / 撤回对它全是空操作
+       （服务端也会拒绝），摆出来就是假按钮。它的唯一动作是点击回拨。 */
+    disabled: !!multi?.on || m.revoked || m.kind === 'call',
   })
 
   if (m.revoked) return <RevokedLine />
@@ -507,6 +572,10 @@ function Message({ m, chat, me, peersWithState, readPopMsgId, onLongPress, onOpe
             onOpenDetail={() => onOpenPollDetail?.(m.pollId)}
           />
         )}
+
+        {/* 通话记录：不画成聊天文字，用带图标的胶囊 —— 它是一次事件，不是一句话。
+            点击整条 = 用同一种媒体类型回拨。 */}
+        {m.kind === 'call' && !m.revoked && <CallBubble m={m} mine={mine} onRedial={() => onRedialCall?.(m)} />}
 
         {m.failed && (
           <div className="msg-send-error" role="status">
@@ -916,17 +985,16 @@ function PlusSheet({ open, onClose, onImage, onVideo, onFile, onLocate, onPoll, 
      全藏掉会让他以为功能消失了。 */
   const mediaLock = canMedia ? {} : { disabled: true, suffix: mediaReason }
   const items = [
-    { label: '图片', icon: <IconImage size={21} />, tone: '#8fd3f4', onClick: onImage, ...mediaLock },
-    { label: '视频', icon: <IconVideo size={21} />, tone: '#ffb0b0', onClick: onVideo, ...mediaLock },
-    { label: '位置', icon: <IconLocate size={21} />, tone: '#a8e6cf', onClick: onLocate, ...mediaLock },
-    { label: '文件', icon: <IconFolder size={21} />, tone: '#b3c7ff', onClick: onFile, ...mediaLock },
+    { label: '图片', icon: <IconImage size={21} />, onClick: onImage, ...mediaLock },
+    { label: '视频', icon: <IconVideo size={21} />, onClick: onVideo, ...mediaLock },
+    { label: '位置', icon: <IconLocate size={21} />, onClick: onLocate, ...mediaLock },
+    { label: '文件', icon: <IconFolder size={21} />, onClick: onFile, ...mediaLock },
     /* 只有群聊才把「投票」拼进来（私聊里这一格直接不存在） */
     ...(isGroup
       ? [
           {
             label: '投票',
             icon: <IconCheck size={21} />,
-            tone: '#ffd08a',
             onClick: onPoll,
             disabled: !canPoll,
             /* 群里的禁用要写清是**为什么** —— 只画一个灰按钮，用户只会以为坏了 */
@@ -959,7 +1027,7 @@ function PlusSheet({ open, onClose, onImage, onVideo, onFile, onLocate, onPoll, 
                 it.onClick?.()
               }}
             >
-              <span className="plus-ic" style={{ background: it.disabled ? '#e6e6ee' : it.tone }}>
+              <span className="plus-ic">
                 {it.icon}
               </span>
               <span>{it.disabled ? `${it.label} · ${it.suffix || '未接入'}` : it.label}</span>
@@ -974,6 +1042,7 @@ function PlusSheet({ open, onClose, onImage, onVideo, onFile, onLocate, onPoll, 
 /* ===== 主组件 ===== */
 export default function ChatRoom({ chat, onBack, jumpTo, onJumped }) {
   const { showToast } = useApp()
+  const { call: voiceCall, startCall } = useVoiceCall()
   const {
     me,
     connected,
@@ -996,6 +1065,23 @@ export default function ChatRoom({ chat, onBack, jumpTo, onJumped }) {
     closePoll,
     conversations,
   } = useChat()
+
+  /* 通话记录气泡上的「回拨」：沿用顶部按钮那一套找人逻辑，
+     媒体类型取那条记录自己的类型 —— 视频通话的回拨不该变成语音。 */
+  const redialCall = (m) => {
+    const peer = chat.peers?.[0] || chat.members?.find((member) => Number(member.user?.id) !== Number(me?.id))?.user
+    if (!peer?.id) {
+      showToast('找不到通话联系人')
+      return
+    }
+    void startCall({
+      conversationId: chat.id,
+      peerId: peer.id,
+      peerName: peer.nickname || peer.username || chat.name,
+      avatar: chat.src,
+      media: m?.callMedia === 'video' ? 'video' : 'audio',
+    })
+  }
   const { isFaved, addFavorite, removeFavorite, addFavorites, removeFavorites, rememberFavorited } = useFavorites()
 
   const [menuState, setMenuState] = useState(null) // { m, canRevoke }
@@ -1714,6 +1800,21 @@ export default function ChatRoom({ chat, onBack, jumpTo, onJumped }) {
         onInfo={() => setInfo(true)}
         onProfile={openPeerProfile}
         onGroup={() => setGset(true)}
+        onVoiceCall={(media) => {
+          const peer = chat.peers?.[0] || chat.members?.find((member) => Number(member.user?.id) !== Number(me?.id))?.user
+          if (!peer?.id) {
+            showToast('找不到通话联系人')
+            return
+          }
+          void startCall({
+            conversationId: chat.id,
+            peerId: peer.id,
+            peerName: peer.nickname || peer.username || chat.name,
+            avatar: chat.src,
+            media,
+          })
+        }}
+        voiceCallActive={voiceCall.status !== 'idle'}
       />
 
       {/* 群公告：默认压成一行，点一下展开全文。
@@ -1766,6 +1867,7 @@ export default function ChatRoom({ chat, onBack, jumpTo, onJumped }) {
               onVotePoll={onVotePoll}
               onClosePoll={onClosePoll}
               onOpenPollDetail={(pollId) => setPollView(pollId)}
+              onRedialCall={redialCall}
               onJumpToMessage={jumpToMessage}
               onRetryUpload={async (message) => {
                 try {

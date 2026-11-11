@@ -188,7 +188,15 @@ export async function maxMessageId() {
  * 演示会话里攒下这种空行，看的人只会以为产品出了 bug。
  */
 export async function purgeMessagesAfter(baselineId) {
-  return (await q.run('DELETE FROM messages WHERE id > ?', Number(baselineId) || 0)).changes
+  const baseline = Number(baselineId)
+  /* 基线必须是正数。`Number(undefined)` / `Number(Promise)` 都会得到 NaN，
+     而 `Number(x) || 0` 会把它变成 0 —— 于是 `id > 0` 删掉**整张消息表**。
+     这不是理论风险：e2e 曾经漏了一个 await，演示库被清空过一次。
+     所以这里宁可抛错，也不接受「没有基线」这种输入。 */
+  if (!Number.isSafeInteger(baseline) || baseline <= 0) {
+    throw new Error(`purgeMessagesAfter 需要正数基线，收到 ${String(baselineId)}（是不是忘了 await maxMessageId()？）`)
+  }
+  return (await q.run('DELETE FROM messages WHERE id > ?', baseline)).changes
 }
 
 /**

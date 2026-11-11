@@ -79,6 +79,10 @@ export async function addFavorite(userId, messageId) {
   )
   if (existed) return { ok: true, favorite: await viewFavorite(existed.id, userId), created: false }
 
+  /* 通话记录没有可收藏的内容：正文是空的，快照下来只会得到一条「空卡片」。
+     和撤回不同，它不是「内容消失了」，而是「本来就没有内容可抄」。 */
+  if (msg.kind === 'call') throw bad(400, '通话记录不能收藏')
+
   /* 已撤回的消息**不给收藏**：快照下来就是一条「消息已撤回」，
      收藏它没有任何意义，而且用户会以为收藏失败了（列表里一条空记录）。
      明确拒绝，让界面给一句「这条消息已撤回，不能收藏」。 */

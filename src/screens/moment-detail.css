@@ -64,7 +64,7 @@
   background: var(--surface);
   border-radius: var(--r-md);
   padding: var(--space-4);
-  box-shadow: 0 1px 2px rgba(22, 22, 31, 0.04);
+  box-shadow: none;
 }
 
 .md-author {
@@ -385,7 +385,7 @@
 /* ===== 输入区 ===== */
 .md-input {
   flex: 0 0 auto;
-  padding: var(--space-3) var(--space-4) max(10px, env(safe-area-inset-bottom));
+  padding: var(--space-3) var(--space-4) max(12px, env(safe-area-inset-bottom));
   background: var(--surface);
   box-shadow: 0 -1px 0 var(--line);
 }
@@ -434,7 +434,7 @@
   display: grid;
   place-items: center;
   border-radius: var(--r-full);
-  color: #fff;
+  color: var(--text-on-brand);
   background: var(--brand-grad);
 }
 
@@ -472,5 +472,5 @@
   padding: var(--space-2) var(--space-3);
   font-size: var(--fs-micro);
   color: var(--text-1);
-  background: linear-gradient(to top, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0));
+  background: linear-gradient(to top, var(--surface), transparent);
 }

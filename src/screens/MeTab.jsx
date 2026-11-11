@@ -15,17 +15,26 @@ import HelpPage from './HelpPage.jsx'
 import GeneralSettings from './GeneralSettings.jsx'
 import WatchLaterPage from './WatchLaterPage.jsx'
 import RecentFilesPage from './RecentFilesPage.jsx'
+import CallHistoryPage from './CallHistoryPage.jsx'
 import NotificationSettings from './NotificationSettings.jsx'
 import PrivacySettings from './PrivacySettings.jsx'
 import SecuritySettings from './SecuritySettings.jsx'
 import { isVideoItem } from '../components/MomentMedia.jsx'
-import { applyThemeColors, applyMotion, MOTION_KEY } from '../utils/theme.js'
+import {
+  applyThemeColors,
+  applyMotion,
+  applyAppearanceMode,
+  getSavedAppearanceMode,
+  APPEARANCE_MODE_KEY,
+  MOTION_KEY,
+} from '../utils/theme.js'
 import {
   IconPlay,
   IconStar,
   IconClock,
   IconFolder,
   IconShield,
+  IconPhone,
   IconLock,
   IconGear,
   IconPalette,
@@ -35,7 +44,6 @@ import {
   IconEdit,
   IconBack,
   IconChevron,
-  IconEye,
   IconLogout,
   IconCheck,
   IconImage,
@@ -131,16 +139,16 @@ function MyPosts({ onManage }) {
 /* ===== 快捷四宫格 ===== */
 function QuickGrid({ onOpen }) {
   const items = [
-    { key: 'posts', label: '我的动态', icon: <IconImage size={21} />, tone: 'linear-gradient(135deg,#a8c8e8,#6a8ad0)' },
-    { key: 'fav', label: '收藏', icon: <IconStar size={21} />, tone: 'linear-gradient(135deg,#ffd08a,#f0a840)' },
-    { key: 'later', label: '稍后看', icon: <IconClock size={21} />, tone: 'linear-gradient(135deg,#c7b3ff,#8a6ad0)' },
-    { key: 'files', label: '最近文件', icon: <IconFolder size={21} />, tone: 'linear-gradient(135deg,#a8dcc0,#4a9c78)' },
+    { key: 'posts', label: '我的动态', icon: <IconImage size={21} /> },
+    { key: 'fav', label: '收藏', icon: <IconStar size={21} /> },
+    { key: 'later', label: '稍后看', icon: <IconClock size={21} /> },
+    { key: 'files', label: '最近文件', icon: <IconFolder size={21} /> },
   ]
   return (
     <div className="quick-grid">
       {items.map((it) => (
         <button key={it.key} type="button" className="quick-item" onClick={() => onOpen(it.key)}>
-          <span className="quick-ic" style={{ background: it.tone }}>
+          <span className="quick-ic">
             {it.icon}
           </span>
           <span>{it.label}</span>
@@ -264,6 +272,7 @@ export default function MeTab({ nav, notifySettingsSignal }) {
     // 从 localStorage 恢复主题
     return localStorage.getItem('chatly-theme') || '极光'
   })
+  const [appearanceMode, setAppearanceMode] = useState(getSavedAppearanceMode)
   /* 「主题外观」里要显示**当前**的字体大小和动效状态 ——
      以前这两个值都是写死的（「标准」、开关恒为开），
      于是用户改了字体大小再回来看，这一页说「标准」，和实际不一致。 */
@@ -405,7 +414,7 @@ export default function MeTab({ nav, notifySettingsSignal }) {
     if (themeData) {
       // applyThemeColors 写的是全站真正用的 --brand-* 变量；
       // 以前只写 --primary（只有「我」页新页面在用），主界面一点没变。
-      applyThemeColors(themeData.colors)
+      applyThemeColors(themeData)
     }
   }, [])
 
@@ -428,6 +437,16 @@ export default function MeTab({ nav, notifySettingsSignal }) {
             dispatch({ type: 'SET_TAB', tab: 'moment' })
           }}
         />
+      </SubPage>
+    )
+  }
+
+  /* ===== 子页面：通话记录 =====
+     和收藏一样读真实后端；列表项点一下就用同一种媒体类型回拨。 */
+  if (page === 'calls') {
+    return (
+      <SubPage title="通话记录" onBack={() => setPage(null)}>
+        <CallHistoryPage />
       </SubPage>
     )
   }
@@ -534,9 +553,7 @@ export default function MeTab({ nav, notifySettingsSignal }) {
    *   ① 「动效开关」以前是 `on` + `showToast('已切换动效')` ——
    *      开关永远是开的、点了只弹一句提示，属于**假功能**。
    *      现在真存 localStorage 并真的停掉全站动画（见 utils/theme.js）。
-   *   ② 「聊天背景 / 气泡颜色 / 强调色」三项点了只弹 toast ——
-   *      底层没有对应实现，按项目铁律一律 disabled 并写明原因。
-   *      注意别把它们写成「点了能弹提示」的样子：那会让人以为功能存在。
+   *   ② 颜色主题与系统明暗模式都写入全局令牌，并在启动时恢复。
    *
    * ⚠️ 标题和列表里那一行**必须同名**：入口写「主题外观」、进来变成「外观主题」，
    *    用户会以为自己点错了地方（这种不一致没有任何收益）。
@@ -547,18 +564,19 @@ export default function MeTab({ nav, notifySettingsSignal }) {
         <SectionTitle hint="使用中">
           <span>当前主题</span>
         </SectionTitle>
-        <div className="theme-grid">
+        <div className="theme-grid" role="group" aria-label="主题配色">
           {THEMES.map((t) => (
             <button
               key={t.id}
               type="button"
+              aria-pressed={theme === t.name}
               className={`theme-card ${theme === t.name ? 'is-on' : ''}`}
               onClick={() => {
                 setTheme(t.name)
                 // 持久化到 localStorage
                 localStorage.setItem('chatly-theme', t.name)
                 // 应用到全站主色（--brand-*），不只是「我」页新页面的 --primary
-                applyThemeColors(t.colors)
+                applyThemeColors(t)
                 showToast('已应用主题 · ' + t.name)
               }}
             >
@@ -577,27 +595,30 @@ export default function MeTab({ nav, notifySettingsSignal }) {
           ))}
         </div>
 
-        <SectionTitle>自定义</SectionTitle>
-        <Group footer="下面三项底层还没实现（只弹提示不算实现），所以先禁用。" >
-          <Row
-            icon={<IconImage size={19} />}
-            label="聊天背景"
-            right={<span className="tag-off">未接入</span>}
-          />
-          <Row
-            icon={<IconPalette size={19} />}
-            label="气泡颜色"
-            sub="未接入：消息气泡还没有可换的配色"
-            right={<span className="tag-off">未接入</span>}
-          />
-          <Row
-            icon={<IconEye size={19} />}
-            label="强调色"
-            sub="未接入：主色由上面的主题统一决定"
-            right={<span className="tag-off">未接入</span>}
-            last
-          />
-        </Group>
+        <SectionTitle hint={appearanceMode === 'system' ? '跟随设备' : appearanceMode === 'dark' ? '深色' : '浅色'}>外观模式</SectionTitle>
+        <div className="mode-picker" role="group" aria-label="外观模式">
+          {[
+            { value: 'system', label: '跟随系统' },
+            { value: 'light', label: '浅色' },
+            { value: 'dark', label: '深色' },
+          ].map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              aria-pressed={appearanceMode === option.value}
+              className={appearanceMode === option.value ? 'is-selected' : ''}
+              onClick={() => {
+                setAppearanceMode(option.value)
+                localStorage.setItem(APPEARANCE_MODE_KEY, option.value)
+                applyAppearanceMode(option.value)
+                const selectedTheme = THEMES.find((item) => item.name === theme)
+                if (selectedTheme) applyThemeColors(selectedTheme)
+              }}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
 
         <Group footer="字体大小在「通用设置」里，这里显示的就是当前值。">
           <Row
@@ -624,7 +645,7 @@ export default function MeTab({ nav, notifySettingsSignal }) {
             last
           />
         </Group>
-        <p className="sub-note">可以为不同联系人设置独立的聊天主题（未接入）。</p>
+      <p className="sub-note">主题配色会同步应用到导航、按钮与消息气泡；系统模式会随设备外观自动切换。</p>
       </SubPage>
     )
   }
@@ -776,6 +797,7 @@ export default function MeTab({ nav, notifySettingsSignal }) {
             label="账号与安全"
             onClick={() => setPage('security')}
           />
+          <Row icon={<IconPhone size={19} />} label="通话记录" onClick={() => setPage('calls')} />
           <Row icon={<IconLock size={19} />} label="隐私设置" onClick={() => setPage('privacy')} />
           <Row icon={<IconGear size={19} />} label="通用设置" onClick={() => setPage('general')} />
           <Row icon={<IconPalette size={19} />} label="主题外观" value={theme} onClick={() => setPage('theme')} />

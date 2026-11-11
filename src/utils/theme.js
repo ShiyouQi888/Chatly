@@ -1,8 +1,5 @@
-/* 主题应用：把一套主题色写进全局 CSS 变量。
- * 为什么要写 --brand-* 而不是 --primary：
- * 全站 250+ 处样式用的都是 --brand-1/2/3、--brand-grad、--brand-soft，
- * --primary 只在「我」页新增的几个页面里用。之前切换主题只写 --primary，
- * 看着切成功了（toast 也弹了），其实主界面一点没变 —— 典型的点了没反应。 */
+const DEFAULT_ON_PRIMARY = '#ffffff'
+
 export function hexToRgba(hex, alpha) {
   const h = String(hex || '').replace('#', '')
   const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h
@@ -14,72 +11,130 @@ export function hexToRgba(hex, alpha) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
-export function applyThemeColors(colors) {
-  if (!Array.isArray(colors) || colors.length < 2) return
-  const [c1, c2] = colors
-  const root = document.documentElement
-  // 承载白字的品牌底必须压暗到 ≥4.6:1，否则浅色主题的按钮/气泡文字不可读。
-  // --brand-1 只用于装饰（圆点、描边），保留原亮色；--brand-2/3/grad 承载文字，走安全值。
-  const safe1 = darkenForWhite(c1)
-  const safe2 = darkenForWhite(c2)
-  root.style.setProperty('--brand-1', c1)
-  root.style.setProperty('--brand-2', safe2)
-  root.style.setProperty('--brand-3', safe2)
-  root.style.setProperty('--brand-action', safe2)
-  root.style.setProperty('--brand-grad', `linear-gradient(135deg, ${safe1} 0%, ${safe2} 100%)`)
-  root.style.setProperty('--brand-soft', hexToRgba(c2, 0.1))
-  root.style.setProperty('--brand-soft-2', hexToRgba(c2, 0.18))
-  root.style.setProperty('--shadow-brand', `0 6px 20px ${hexToRgba(safe2, 0.32)}`)
-  // 「我」页新页面用的别名，保持同步（同样用安全值，避免白字不达标）
-  root.style.setProperty('--primary', safe2)
-  root.style.setProperty('--primary-end', safe1)
-  root.style.setProperty('--accent', c1)
+function parseHex(hex) {
+  const value = String(hex || '').replace('#', '')
+  const full = value.length === 3 ? value.split('').map((c) => c + c).join('') : value
+  if (!/^[0-9a-f]{6}$/i.test(full)) return null
+  return [0, 2, 4].map((offset) => parseInt(full.slice(offset, offset + 2), 16))
 }
 
-/* 相对亮度（WCAG 2.1） */
-function linearize(v) {
-  v /= 255
-  return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
-}
-function luminance(r, g, b) {
-  return 0.2126 * linearize(r) + 0.7152 * linearize(g) + 0.0722 * linearize(b)
-}
-function whiteContrast(r, g, b) {
-  return 1.05 / (luminance(r, g, b) + 0.05)
+function linearize(value) {
+  value /= 255
+  return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
 }
 
-/* 把任意色压暗到「白字 ≥ target:1」，保留色相。用于主题切换时保证按钮/气泡可读。
- * 步长 4%，最多 90 步；不可解析的颜色原样返回。 */
-export function darkenForWhite(hex, target = 4.6) {
-  const h = String(hex || '').replace('#', '')
-  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h
-  let r = parseInt(full.slice(0, 2), 16)
-  let g = parseInt(full.slice(2, 4), 16)
-  let b = parseInt(full.slice(4, 6), 16)
-  if (![r, g, b].every(Number.isFinite)) return hex
-  let guard = 0
-  while (whiteContrast(r, g, b) < target && guard++ < 90) {
-    r = Math.round(r * 0.96)
-    g = Math.round(g * 0.96)
-    b = Math.round(b * 0.96)
+function luminance(hex) {
+  const rgb = parseHex(hex)
+  if (!rgb) return 0
+  const [r, g, b] = rgb.map(linearize)
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b
+}
+
+function contrastRatio(first, second) {
+  const a = luminance(first)
+  const b = luminance(second)
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
+}
+
+function mixHex(color, target, amount) {
+  const from = parseHex(color)
+  const to = parseHex(target)
+  if (!from || !to) return color
+  const channels = from.map((value, index) => Math.round(value + (to[index] - value) * amount))
+  return `#${channels.map((value) => value.toString(16).padStart(2, '0')).join('')}`
+}
+
+function colorForContrast(color, against, target = 4.6) {
+  if (contrastRatio(color, against) >= target) return color
+  const moveToward = luminance(against) > 0.5 ? '#000000' : '#ffffff'
+  for (let step = 1; step <= 100; step += 1) {
+    const candidate = mixHex(color, moveToward, step / 100)
+    if (contrastRatio(candidate, against) >= target) return candidate
   }
-  const to2 = (x) => Math.max(0, Math.min(255, x)).toString(16).padStart(2, '0')
-  return `#${to2(r)}${to2(g)}${to2(b)}`
+  return moveToward
+}
+
+/* Theme colors serve both flat controls and gradient controls, whose foreground
+   changes by palette. Correct each endpoint before placing accessible text on it. */
+export function applyThemeColors(themeOrColors) {
+  const theme = Array.isArray(themeOrColors) ? { colors: themeOrColors } : themeOrColors
+  if (!Array.isArray(theme?.colors) || theme.colors.length < 2) return
+
+  const [rawStart, rawEnd] = theme.colors
+  const onPrimary = theme.onPrimary || DEFAULT_ON_PRIMARY
+  const actionColors = theme.actionColors || [rawStart, rawEnd]
+  const safeStart = colorForContrast(actionColors[0], onPrimary)
+  const safeEnd = colorForContrast(actionColors[1], onPrimary)
+  const lightInk = colorForContrast(rawStart, '#ffffff')
+  const darkInk = colorForContrast(rawStart, '#1a1a26')
+  const root = document.documentElement
+
+  root.style.setProperty('--on-primary', onPrimary)
+  root.style.setProperty('--text-on-brand', onPrimary)
+  root.style.setProperty('--brand-1', rawStart)
+  root.style.setProperty('--brand-ink-light', lightInk)
+  root.style.setProperty('--brand-ink-dark', darkInk)
+  root.style.setProperty('--brand-3', safeEnd)
+  root.style.setProperty('--brand-action', safeEnd)
+  root.style.setProperty('--brand-grad', `linear-gradient(135deg, ${safeStart} 0%, ${safeEnd} 100%)`)
+  root.style.setProperty('--chat-outgoing', `linear-gradient(135deg, ${safeStart} 0%, ${safeEnd} 100%)`)
+  root.style.setProperty('--chat-out-bg', `linear-gradient(135deg, ${safeStart} 0%, ${safeEnd} 100%)`)
+  root.style.setProperty('--chat-outgoing-text', onPrimary)
+  root.style.setProperty('--chat-out-text', onPrimary)
+  root.style.setProperty('--brand-soft', hexToRgba(rawStart, 0.14))
+  root.style.setProperty('--brand-soft-2', hexToRgba(rawStart, 0.2))
+  root.style.setProperty('--brand-pulse', hexToRgba(rawStart, 0.45))
+  root.style.setProperty('--brand-pulse-clear', hexToRgba(rawStart, 0))
+  root.style.setProperty('--shadow-brand', 'none')
+  root.style.setProperty('--accent', rawStart)
+  root.style.setProperty('--focus-ring', hexToRgba(rawStart, 0.62))
 }
 
 const FONT_SCALE = { small: '0.9', standard: '1', large: '1.1', xlarge: '1.2' }
 
 export function applyFontSize(value) {
-  const scale = FONT_SCALE[value] || '1'
-  document.documentElement.style.setProperty('--font-scale', scale)
+  document.documentElement.style.setProperty('--font-scale', FONT_SCALE[value] || '1')
 }
 
-/* 动效开关。
- * 关掉时给 <html> 挂 `.no-motion`，由 global.css 用**和
- * `@media (prefers-reduced-motion: reduce)` 完全相同的规则**停掉动画 ——
- * 两边各写一份必然漂，改了一处另一处就不生效。
- * 存 localStorage：这是个跨会话的偏好，刷新后必须还在（否则又变成「点了没反应」）。 */
 export const MOTION_KEY = 'chatly-motion'
+export const APPEARANCE_MODE_KEY = 'chatly-mode'
+const validModes = new Set(['system', 'light', 'dark'])
+let systemModeMedia
+let systemModeHandler
+
+export function getSavedAppearanceMode() {
+  try {
+    const saved = localStorage.getItem(APPEARANCE_MODE_KEY) || 'system'
+    return validModes.has(saved) ? saved : 'system'
+  } catch {
+    return 'system'
+  }
+}
+
+export function applyAppearanceMode(mode = 'system') {
+  const root = document.documentElement
+  const preference = validModes.has(mode) ? mode : 'system'
+  const media = window.matchMedia?.('(prefers-color-scheme: dark)')
+  const updateEffectiveMode = () => {
+    root.dataset.colorMode = preference === 'system'
+      ? (media?.matches ? 'dark' : 'light')
+      : preference
+  }
+
+  if (systemModeMedia && systemModeHandler) {
+    systemModeMedia.removeEventListener?.('change', systemModeHandler)
+    systemModeMedia.removeListener?.(systemModeHandler)
+  }
+  systemModeMedia = preference === 'system' ? media : null
+  systemModeHandler = preference === 'system' ? updateEffectiveMode : null
+  if (systemModeMedia && systemModeHandler) {
+    if (systemModeMedia.addEventListener) systemModeMedia.addEventListener('change', systemModeHandler)
+    else systemModeMedia.addListener?.(systemModeHandler)
+  }
+
+  updateEffectiveMode()
+  return preference
+}
 
 export function applyMotion(on) {
   document.documentElement.classList.toggle('no-motion', !on)
@@ -87,19 +142,21 @@ export function applyMotion(on) {
 
 export function applySavedAppearance() {
   try {
-    const fontSize = localStorage.getItem('chatly-font-size') || 'standard'
-    applyFontSize(fontSize)
+    applyFontSize(localStorage.getItem('chatly-font-size') || 'standard')
     applyMotion(localStorage.getItem(MOTION_KEY) !== 'off')
   } catch {}
+  applyAppearanceMode(getSavedAppearanceMode())
 }
 
-/* 启动时恢复主题。MeTab 里也有一份恢复（进「我」页时），
- * 但用户可能一次都不进「我」页 —— 主题必须在整站入口就恢复，
- * 否则「切了主题、刷新、首页还是紫的」就是点了没反应。 */
 export function applySavedTheme(themes) {
   try {
     const saved = localStorage.getItem('chatly-theme') || '极光'
-    const found = (themes || []).find((t) => t.name === saved)
-    if (found) applyThemeColors(found.colors)
+    const legacyNames = { '海盐': '薄荷', '暮色': '蜜桃', '云朵': '极光', '午夜': '石墨' }
+    const resolved = legacyNames[saved] || saved
+    const found = (themes || []).find((theme) => theme.name === resolved)
+    if (found) {
+      if (resolved !== saved) localStorage.setItem('chatly-theme', resolved)
+      applyThemeColors(found)
+    }
   } catch {}
 }

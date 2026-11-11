@@ -13,6 +13,17 @@
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%239b8cfb'/%3E%3Cstop offset='1' stop-color='%235b6ef5'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='9' fill='url(%23g)'/%3E%3Cpath d='M9.5 11.5h13M9.5 16h9.5M9.5 20.5h6' stroke='white' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E"
     />
     <title>Chatly · 连接更有趣的人</title>
+    <!-- PWA：iOS 只有「添加到主屏幕」之后才会分发 Web Push（16.4+），
+         而能添加的前提是有 manifest 与 apple-touch-icon。缺任何一个，
+         桌面上都是一个灰色缩略图，推送那一步永远走不到。 -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icon-180.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <!-- Chrome 已把 apple- 前缀那条标记为废弃，但 iOS 仍只认它；
+         两条都写，新版 Chrome 不告警、老 iOS 也能全屏启动。 -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Chatly" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   </head>
   <body>
     <div id="root"></div>

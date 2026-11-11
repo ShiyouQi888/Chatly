@@ -45,12 +45,10 @@ export default function ProfileEditor({ open, onClose, onSaved, showToast }) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [saving, setSaving] = useState(false)
 
-  /* ---- 位置 ----
-     `cityGeo` 是**行政区划中心点**（后端 /geo/locate 返回的 city.lat/lng），
-     不是用户站在哪 —— 传给我们自己的坐标从不落库，只有这个中心点会被保存。 */
-  const [city, setCity] = useState(null)
-  const [cityGeo, setCityGeo] = useState(null)
-  const [cityPublic, setCityPublic] = useState(false)
+  /* ---- 地区 ----
+     「定位」只是把城市名填进地区输入框的快捷方式：
+     请求设备位置 → 服务端逆地址解析 → 回填文字。
+     **不保存任何坐标** —— 原先为「附近的人」保存的行政区划中心点随该功能一起移除了。 */
   const [locating, setLocating] = useState(false)
   const [locNote, setLocNote] = useState('')
 
@@ -75,14 +73,6 @@ export default function ProfileEditor({ open, onClose, onSaved, showToast }) {
     setTagInput('')
     setAvatarDraft(null)
     setPickerOpen(false)
-    setCity(user.city || null)
-    /* user 上只有 cityPublic 为真时才有坐标（后端做的闸门），所以这里跟着走 */
-    setCityGeo(
-      Number.isFinite(user.cityLat) && Number.isFinite(user.cityLng)
-        ? { lat: user.cityLat, lng: user.cityLng }
-        : null
-    )
-    setCityPublic(!!user.cityPublic)
     setLocNote('')
   }, [open, user])
 
@@ -138,10 +128,6 @@ export default function ProfileEditor({ open, onClose, onSaved, showToast }) {
    * ⚠️ 失败后**不清空手输内容** —— 定位是加速手段，不是必经之路。
    */
   const useCurrentLocation = async () => {
-    if (!cityPublic) {
-      setLocNote('附近分享默认关闭。先勾选下方授权，再手动定位；不勾选时不会请求设备位置。')
-      return
-    }
     setLocating(true)
     setLocNote('')
     try {
@@ -154,14 +140,11 @@ export default function ProfileEditor({ open, onClose, onSaved, showToast }) {
       }
 
       const label = res.city?.region || res.address?.city || ''
-      if (label) setRegion(label)
-
-      if (res.city && Number.isFinite(res.city.lat) && Number.isFinite(res.city.lng)) {
-        setCity(res.city.name || label || null)
-        setCityGeo({ lat: res.city.lat, lng: res.city.lng })
-        setLocNote(`已定位到「${res.city.name || label}」。保存后只保留城市中心点，不保留实时坐标。`)
+      if (label) {
+        setRegion(label)
+        setLocNote(`已填为「${label}」。定位只用于填写地区，不会保存坐标。`)
       } else {
-        setLocNote(`已定位到「${label || '当前位置'}」，但没有拿到行政区划中心点`)
+        setLocNote('已获取位置，但没有解析出城市名 —— 可以手动填')
       }
     } catch (e) {
       /* getMyLocation 失败给的是 GeolocationPositionError；locate 失败给的是接口错误 */
@@ -181,10 +164,6 @@ export default function ProfileEditor({ open, onClose, onSaved, showToast }) {
     (birthday || '') !== (user?.birthday || '') ||
     phone.trim() !== (user?.phone || '') ||
     region.trim() !== (user?.region || '') ||
-    (city || null) !== (user?.city || null) ||
-    (cityGeo?.lat ?? null) !== (user?.cityLat ?? null) ||
-    (cityGeo?.lng ?? null) !== (user?.cityLng ?? null) ||
-    cityPublic !== !!user?.cityPublic ||
     tags.join(',') !== (Array.isArray(user?.tags) ? user.tags : []).join(',')
 
   const save = async () => {
@@ -195,10 +174,6 @@ export default function ProfileEditor({ open, onClose, onSaved, showToast }) {
     const name = nickname.trim()
     if (!name) {
       showToast('昵称不能为空')
-      return
-    }
-    if (cityPublic && !cityGeo) {
-      showToast('请先手动定位城市，或关闭附近分享')
       return
     }
     setSaving(true)
@@ -212,12 +187,6 @@ export default function ProfileEditor({ open, onClose, onSaved, showToast }) {
         phone: phone.trim() || null,
         region: region.trim(),
         tags,
-        /* 位置只在用户明确开启「参与附近」时提交城市中心点；关闭后清空，
-           不保留未授权的位置数据。浏览器定位仍只由用户点按钮触发。 */
-        city,
-        cityLat: cityPublic ? cityGeo?.lat ?? null : null,
-        cityLng: cityPublic ? cityGeo?.lng ?? null : null,
-        cityPublic,
       }
       // 预设头像就是一个字符串，跟其它字段一起提交；旧的上传头像会由后端顺手删掉
       if (avatarDraft?.kind === 'preset') fields.avatar = `preset:${avatarDraft.n}`
@@ -364,29 +333,18 @@ export default function ProfileEditor({ open, onClose, onSaved, showToast }) {
               type="button"
               className="pe-locate"
               onClick={useCurrentLocation}
-              disabled={locating || !locateSupported || !cityPublic}
+              disabled={locating || !locateSupported}
               data-testid="use-location"
-              title={!cityPublic ? '先明确授权参与附近后再定位' : locateSupported ? '使用当前位置解析城市中心点' : '这个浏览器不支持定位'}
+              title={locateSupported ? '用当前位置填写地区' : '这个浏览器不支持定位'}
             >
               <IconLocate size={15} sw={2.1} />
               {locating ? '定位中…' : '定位'}
             </button>
           </div>
           {locNote && <p className="pe-note pe-loc-note">{locNote}</p>}
-          <label className="pe-switch">
-            <input
-              type="checkbox"
-              checked={cityPublic}
-              onChange={(e) => setCityPublic(e.target.checked)}
-              data-testid="city-public"
-            />
-            <span>
-              授权城市级附近分享（默认关闭）
-              <em>
-                只有勾选后手动点击「定位」才会请求设备位置；服务端只保存行政区划中心点{city ? `（${city}）` : ''}。关闭后立即清除坐标。
-              </em>
-            </span>
-          </label>
+          <p className="pe-note">
+            地区只作为资料展示，服务端<b>不保存任何坐标</b>。
+          </p>
         </div>
 
         <div className="pe-field is-block">

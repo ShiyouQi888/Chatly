@@ -145,8 +145,9 @@ export async function reverseGeocode(lat, lng, opts = {}) {
       street: c.street || '',
       streetNumber: c.street_number || '',
     },
-    /* 行政区划的**中心点** —— 这是公开地理事实，不是个人位置。
-       要存就存这个（配合 city_public 开关），存它既不侵犯隐私又够「附近」用。 */
+    /* 行政区划的**中心点** —— 公开地理事实，不是个人位置。
+       当前客户端只用 `name / region` 回填「所在地区」文字，**不落库任何坐标**
+       （原先为「附近的人」保存城市中心点的那条链路已随发现页移除）。 */
     city: {
       name: ad.name || '',
       adcode: ad.adcode ? String(ad.adcode) : '',

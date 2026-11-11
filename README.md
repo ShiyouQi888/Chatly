@@ -2,10 +2,10 @@
 
 > 连接更有趣的人 —— 移动端聊天通讯 App
 
-基于《移动端聊天通讯软件功能书》（47 节 PRD）实现。覆盖 **聊天 / 动态 / 发现 / 我** 四大板块，
-其中**聊天 / 动态 / 发现 / 位置 / 群文件 / 群公告与通知 / 群投票 / 消息收藏 / 引用回复 / 消息转发 / 隐私门控 / 在线状态**已接通独立后端
+基于《移动端聊天通讯软件功能书》（47 节 PRD）实现，并按「纯粹即时通讯」的方向收敛：覆盖 **聊天 / 通讯录 / 动态 / 社群 / 我** 五大板块，
+其中**聊天 / 动态 / 社群 / 位置 / 群文件 / 群公告与通知 / 群投票 / 消息收藏 / 引用回复 / 消息转发 / 隐私门控 / 在线状态**已接通独立后端
 （REST + WebSocket + JWT，数据层**双驱动**：本地 SQLite / 线上 PostgreSQL；在线状态可选接入 Redis），
-通知中心、状态和稍后看也已接入后端。项目仍是功能原型，通话和正式生产运维保障尚未完成；具体边界见下方功能状态。
+通知中心、状态和稍后看也已接入后端。项目仍是功能原型，群语音/群视频和正式生产运维保障尚未完成；具体边界见下方功能状态。
 
 > 每一页都遵守同一条底线：**界面上的每个数字、每句话、每次点击都要能追到库里的一行数据**。
 > 追不到的，就标「未接入」并禁用 —— 不做一个点了弹 toast 假装成功的假按钮。
@@ -30,8 +30,10 @@
   - [引用回复](#引用回复)
   - [消息转发](#消息转发)
   - [长按手势](#长按手势)
+- [系统推送](#系统推送)
+- [语音与视频通话](#语音与视频通话)
 - [动态](#动态)
-- [发现](#发现)
+- [社群](#社群)
 - [我](#我)
 - [用户资料与头像](#用户资料与头像)
 - [媒体查看器](#媒体查看器)
@@ -112,6 +114,8 @@ ADMIN_PASSWORD=replace-with-at-least-12-random-characters
 
 后台运营成员仍可由超级管理员按角色授权。停用账号会撤销其所有登录设备。后台不开放手机号与精确位置。私聊正文由 `messages.private.read` 专属权限控制，当前仅超级管理员拥有；查阅前需填写原因，每次读取均记录会话、消息 ID 范围与管理员身份，不将正文复制到审计日志。集中日志、历史监控告警和自动备份/恢复仍需接入独立运维与备份服务，健康页会明确显示当前能力边界。
 
+后台信息架构、能力边界与后续规划见[运营后台设计审计与规划](docs/ADMIN-REDESIGN.md)。
+
 ---
 
 ## 功能概览
@@ -122,17 +126,19 @@ ADMIN_PASSWORD=replace-with-at-least-12-random-characters
 | **通讯录** | 互关联系人列表 / 姓名与账号搜索 / 联系人菜单 / 查看资料 / 发消息 / 单个或批量删除 / 群聊列表与创建 | ✅ |
 | **群管理** | 群资料 / 群公告 / 成员管理 / 权限三档 / 全员禁言 / 仅管理员发言 | ✅ |
 | **动态** | 图文 / 视频 / 发布 / 编辑 / 点赞 / 评论 / 可见范围（公开 / 仅好友 / 仅自己） | ✅ |
-| **发现** | 推荐用户 / 附近 / 公开群 / 活动报名 / 热门话题榜 / 关注 / 标签筛选 | ✅ |
+| **社群** | 我加入的群聚合 / 公开群列表 / 加入公开群 / 群内搜索 | ✅ |
 | **我** | 资料编辑 / 头像裁剪 / 我的动态 / 我的收藏 / 二维码 / 扫一扫 / 关于我们 / 帮助与反馈 / 通用设置 / 主题外观 / 稍后看 / 最近文件 / 消息通知 / 隐私设置 / 账号与安全 | ✅ |
 | **扫一扫** | 摄像头扫码 / 相册选图 / 手输 ID / 加好友 / 发消息 | ✅ |
 | **表情** | 386 彩色 SVG + 30 动画 GIF / 9 分组 / 搜索 / 大表情直发 | ✅ |
 | **二维码** | 零依赖编解码 / 我的二维码 / 扫一扫 | ✅ |
+| **通话** | 一对一语音 / 视频 / 来电浮层 / 麦克风与摄像头开关 / 前后摄切换 / 通话记录 / 回拨 | ✅ |
+| **推送** | 新消息 / 来电 / 挂断撤回通知；离线才推、免打扰与通知开关生效；点击直达会话 | ✅ |
 
 **部分实现或尚未接入**：
 
-- 未接入：语音与视频通话、群主转让。
+- 未接入：群语音与群视频、群主转让。
 - 部分实现：全文消息搜索最多扫描最近 5,000 条文字消息，图片 / 文件内容不可检索；语音消息录制受浏览器麦克风能力限制；消息加密是服务端存储加密，不是端到端加密。
-- 动态视频可上传、列表预览并在动态详情中播放；视频通话与实时媒体服务未接入。
+- 动态视频可上传、列表预览并在动态详情中播放。
 - 群文件、群公告发布/推送和通知中心已接入，不再属于占位功能。
 
 ---
@@ -183,21 +189,23 @@ src/
 │   ├── GroupSettings.jsx  群设置页（整屏覆盖层：群头像 / 群名 / 公告 / 成员管理 / 群开关 / 群投票列表 / 退出）
 │   ├── MomentTab.jsx      动态内容流（朋友 / 我的 / 热门 + 点赞 + 管理入口）
 │   ├── MomentDetail.jsx   动态详情（整屏覆盖层：正文 / 点赞的人 / 评论树 / 回复）
-│   ├── DiscoverTab.jsx    发现（推荐 / 附近 / 活动 / 话题 / 群组 / 用户）
+│   ├── CommunityTab.jsx   社群（我加入的群 + 可加入的公开群 + 加入）
 │   ├── MeTab.jsx          我（个人空间 + 设置子页 + 收藏 + 退出登录）
 │   ├── MyQrPage.jsx       我的二维码（子页：码 + 头像昵称 + 保存卡片图 + 复制 ID）
 │   ├── ScanPage.jsx       扫一扫（整屏层：摄像头 / 相册 / 手动 ID + 四种结果卡）
 │   ├── NoticeCenter.jsx   通知中心
+│   ├── CallHistoryPage.jsx 通话记录（全部 / 未接 + 分页 + 按原媒体类型回拨）
 │   ── SearchPanel.jsx    全局搜索
 ├── lib/
 │   ├── qr.js              零依赖二维码编解码（编码给「我的二维码」/ 解码给「扫一扫」）
+│   ├── call.js            通话文案（气泡 / 预览 / 记录页共用，区分主叫与被叫口径）
 │   └── qrPayload.js       chatly:// 负载的生成与解析（群码 / 动态码留了扩展位）
 ├── store/
 │   ├── AuthContext.jsx    用户 / token / 登录登出
 │   ├── AppContext.jsx     Tab / Toast 等全局 UI 状态
 │   ├── ChatStore.jsx      真实会话与消息（REST + WS）+ 投票详情缓存
+│   ├── VoiceCallStore.jsx 一对一音视频通话（信令 + RTCPeerConnection + 通话浮层）
 │   ├── MomentStore.jsx    真实动态（列表 / 发布 / 编辑 / 删除 / 点赞 / 评论）
-│   ├── DiscoverStore.jsx  发现页数据（推荐 / 附近 / 活动 / 话题 / 标签 / 群组 / 热门）
 │   └── FavoriteStore.jsx  消息收藏（列表 / 收藏 / 取消 / 批量 + 「这条收藏了没」的 Set）
 ├── data/
 │   ├── themes.js          主题配置
@@ -207,6 +215,8 @@ src/
 
 public/emoji/              386 个彩色 SVG（Microsoft Fluent Emoji，MIT）+ LICENSE.txt
 public/emoji-anim/         30 个动画大表情 GIF（fluentui-emoji-animated，MIT）+ LICENSE.txt
+public/sw.js               Service Worker：接住三种推送、点击落到会话
+public/manifest.webmanifest + icon-180/192/512.png   PWA 安装（iOS 收推送的前提）
 scripts/
 ├── verify.mjs               统一快速 / 完整回归入口
 ├── check-core-flows.mjs     登录 / 公告 / 搜索 / 上传 / 权限核心链路
@@ -217,7 +227,9 @@ scripts/
 ├── check-favorite.mjs        消息收藏专项自检（85 项断言）
 ├── check-moment.mjs          动态专项自检
 ├── check-video.mjs           视频动态专项自检
-├── check-discover.mjs        发现页专项自检
+├── check-community.mjs       社群专项自检（公开群可见性 / 加入落库 / 越权 403）
+├── check-call.mjs            通话专项自检（视频信令 / 记录落库 / 未读不计数 / 拒接）
+├── check-push.mjs            推送专项自检（SSRF 防线 / 摘要 / 免打扰 / 开关 / 通话记录不推）
 ├── check-qr.mjs              扫一扫 / 我的二维码专项自检
 ├── check-group.mjs           群聊专项自检
 ├── check-profile.mjs         用户资料与头像专项自检
@@ -249,15 +261,17 @@ server/
 │   ├── auth.js            scrypt 密码 + JWT + 鉴权中间件 + USER_COLS
 │   ├── chat.js            会话 / 消息 / 已读 / 撤回 / 群资料与成员业务逻辑 + canSpeak() + assertReplyTo() + forwardMessages()
 │   ├── moment.js          动态业务逻辑（可见性判定 / 列表 / 增删改 / 点赞 / 评论 / 关注）
-│   ├── discover.js        发现页业务逻辑（推荐排序 / 地区匹配 / 标签聚合 / 公开群与加入）
+│   ├── community.js       社群业务逻辑（公开群列表 / 加入群，复用群聊表，不建新表）
 │   ├── poll.js            群投票业务逻辑（创建 / 票数统计 / 匿名出参 / 结束判定）
 │   ├── favorite.js        消息收藏业务逻辑（快照抄写 / 列表 / 批量 / 权限判定）
 │   ├── profile.js         资料校验 / 更新 / 他人资料（生日打码、共同群聊数）
 │   ├── upload.js          multer 工厂（附件 20MB / 头像 5MB / 动态图 12MB / 动态视频 80MB + 视频魔数校验）
 │   ├── ws.js              WebSocket 网关（在线表 + 心跳 + 推送）
+│   ├── push.js            Web Push 投递（VAPID / 订阅表 / SSRF 校验 / 失效订阅清理）
+│   ├── message-push.js    新消息要不要推（在线判定 / 免打扰 / 通知开关 / 摘要）
 │   ├── index.js           Express 入口
 │   ├── seed.js            演示数据（含只补空字段的资料回填 + 投票 / 收藏种子）
-│   └── routes/            auth / conversations / messages / users / moments / discover / geo / polls / favorites / files / notifications / statuses
+│   └── routes/            auth / conversations / messages / users / moments / communities / geo / polls / favorites / files / notifications / statuses
 ├── test/e2e.mjs           后端端到端测试
 ── data/                  SQLite 库（运行时生成，不入库）
 └── uploads/               上传文件（运行时生成，不入库）
@@ -383,7 +397,7 @@ docker compose ps             # 等 healthcheck 变 healthy
 - 历史消息：上翻分页加载
 - 会话设置（置顶 / 免打扰）、删除会话
 
-**尚未接入：** 语音与视频通话、群主转让。
+**尚未接入：** 群语音与群视频、群主转让。
 
 **部分实现：** 全文搜索扫描最近 5,000 条文字消息，不检索图片 / 文件内容；语音录制取决于浏览器的 MediaRecorder 和麦克风权限。消息加密是服务端存储加密，不是端到端加密。
 群文件、公告推送、稍后看、最近文件和通知中心均使用服务端数据。
@@ -720,6 +734,94 @@ DELETE /api/v1/statuses/:id         删除自己的状态
 
 状态目前为文字和心情图标，不包含图片或视频。
 
+## 系统推送
+
+推送用标准 **Web Push**（VAPID + Service Worker），不接第三方推送 SDK。三种推送：
+
+| 类型 | 触发 | 行为 |
+| --- | --- | --- |
+| `call.incoming` | 有人打来 | 常驻通知 + 响铃；挂断后由 `call.dismiss` 主动撤掉 |
+| `call.dismiss` | 对方挂断/取消 | 关闭对应的那条来电通知 |
+| `message.new` | 新消息且接收者离线 | 同一会话用同一个 `tag`，多条未读在系统托盘里替换成最新一条 |
+
+### 五条规则
+
+1. **在线不推**。用户连着 WS、消息就在眼前，再弹系统通知是重复打扰。代价是后台标签页仍算在线、可能不推——比「前台还在弹通知」好接受。
+2. **免打扰会话不推**（`conversation_members.muted`）。
+3. **按类型尊重通知设置**：私聊看 `notify_message`，群聊看 `notify_group`，与站内通知共用同一套开关。
+4. **通话记录不推**：它是回执，不是等你回的消息。
+5. **群消息不做「只推 @」的收窄**：那会让普通群消息在离线时彻底静默，与 IM 常识不符。
+
+### 摘要与聚合
+
+正文由 `pushSnippet()` 按消息类型生成（`[图片]` / `[文件] 报价单.pdf` / `[位置] 深圳湾公园` / `[投票] 题目`），
+空白内容兜底成 `[消息]`，超过 80 字截断。批量转发只推最后一条——它们进的是同一个会话、
+同一个 tag，推 5 次和推 1 次结果一样。
+
+### 部署与前置条件
+
+```dotenv
+# 生成一对密钥（只生成一次，公私钥必须成对）：
+#   npx web-push generate-vapid-keys --json
+WEB_PUSH_VAPID_PUBLIC_KEY=
+WEB_PUSH_VAPID_PRIVATE_KEY=
+WEB_PUSH_VAPID_SUBJECT=mailto:ops@example.com
+```
+
+- **必须 HTTPS**：Service Worker 与 Push API 都要求安全上下文，`http://` 下连订阅都建不起来。
+- **iOS 需要「添加到主屏幕」**：iOS 16.4+ 才支持 Web Push，且只能从主屏幕上的 PWA 收推送。仓库已补 `manifest.webmanifest` 与 `apple-touch-icon`（`scripts/gen-icons.mjs` 生成 180/192/512 三个尺寸）。
+- **`/sw.js` 不能缓存**：Nginx 对 `.js` 默认缓存 7 天，已在 `docker/nginx.conf` 单独给它 `no-cache`，否则推送逻辑改了用户一周内还在跑旧版。
+- 站内通知（通知中心里的红点与列表）与系统推送是两条线：前者由 `notification.js` 写库，后者由 `message-push.js` 投递，共用同一组开关。
+
+---
+
+## 语音与视频通话
+
+一对一通话走 **WebRTC P2P**：媒体不经过服务器，服务端只转发信令。群通话没有做 ——
+3 人以上 P2P 的上行会按 N-1 条视频流增长，那时需要的是 SFU，不是把现有实现改参数。
+
+```
+GET  /api/v1/calls/ice-config      STUN / TURN 配置（TURN 凭证是短期 HMAC，1 小时有效）
+GET  /api/v1/calls?limit=&before=  通话记录（只回元数据，不含任何媒体地址）
+```
+
+信令事件（全部走已有 WS 通道，服务端逐条校验会话成员、主叫/被叫身份与状态机）：
+
+| 方向 | 事件 |
+| --- | --- |
+| 客户端 → | `call.invite` `call.accept` `call.reject` `call.cancel` `call.end` `call.offer` `call.answer` `call.ice` |
+| 服务端 → | `call.incoming` `call.ringing` `call.accepted` `call.rejected` `call.cancelled` `call.ended` `call.timeout` `call.busy` `call.unavailable` `call.error` |
+
+### 四条硬规矩
+
+1. **媒体只在通话时获取**：主叫点下按钮才开麦克风；被叫**接听时**才开摄像头 —— 振铃期间就打开等于对方还没同意就被看着。
+2. **接听时刻才是计时起点**：`voice_calls.started_at` 在 `call.accept` 时写入，振铃时间不算通话时长。
+3. **通话记录是事实，不是用户内容**：`kind='call'` 的消息只能由服务端写；它不能收藏、不能撤回，也不参与未读计数。
+4. **结束后一定留痕**：正常挂断 / 拒接 / 取消 / 振铃超时 / 断线 / 4 小时到期，全部收敛到 `finishVoiceCall()` 一个出口，避免「我明明挂了，聊天里没有这通电话」。
+
+### 通话记录
+
+`voice_calls` 一行就是一条记录：`media`（audio/video）、`started_at`、`ended_at`、
+`duration_sec`、`end_reason`，并通过 `call_state` 落到消息上：
+
+| 结果 | 触发 | 主叫看到 | 被叫看到 |
+| --- | --- | --- | --- |
+| `ended` | 接通后挂断 / 对方断线 | 时长 | 时长 |
+| `expired` | 振铃 90 秒无人接 | 未接通 | 未接来电 |
+| `rejected` | 被叫拒接 | 对方已拒绝 | 已拒绝 |
+| `cancelled` | 主叫接通前取消 | 已取消 | 未接来电 |
+
+记录在三个地方出现：聊天里的胶囊气泡（点击按原媒体类型回拨）、会话列表预览、
+「我 → 通话记录」（全部 / 未接筛选，分页）。三处文案共用 `src/lib/call.js` ——
+同一个状态在主叫和被叫眼里含义不同，分开写必然有一处写反。
+
+### 部署前提
+
+- **必须 HTTPS**：`getUserMedia` 只在安全上下文可用，`http://` 下连麦克风都拿不到，报错还很含糊。
+- **公网必须部署 TURN**：两端都在对称 NAT / 企业网时 P2P 必然失败，表现是「一直正在接通」。仓库已在 `docker-compose.app.yml` 里带一个 coturn 服务，凭证算法与 `routes/calls.js` 的 HMAC 对齐。
+- **多副本要开 Redis**：通话路由状态与到期定时器是进程内的，Redis 关闭时只能单实例运行（`ws.js` 已注明）。
+- **不录音、不录像**：库里只有元数据，这也是合规上最省心的选择。
+
 ## 动态
 
 动态（PRD §16「轻量内容流」）的数据全部来自后端，五个表：
@@ -762,26 +864,27 @@ POST   /api/v1/users/:id/follow  ·  DELETE 同路径   关注 / 取关
 
 ---
 
-## 发现
+## 社群
+
+「社群」取代了原先的「发现」页。发现页做的是推荐用户、附近的人、活动报名、话题榜、兴趣标签 ——
+那是把聊天软件往内容社区推；与「纯粹做即时通讯」的定位冲突，已整体移除：
+后端 `discover.js` / `routes/discover.js`、前端 `DiscoverTab` / `DiscoverStore`、
+话题浏览表 `moment_topic_views` 以及为「附近」保存的城市坐标全部下线。
+
+社群只做三件事：**看我在的群、找公开群、加群进群**。没有新表 —— 读写都落在
+`conversations` / `conversation_members` 上。
 
 ```
-GET    /api/v1/discover/recommend?tag=&limit=&offset=   推荐用户（带理由 / 排序）
-GET    /api/v1/discover/nearby?limit=                   附近的人（默认按地区；双方授权后按城市中心点估算）
-GET    /api/v1/discover/tags                            兴趣标签聚合
-GET    /api/v1/discover/groups                          可加入的公开兴趣群
-POST   /api/v1/discover/groups/:id/join                 加入公开群
-GET    /api/v1/discover/activities                      当前用户有权查看的未开始活动
-GET    /api/v1/discover/topics                          近 30 天公开动态话题榜（合并近 7 天去重浏览）
-POST   /api/v1/discover/topics/:topic/view              记录用户打开话题（每人每话题去重）
-GET    /api/v1/discover/topics/:topic/moments           查看该话题下有权访问的动态
+GET    /api/v1/communities?limit=            可加入的公开群（discoverable=1 且我不在里面）
+POST   /api/v1/communities/:id/join          加入公开群
 ```
 
-### 三条硬规矩
+### 四条硬规矩
 
-1. **推荐理由必须可解释。** 只能由「共同群聊 / 共同兴趣标签 / 同城」算出来，算不出就给 `null`。
-2. **附近分享默认关闭。** 发现页不主动定位；用户需在资料页明确授权并手动点击定位。服务端只保存城市中心点，关闭授权会清除坐标。
-3. **距离不冒充实时距离。** 只有双方都授权时才显示城市中心点间的估算；否则按资料地区匹配，不显示公里数。
-4. **话题榜有边界。** 榜单只统计近 30 天公开动态；打开话题按用户去重计入近 7 天浏览热度；详情只返回当前用户有权限查看的动态。
+1. **「我加入的群」只有一个数据源**：会话列表。两处各查一份，群名改了就会出现两个版本。
+2. **公开是开关，不是默认**：`conversations.discoverable = 1` 才会被列出。否则知道 id 就能进别人的私人群。
+3. **加入是幂等的**：重复加入返回 `joined: false`，不会插入第二行成员；成员行与 `updated_at` 在同一事务里写。
+4. **不编数字**：成员数来自 `conversation_members` 的真实计数；没有公开群就显示空态，不放假卡片。
 
 ---
 
@@ -812,7 +915,7 @@ GET    /api/v1/discover/topics/:topic/moments           查看该话题下有权
 | 账号与安全 | ✅ | 退出登录、设备列表 / 远程退出、修改密码；显示已绑定手机号和邮箱 | 邮箱注册与验证已接入；手机号注册入口暂时关闭，服务端实现保留；手机号可在编辑资料中维护；生物识别、二次验证尚未接入 |
 | 隐私设置 | ✅ | 动态默认可见范围、添加好友、在线状态、文字消息加密存储、已读回执、阅后即焚 | 截屏提醒未接入；消息加密是服务端存储加密，不是端到端加密 |
 | 通用设置 | ✅ | 字体大小（真写 `--font-scale`）、聊天列表左滑删除、回车键发送、自动下载图片 | 语言（只有中文） |
-| 主题外观 | ✅ | 5 套主题（真写 `--brand-*`）、**动效开关**（真挂 `.no-motion`，和 `prefers-reduced-motion` 同一套规则）、当前字体大小只读回显 | 聊天背景 / 气泡颜色 / 强调色 —— 标 `未接入` |
+| 主题外观 | ✅ | 5 套设计系统配色、跟随系统/浅色/深色外观模式、**动效开关**（真挂 `.no-motion`，和 `prefers-reduced-motion` 同一套规则）、当前字体大小只读回显 | 联系人独立主题未接入；不显示假入口 |
 | 消息通知 | ✅ | 通知中心 / 偏好设置 / WebSocket 在线提醒 | 系统运营通知尚无产生方；提醒方式受浏览器权限与当前页面状态限制 |
 | 帮助与反馈 | ✅ | FAQ（逐条对齐真实实现）、**反馈真的落库**到 `feedbacks` 表 + 截图真的上传到磁盘 | — |
 | 关于我们 | ✅ | 版本号 / 关于信息 | 纯静态页 |
@@ -868,17 +971,17 @@ POST /api/v1/feedback              提交反馈
 
 #### 主题外观
 
-5 套主题，切换时写入 CSS 变量到 `:root`，同时持久化到 localStorage：
+5 套主题，切换时写入 CSS 变量到 `:root`，同时持久化到 localStorage。品牌渐变会按主题文字色检查可读性；蜜桃的消息/按钮渐变端点会自动加深以满足白字对比度：
 
-| 主题 | 渐变 |
-| --- | --- |
-| 极光 | `#8b7cf6 → #6d5cf6` |
-| 薄荷 | `#34d3a6 → #2bb595` |
-| 蜜桃 | `#f97ca8 → #e86a96` |
-| 琥珀 | `#ffb43f → #f5a028` |
-| 石墨 | `#4a4a5a → #3a3a4a` |
+| 主题 | 色板渐变 | 按钮文字 |
+| --- | --- | --- |
+| 极光 | `#6d5df6 → #5b4bd8` | 白色 |
+| 薄荷 | `#34d3a6 → #2bb595` | 深绿 `#06382c` |
+| 蜜桃 | `#f97ca8 → #cf3f75` | 白色（动作色按 AA 安全值调整） |
+| 琥珀 | `#ffb43f → #f5a028` | 深棕 `#3d2600` |
+| 石墨 | `#4a4a5a → #3a3a4a` | 白色 |
 
-CSS 变量：`--primary`、`--primary-end`、`--accent`。
+CSS 变量：`--primary`、`--primary-end`、`--on-primary`、`--brand-grad` 与 `--brand-soft`。`chatly-mode` 保存 `system` / `light` / `dark`；系统模式会跟随设备外观变化。
 
 #### 稍后看
 
@@ -950,12 +1053,12 @@ GET /api/v1/files?limit=20&beforeId=&type=all
 | `GET /users/by-username/:username?from=qr\|search` | `?from=` | 资料**照常返回**，但 `addable.allowed=false` + 原因 |
 | `POST /users/:id/follow` 带 `body.source` | `source` | **403** + `code:'privacy_blocked'` |
 
-**不带渠道一律放行**：群成员列表点「关注」、发现页推荐里点「关注」都不带 source ——
-那些人本来就在你眼前（同一个群 / 公开推荐），不存在「被找到」的问题，拦下来只会让人困惑。
+**不带渠道一律放行**：群成员列表点「关注」不带 source ——
+那些人本来就在你眼前（同一个群），不存在「被找到」的问题，拦下来只会让人困惑。
 这就是「**查得到 ≠ 加得上**」：命中闸门时资料照常返回（你知道这是谁），只是加不上。
 
 **在线状态可见**的语义是「所有对外出口都不再回答他在不在线」：
-`GET /users`、`GET /users/:id`、发现页里的人 `online` 恒为 `false`；
+`GET /users`、`GET /users/:id` 里的人 `online` 恒为 `false`；
 WS 的 `presence` 上下线广播**直接不发**（不是发 `online:false` —— 「一直显示离线」和
 「对方关了在线状态」在界面上是一回事，没必要泄露前者）。而且只推给 `peersOf(userId)`
 （有共同会话的人），不再广播给所有在线连接。
@@ -1055,7 +1158,7 @@ PUT    /api/v1/devices/settings     更新安全设置
 
 ## 位置服务
 
-四个落地场景：我页「所在地区」手动授权后解析城市中心点、动态发布选附近 POI、发现页「附近」城市中心点估算距离、聊天里发位置消息。发现页不会自动请求设备定位；未授权时不保留城市坐标。
+三个落地场景：我页「所在地区」点定位后回填城市名、动态发布选附近 POI、聊天里发位置消息。定位只由用户主动点按钮触发；服务端不保存用户坐标。
 
 ### 三套坐标系，别混用
 
@@ -1103,11 +1206,15 @@ VITE_TMAP_KEY      →  前端地图渲染用，放 .env.local
 
 ## 设计规范
 
-- **主色**：紫蓝渐变 `#9b8cfb → #7b5cf6 → #5b6ef5`
-- **强调色**：荧光蓝 `#39c9f5` / 薄荷绿 `#34d3a6` / 粉 `#f97ca8` / 琥珀 `#ffb43f`
-- **背景**：暖白 `#f7f7fb`
-- **特征**：大圆角、卡片式内容、轻阴影、半透明层、柔和渐变、大留白、细腻微动效
-- **字体**：Noto Sans SC / 思源黑体，正文 weight 450+
+- **设计系统来源**：项目规范见 [`docs/CHATLY-DESIGN-SYSTEM.md`](docs/CHATLY-DESIGN-SYSTEM.md)，聊天界面审计与实施记录见 [`docs/CHAT-UI-AUDIT.md`](docs/CHAT-UI-AUDIT.md)。
+- **品牌动作色**：Aurora 渐变 `#6d5df6 → #5b4bd8`；其它主题各自声明 `on-primary`，品牌按钮、气泡和选择状态共用安全渐变。
+- **强调色**：青蓝 `#39c9f5` / 薄荷绿 `#34d3a6` / 粉 `#f97ca8` / 琥珀 `#ffb43f`，仅用于状态或内容强调。
+- **表面层级**：浅色暖白画布、白色内容面、`#f0f0f6` 输入控件；深色模式改用深画布/表面/控件；细分隔线代替多层重阴影。
+- **文字对比**：正文使用 `--text-1`，次级信息使用 `--text-2/--text-3`；`--text-4` 只用于非文本装饰。
+- **形状与动效**：4pt 间距、8/12/18px 圆角与 E0/E1/E2 层级来自统一令牌；动效短、轻，并遵守系统的减少动态效果设置。
+- **字体**：Noto Sans SC / 思源黑体，正文 weight 450+；时间、状态和提示文字保持至少 11px。
+- **聊天语义令牌**：`--chat-*` 映射共享画布、表面、输入、分隔、选中态及我方消息颜色，供会话列表、消息房间、状态栏和输入区共用。
+- **导航结构**：保留聊天 / 通讯录 / 动态 / 社群 / 我五个入口；设计稿中的四项导航是示例 IA，不覆盖产品现有通讯录入口。
 - 全量令牌见 `src/styles/tokens.css`
 
 ---
@@ -1225,12 +1332,12 @@ DB_DRIVER=postgres DATABASE_URL=postgres://chatly:chatly_dev_pw@127.0.0.1:55433/
 | 类别 | 脚本 | 说明 |
 | --- | --- | --- |
 | **两种驱动都跑** | `check-driver` / `check-privacy` / `check-presence` + 全部纯浏览器脚本（`check-group` / `check-video` / `check-media` / `check-console` / `check-readreceipt` / `check-scroll` / `check-emoji` / `check-align` / `check-narrow` / `e2e-realtime` / `audit-ui`） | 回库核对走异步 `q`；纯浏览器脚本只走 HTTP + CDP |
-| **仅 SQLite** | `check-favorite` / `check-poll` / `check-me` / `check-moment` / `check-geo` / `check-discover` / `check-qr` / `check-reply-forward` / `check-longpress` | 用了 SQLite 专有的 `db` / `qSync` / `insertSync`（同步直连） |
+| **仅 SQLite** | `check-favorite` / `check-poll` / `check-me` / `check-moment` / `check-geo` / `check-community` / `check-call` / `check-qr` / `check-reply-forward` / `check-longpress` | 用了 SQLite 专有的 `db` / `qSync` / `insertSync`（同步直连） |
 
 > `scripts/lib/debris.mjs`（自检残留清理）**已经是驱动无关的**（异步 `q` + `tx`）。
 > 它原先用 SQLite 裸句柄，后果不是「这个库不能用」，而是**任何 import 它的脚本都跑不了 PG** ——
 > 于是纯浏览器脚本被打上了「只能在 SQLite 下验」的隐形烙印，
-> 实测就因此漏掉一个「发现页 500」。共用工具库要按**最严格的调用方**来写。
+> 实测就因此漏掉一个接口 500。共用工具库要按**最严格的调用方**来写。
 
 每个自检脚本都是**自包含**的：自己建临时群、自己发探针消息、自己清理残留。
 跑完数据库回到基线，不会污染下一个自检。

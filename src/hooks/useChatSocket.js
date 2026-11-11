@@ -6,7 +6,7 @@
  * 组件通过订阅表消费事件。
  *
  * 事件协议（下行，见 server/src/ws.js）：
- *   hello | message.new | message.revoked | conversation.read | typing | presence | error
+ *   hello | message.* | conversation.* | typing | presence | call.* | error
  * 另有前端内部事件 '@status' 表示连接状态变化。
  */
 import { useEffect, useRef, useState } from 'react'
@@ -130,6 +130,17 @@ export function sendTyping(conversationId) {
   }
 }
 
+/** Send a small real-time event over the authenticated, shared socket. */
+export function sendChatSocketEvent(type, payload = {}) {
+  if (!sock || sock.readyState !== 1) return false
+  try {
+    sock.send(JSON.stringify({ type, payload }))
+    return true
+  } catch {
+    return false
+  }
+}
+
 /**
  * 订阅全部下行事件。
  * @param {string|null} token  JWT，为 null 时不连接
@@ -158,6 +169,9 @@ export function useChatSocket(token, onEvent) {
 
     listeners.add(fn)
     open(token)
+    // A later subscriber can reuse an already-open socket; it would not see the
+    // original onopen event, so mirror the current transport state here.
+    if (sock && sock.readyState === 1) setConnected(true)
 
     return () => {
       listeners.delete(fn)

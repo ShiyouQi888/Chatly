@@ -6,14 +6,14 @@ import { useChat } from '../store/ChatStore.jsx'
 import ChatTab from '../screens/ChatTab.jsx'
 import ContactsTab from '../screens/ContactsTab.jsx'
 import MomentTab from '../screens/MomentTab.jsx'
-import DiscoverTab from '../screens/DiscoverTab.jsx'
+import CommunityTab from '../screens/CommunityTab.jsx'
 import MeTab from '../screens/MeTab.jsx'
 import ChatRoom from '../screens/ChatRoom.jsx'
 import NoticeCenter from '../screens/NoticeCenter.jsx'
 import SearchPanel from '../screens/SearchPanel.jsx'
 import ScanPage from '../screens/ScanPage.jsx'
 import LoginScreen from '../screens/LoginScreen.jsx'
-import { IconChat, IconContacts, IconMoment, IconCompass, IconUser } from './Icon.jsx'
+import { IconChat, IconContacts, IconMoment, IconCommunity, IconUser } from './Icon.jsx'
 import { Badge, Toast } from './ui.jsx'
 import './phone.css'
 
@@ -21,7 +21,7 @@ const TABS = [
   { key: 'chat', label: '聊天', icon: IconChat },
   { key: 'contacts', label: '通讯录', icon: IconContacts },
   { key: 'moment', label: '动态', icon: IconMoment },
-  { key: 'discover', label: '发现', icon: IconCompass },
+  { key: 'community', label: '社群', icon: IconCommunity },
   { key: 'me', label: '我', icon: IconUser },
 ]
 
@@ -97,6 +97,34 @@ export default function Phone() {
     }
   }, [ready, user?.id])
 
+  /* 从系统通知点进来：冷启动读 `?conv=`，热启动等 SW 发消息。
+     两条路都要，缺一条就会出现「点了通知只回到首页，还得自己找那个会话」。 */
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const convId = Number(params.get('conv'))
+    if (!convId) return
+    dispatch({ type: 'SET_TAB', tab: 'chat' })
+    setOpenChatId(convId)
+    /* 用完就把参数抹掉：刷新页面不该又跳一次，用户也可能已经切走了 */
+    params.delete('conv')
+    const qs = params.toString()
+    window.history.replaceState(null, '', `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash}`)
+  }, [dispatch])
+
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return undefined
+    const onMessage = (event) => {
+      const data = event.data
+      if (data?.type !== 'openConversation') return
+      const convId = Number(data.payload?.conversationId)
+      if (!convId) return
+      dispatch({ type: 'SET_TAB', tab: 'chat' })
+      setOpenChatId(convId)
+    }
+    navigator.serviceWorker.addEventListener('message', onMessage)
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage)
+  }, [dispatch])
+
   /* 会话对象从 store 里按 id 取，保证打开时拿到的是最新状态（预览/未读/在线） */
   const openChat = useMemo(
     () => conversations.find((c) => c.id === openChatId) || null,
@@ -171,7 +199,7 @@ export default function Phone() {
             {tab === 'chat' && <ChatTab nav={nav} statusComposeSignal={statusComposeSignal} />}
             {tab === 'contacts' && <ContactsTab nav={nav} onIncomingCountChange={setFriendRequestCount} />}
             {tab === 'moment' && <MomentTab nav={nav} />}
-            {tab === 'discover' && <DiscoverTab nav={nav} />}
+            {tab === 'community' && <CommunityTab nav={nav} />}
             {tab === 'me' && <MeTab nav={nav} notifySettingsSignal={notifySettingsSignal} />}
           </div>
 

@@ -22,8 +22,8 @@ export default function AboutPage({ onBack }) {
             <svg width="64" height="64" viewBox="0 0 64 64">
               <defs>
                 <linearGradient id="aboutG" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0" stopColor="#9b8cfb" />
-                  <stop offset="1" stopColor="#5b6ef5" />
+                  <stop offset="0" stopColor="var(--brand-1)" />
+                  <stop offset="1" stopColor="var(--brand-3)" />
                 </linearGradient>
               </defs>
               <rect width="64" height="64" rx="16" fill="url(#aboutG)" />
@@ -48,7 +48,7 @@ export default function AboutPage({ onBack }) {
                 <li>群聊：群管理 / 群投票 / 禁言锁定</li>
                 <li>消息：引用回复 / 消息转发 / 长按手势 / 消息收藏</li>
                 <li>动态：图文 / 视频 / 点赞 / 评论 / 可见范围</li>
-                <li>发现：推荐用户 / 附近的人 / 公开群</li>
+                <li>社群：公开群聚合 / 加入公开群 / 群聊进群</li>
                 <li>我：资料编辑 / 头像裁剪 / 我的二维码 / 扫一扫</li>
                 <li>表情：386 彩色 SVG + 30 动画 GIF</li>
               </ul>

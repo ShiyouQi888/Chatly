@@ -23,9 +23,9 @@
   display: flex;
   flex-direction: column;
   background: var(--surface);
-  border-radius: var(--r-xl) var(--r-xl) 0 0;
-  box-shadow: 0 -8px 32px rgba(18, 18, 28, 0.18);
-  padding-bottom: max(14px, env(safe-area-inset-bottom));
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  box-shadow: var(--e2);
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
 }
 
 .avp-head {
@@ -46,8 +46,8 @@
 
 .avp-close,
 .avp-spacer {
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   flex: 0 0 auto;
 }
 
@@ -80,13 +80,13 @@
 .avp-preview {
   width: 96px;
   height: 96px;
-  margin: 2px auto 14px;
-  border-radius: 30px;
+  margin: 2px auto 16px;
+  border-radius: var(--r-lg);
   overflow: hidden;
   background: var(--surface-2);
   display: grid;
   place-items: center;
-  box-shadow: 0 0 0 1px var(--line), 0 6px 18px -8px rgba(30, 28, 70, 0.28);
+  box-shadow: 0 0 0 1px var(--line), var(--e1);
 }
 
 .avp-preview img {
@@ -112,13 +112,13 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
+  gap: 8px;
   border-radius: var(--r-md);
   font-size: var(--fs-body);
   font-weight: 600;
-  color: #fff;
+  color: var(--text-on-brand);
   background: var(--brand-grad);
-  box-shadow: 0 8px 20px -10px rgba(107, 92, 246, 0.9);
+  box-shadow: none;
 }
 
 .avp-upload:active {
@@ -134,26 +134,26 @@
 }
 
 .avp-sec {
-  margin-top: 18px;
+  margin-top: 20px;
 }
 
 .avp-sec h4 {
   font-size: var(--fs-cap);
   font-weight: 600;
   color: var(--text-3);
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .avp-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
+  gap: 12px;
 }
 
 .avp-item {
   position: relative;
   aspect-ratio: 1;
-  border-radius: 16px;
+  border-radius: var(--r-lg);
   overflow: hidden;
   background: var(--surface-2);
   transition: transform 0.14s var(--ease);
@@ -175,15 +175,15 @@
 
 .avp-item-check {
   position: absolute;
-  right: 3px;
+  right: 4px;
   bottom: 3px;
   width: 18px;
   height: 18px;
   border-radius: var(--r-full);
   display: grid;
   place-items: center;
-  color: #fff;
-  background: var(--brand-2);
+  color: var(--text-on-brand);
+  background: var(--brand-grad);
   box-shadow: 0 0 0 2px var(--surface);
 }
 
@@ -199,7 +199,7 @@
   position: relative;
   flex: 0 0 auto;
   overflow: hidden;
-  border-radius: 20px;
+  border-radius: var(--r-lg);
   background: #1b1b26;
   touch-action: none;
   cursor: grab;
@@ -220,8 +220,8 @@
 /* 参考环：让用户知道最终会被裁成什么样（与头像实际圆角一致） */
 .avp-stage-ring {
   position: absolute;
-  inset: 14px;
-  border-radius: 24px;
+  inset: 16px;
+  border-radius: var(--r-lg);
   border: 1.5px dashed rgba(255, 255, 255, 0.5);
   pointer-events: none;
 }
@@ -230,7 +230,7 @@
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   color: var(--text-3);
   font-size: var(--fs-sub);
 }
@@ -254,19 +254,19 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 4px;
 }
 
 .avp-btn.is-ghost {
   flex: 0 0 auto;
-  padding: 0 14px;
+  padding: 0 16px;
   color: var(--text-2);
   background: var(--surface-2);
 }
 
 .avp-btn.is-primary {
   flex: 1;
-  color: #fff;
+  color: var(--text-on-brand);
   background: var(--brand-grad);
 }
 

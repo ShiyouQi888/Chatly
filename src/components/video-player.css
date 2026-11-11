@@ -106,7 +106,7 @@
   color: #fff;
   display: grid;
   place-items: center;
-  padding-left: 3px; /* 三角视觉重心偏左，补一点让它看起来居中 */
+  padding-left: 4px; /* 三角视觉重心偏左，补一点让它看起来居中 */
   box-shadow: 0 6px 20px -8px rgba(0, 0, 0, 0.7);
   transition: transform 0.16s var(--ease);
 }
@@ -117,9 +117,9 @@
 
 .vp-dur {
   position: absolute;
-  right: 9px;
+  right: 8px;
   bottom: 9px;
-  padding: 2px 7px;
+  padding: 2px 8px;
   border-radius: var(--r-full);
   background: rgba(14, 14, 22, 0.52);
   backdrop-filter: blur(10px);
@@ -138,7 +138,7 @@
   top: 50%;
   width: 62px;
   height: 62px;
-  margin: -31px 0 0 -31px;
+  margin: -32px 0 0 -32px;
   border-radius: var(--r-full);
   display: grid;
   place-items: center;
@@ -172,12 +172,12 @@
    （顶栏 blur(16px)、弹层 blur(8px)、封面播放键）是同一套语言。 */
 .vp-bar {
   position: absolute;
-  left: 10px;
+  left: 12px;
   right: 10px;
-  bottom: 10px;
+  bottom: 12px;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   padding: 5px 9px 5px 5px;
   border-radius: var(--r-full);
   background: rgba(18, 18, 28, 0.52);
@@ -220,8 +220,8 @@
   width: 26px;
   height: 26px;
   background: var(--brand-grad);
-  color: #fff;
-  box-shadow: 0 4px 12px -4px rgba(91, 110, 245, 0.9);
+  color: var(--text-on-brand);
+  box-shadow: none;
   padding-left: 1px; /* 播放三角视觉重心偏左 */
 }
 
@@ -275,17 +275,17 @@
   position: absolute;
   width: 11px;
   height: 11px;
-  margin-left: -5.5px;
+  margin-left: -4px;
   border-radius: var(--r-full);
   background: #fff;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5), 0 0 0 3px rgba(123, 92, 246, 0.35);
+  box-shadow: var(--e1), 0 0 0 3px var(--brand-soft-2);
   pointer-events: none;
 }
 
 /* ===== 失效 ===== */
 .vp-broken {
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   background: var(--surface-2);
   color: var(--text-3);
   font-size: var(--fs-micro);

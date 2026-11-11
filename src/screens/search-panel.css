@@ -3,7 +3,7 @@
   position: absolute;
   inset: 0;
   z-index: var(--z-overlay);
-  background: var(--bg);
+  background: var(--chat-canvas);
   display: flex;
   flex-direction: column;
   animation: subIn var(--dur) var(--ease) both;
@@ -32,8 +32,8 @@
   font-size: var(--fs-micro);
   font-style: normal;
   font-weight: 600;
-  color: #fff;
-  background: var(--brand-2);
+  color: var(--text-on-brand);
+  background: var(--brand-grad);
   min-width: 18px;
   height: 18px;
   /* 1px 是徽标行间微调，不属于 4px 节奏刻度，刻意保留字面值 */
@@ -93,7 +93,7 @@
 }
 
 .notice-row.is-unread {
-  background: linear-gradient(120deg, rgba(155, 140, 251, 0.07), rgba(91, 110, 245, 0.04));
+  background: linear-gradient(120deg, var(--brand-soft), var(--surface));
 }
 
 .nr-av {
@@ -147,7 +147,7 @@
 .nr-top em {
   font-size: var(--fs-micro);
   font-style: normal;
-  color: var(--text-4);
+  color: var(--text-3);
   flex: 0 0 auto;
 }
 
@@ -186,7 +186,7 @@
   position: absolute;
   inset: 0;
   z-index: var(--z-overlay);
-  background: var(--bg);
+  background: var(--chat-canvas);
   display: flex;
   flex-direction: column;
   animation: subIn var(--dur) var(--ease) both;
@@ -220,7 +220,7 @@
 }
 
 .sp-field input::placeholder {
-  color: var(--text-4);
+  color: var(--text-3);
 }
 
 .sp-clear {
@@ -241,9 +241,9 @@
 .sp-clear::after {
   content: '';
   position: absolute;
-  left: -6px;
+  left: -8px;
   right: -6px;
-  top: -6px;
+  top: -8px;
   bottom: -6px;
 }
 
@@ -287,7 +287,7 @@
 
 .sp-empty-hist {
   font-size: var(--fs-sub);
-  color: var(--text-4);
+  color: var(--text-3);
   padding: var(--space-2) var(--space-1) var(--space-3);
 }
 
@@ -426,7 +426,7 @@
 
 .sp-hot-row > svg {
   margin-left: auto;
-  color: var(--text-4);
+  color: var(--text-3);
 }
 
 .sp-hot-row:nth-child(-n + 3) > svg {
@@ -488,12 +488,12 @@
 .sp-p-self {
   flex: 0 0 auto;
   font-size: var(--fs-micro);
-  color: var(--text-4);
+  color: var(--text-3);
 }
 
 .sp-people-empty {
   padding: var(--space-5) var(--space-4);
   font-size: var(--fs-sub);
-  color: var(--text-4);
+  color: var(--text-3);
   text-align: center;
 }

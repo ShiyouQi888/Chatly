@@ -4,7 +4,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -18,7 +17,7 @@ import com.example.chatly.ui.theme.ChatlyViolet
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
     object Chat : Screen("chat", "聊天", Icons.Default.Email)
     object Moments : Screen("moments", "动态", Icons.Default.Home)
-    object Discover : Screen("discover", "发现", Icons.Default.Star)
+    object Contacts : Screen("contacts", "通讯录", Icons.Default.Person)
     object Me : Screen("me", "我", Icons.Default.Person)
 }
 
@@ -30,7 +29,7 @@ fun ChatlyBottomBar(
     val items = listOf(
         Screen.Chat,
         Screen.Moments,
-        Screen.Discover,
+        Screen.Contacts,
         Screen.Me
     )
 

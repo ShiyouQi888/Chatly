@@ -3,7 +3,16 @@ import { useNotifications } from '../store/NotificationStore.jsx'
 import { inDnd } from '../utils/notifyAlert.js'
 import { IconBack } from '../components/Icon.jsx'
 import { Row, Group, Switch } from '../components/ui.jsx'
+import { api } from '../api/client.js'
 import './me-tab.css'
+
+const PUSH_ENDPOINT_KEY = 'chatly.push.endpoint'
+
+function vapidKeyBytes(value) {
+  const normalized = String(value || '').replace(/-/g, '+').replace(/_/g, '/')
+  const raw = atob(normalized + '='.repeat((4 - normalized.length % 4) % 4))
+  return Uint8Array.from(raw, (char) => char.charCodeAt(0))
+}
 
 /* ===== 消息通知设置 =====
  *
@@ -36,10 +45,73 @@ export default function NotificationSettings({ onBack }) {
   const [end, setEnd] = useState('08:00')
   const [saving, setSaving] = useState({})
   const [saveMessage, setSaveMessage] = useState('')
+  const [pushConfig, setPushConfig] = useState(null)
+  const [pushPermission, setPushPermission] = useState(() => typeof Notification === 'undefined' ? 'unsupported' : Notification.permission)
+  const [pushEnabled, setPushEnabled] = useState(false)
+  const [pushBusy, setPushBusy] = useState(false)
+  const pushSupported = typeof window !== 'undefined' && 'Notification' in window && 'serviceWorker' in navigator && 'PushManager' in window
 
   useEffect(() => {
     if (!prefs) loadPrefs()
   }, [prefs, loadPrefs])
+
+  useEffect(() => {
+    let active = true
+    api.pushConfig().then((config) => active && setPushConfig(config)).catch(() => active && setPushConfig({ enabled: false }))
+    if (pushSupported) {
+      setPushPermission(Notification.permission)
+      navigator.serviceWorker.getRegistration('/').then((registration) => registration?.pushManager?.getSubscription())
+        .then((subscription) => {
+          if (active) setPushEnabled(!!subscription)
+        })
+        .catch(() => {})
+    }
+    return () => { active = false }
+  }, [pushSupported])
+
+  const togglePush = async (enabled) => {
+    if (pushBusy) return
+    setPushBusy(true)
+    setSaveMessage('')
+    try {
+      if (enabled) {
+        if (!pushSupported) throw new Error('此浏览器不支持后台推送')
+        if (!pushConfig?.enabled || !pushConfig.publicKey) throw new Error('服务端尚未配置 Web Push 密钥')
+        let permission = Notification.permission
+        if (permission === 'default') permission = await Notification.requestPermission()
+        setPushPermission(permission)
+        if (permission !== 'granted') throw new Error(permission === 'denied' ? '通知权限已拒绝，请在浏览器站点设置中开启' : '需要允许通知权限才能接收来电推送')
+
+        const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' })
+        await navigator.serviceWorker.ready
+        let subscription = await registration.pushManager.getSubscription()
+        if (!subscription) {
+          subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: vapidKeyBytes(pushConfig.publicKey),
+          })
+        }
+        await api.savePushSubscription(subscription.toJSON())
+        try { localStorage.setItem(PUSH_ENDPOINT_KEY, subscription.endpoint) } catch { /* browser storage may be disabled */ }
+        setPushEnabled(true)
+        setSaveMessage('此设备已开启语音来电推送')
+      } else {
+        const registration = await navigator.serviceWorker.getRegistration('/')
+        const subscription = await registration?.pushManager?.getSubscription()
+        if (subscription) {
+          await api.deletePushSubscription(subscription.endpoint)
+          await subscription.unsubscribe()
+        }
+        try { localStorage.removeItem(PUSH_ENDPOINT_KEY) } catch { /* browser storage may be disabled */ }
+        setPushEnabled(false)
+        setSaveMessage('此设备已关闭语音来电推送')
+      }
+    } catch (error) {
+      setSaveMessage(error.message || '推送设置失败，请重试')
+    } finally {
+      setPushBusy(false)
+    }
+  }
 
   /* 从后端读回来后同步进输入框（只在有值时覆盖，避免闪回默认值） */
   useEffect(() => {
@@ -134,6 +206,28 @@ export default function NotificationSettings({ onBack }) {
                 label="群通知"
                 sub="我所在的群更新了群公告"
                 right={<Switch on={prefs?.group !== false} onChange={toggle('notify_group')} disabled={saving.notify_group} />}
+                last
+              />
+            </Group>
+
+            <Group
+              title="设备推送"
+              footer="浏览器处于后台时提醒语音来电。点击系统通知打开 Chatly 后接听；需要 HTTPS 和浏览器通知权限，推送权限只对当前设备生效。"
+            >
+              <Row
+                label="语音来电推送"
+                sub={!pushSupported
+                  ? '此浏览器不支持 Web Push'
+                  : !pushConfig
+                    ? '正在检查推送服务…'
+                    : !pushConfig.enabled
+                      ? '服务端尚未配置 VAPID 密钥'
+                      : pushPermission === 'denied'
+                        ? '通知权限已拒绝，请在浏览器站点设置中开启'
+                        : pushEnabled
+                          ? '此设备已开启，离线来电可通过推送送达'
+                          : '未开启，仅在线时显示应用内来电'}
+                right={<Switch on={pushEnabled} onChange={(enabled) => void togglePush(enabled)} disabled={pushBusy || !pushSupported || (!pushEnabled && !pushConfig?.enabled) || (pushPermission === 'denied' && !pushEnabled)} />}
                 last
               />
             </Group>

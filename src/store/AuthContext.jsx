@@ -59,6 +59,18 @@ export function AuthProvider({ children }) {
   }, [])
 
   const logout = useCallback(() => {
+    let pushEndpoint = ''
+    try { pushEndpoint = localStorage.getItem('chatly.push.endpoint') || '' } catch { /* browser storage may be disabled */ }
+    if (pushEndpoint) {
+      // Start authenticated deletion before clearing the token so this device
+      // does not keep receiving account-specific call alerts after sign-out.
+      void api.deletePushSubscription(pushEndpoint).catch(() => {})
+      try { localStorage.removeItem('chatly.push.endpoint') } catch { /* browser storage may be disabled */ }
+      if ('serviceWorker' in navigator) {
+        void navigator.serviceWorker.getRegistration('/').then((registration) => registration?.pushManager?.getSubscription())
+          .then((subscription) => subscription?.unsubscribe()).catch(() => {})
+      }
+    }
     void api.logout().catch(() => {})
     tokenStore.clear()
     setToken(null)

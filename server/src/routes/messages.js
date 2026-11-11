@@ -14,6 +14,7 @@ import { parseGeoPair } from '../../../shared/geo-math.mjs'
 import { q } from '../db.js'
 import { decryptMessageText } from '../message-crypto.js'
 import { privateMessageGate } from '../friends.js'
+import { notifyMessagePush } from '../message-push.js'
 
 const r = Router()
 r.use(authRequired)
@@ -202,6 +203,12 @@ r.post('/', async (req, res) => {
      它内部从不抛错，所以这里不需要包 try。 */
   await notifyIncomingMessage({ conversationId: cid, senderId: req.user.id, message })
 
+  /* 系统推送：给**离线且未静音**的成员。不 await —— 推送要查 DNS、发 HTTPS，
+     让发送方等这一圈不划算；失败也不该影响消息本身（函数内部自己吞错）。
+     ⚠️ 新增「广播 message.new」的路径时，这里也要跟着加一行，否则那条路径的消息
+     在离线端永远不会有通知。 */
+  void notifyMessagePush({ conversationId: cid, senderId: req.user.id, message })
+
   res.status(201).json({ message })
 })
 
@@ -253,6 +260,15 @@ r.post('/forward', async (req, res) => {
      不然「转发到私聊」对方收不到任何提醒，而那明明是一条真消息。 */
   for (const m of out.forwarded) {
     await notifyIncomingMessage({ conversationId: targetConversationId, senderId: req.user.id, message: m })
+  }
+  /* 批量转发只推最后一条：它们进的是同一个会话、用的是同一个通知 tag，
+     推 5 次的结果和推 1 次完全一样，只是多打 4 轮网络请求。 */
+  if (out.forwarded.length) {
+    void notifyMessagePush({
+      conversationId: targetConversationId,
+      senderId: req.user.id,
+      message: out.forwarded[out.forwarded.length - 1],
+    })
   }
   res.status(201).json(out)
 })

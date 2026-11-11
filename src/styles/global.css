@@ -19,6 +19,7 @@ body {
 
 body {
   font-weight: 450;
+  line-height: 1.5;
   overscroll-behavior: none;
 }
 
@@ -38,6 +39,11 @@ textarea {
   background: none;
   color: inherit;
   resize: none;
+}
+
+html[data-app="chat"] :is(input, textarea, select)::placeholder {
+  color: var(--text-3);
+  opacity: 1;
 }
 
 ul,
@@ -136,10 +142,10 @@ select:focus-visible,
 
 @keyframes ringPulse {
   0% {
-    box-shadow: 0 0 0 0 rgba(124, 92, 246, 0.45);
+    box-shadow: 0 0 0 0 var(--brand-pulse);
   }
   100% {
-    box-shadow: 0 0 0 8px rgba(124, 92, 246, 0);
+    box-shadow: 0 0 0 8px var(--brand-pulse-clear);
   }
 }
 

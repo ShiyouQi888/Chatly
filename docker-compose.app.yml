@@ -57,6 +57,12 @@ services:
       TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
       TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
       TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER:-}
+      WEB_PUSH_VAPID_PUBLIC_KEY: ${WEB_PUSH_VAPID_PUBLIC_KEY:-}
+      WEB_PUSH_VAPID_PRIVATE_KEY: ${WEB_PUSH_VAPID_PRIVATE_KEY:-}
+      WEB_PUSH_VAPID_SUBJECT: ${WEB_PUSH_VAPID_SUBJECT:-}
+      WEBRTC_STUN_URLS: ${WEBRTC_STUN_URLS:-}
+      WEBRTC_TURN_URLS: ${WEBRTC_TURN_URLS:-}
+      WEBRTC_TURN_SHARED_SECRET: ${WEBRTC_TURN_SHARED_SECRET:-}
     volumes:
       - prod-uploads:/app/uploads
       - prod-private-uploads:/app/private-uploads
@@ -71,6 +77,49 @@ services:
       timeout: 5s
       start_period: 30s
       retries: 5
+
+  # TURN 中继：对称 NAT / 企业网封 UDP 时唯一能救通话的一环。
+  # 不部署的话，两端都在对称 NAT 后面时 WebRTC 会一直卡在「正在接通」。
+  #
+  # 端口：3478 (UDP/TCP) + 49160-49200 (UDP 中继段)。
+  # 中继段刻意收窄到 40 个端口——每通视频通话占 2 个，够几十路并发，
+  # 又不至于让防火墙要开 3 万个 UDP 端口。
+  turn:
+    image: coturn/coturn:4.6-alpine
+    restart: unless-stopped
+    # 用 host 网络最省事（TURN 的 UDP 端口范围映射在桥接网络下很啰嗦），
+    # 但 Windows/macOS 的 Docker Desktop 不支持 host 网络，所以这里用端口映射，
+    # Linux 生产环境可以把下面的 ports 删掉、改成 network_mode: host。
+    ports:
+      - "3478:3478/udp"
+      - "3478:3478/tcp"
+      - "49160-49200:49160-49200/udp"
+    command:
+      - --listening-port=3478
+      - --fingerprint
+      - --lt-cred-mech
+      # 短期凭证：与 server 的 WEBRTC_TURN_SHARED_SECRET 必须是同一个值，
+      # 算法是 HMAC-SHA1(secret, "过期时间:用户id")，见 server/src/routes/calls.js
+      - --use-auth-secret
+      - --static-auth-secret=${WEBRTC_TURN_SHARED_SECRET:?请设置 WEBRTC_TURN_SHARED_SECRET（TURN 与 server 共用）}
+      - --realm=chatly
+      # 公网 IP。**部署到云主机时一定要取消注释并填写** ——
+      # 不填的话 coturn 自己探测，在 NAT 后面常常探测成内网地址，
+      # 客户端拿到的中继候选不可达，表现是「一直正在接通」。
+      # - --external-ip=${TURN_EXTERNAL_IP}
+      - --min-port=49160
+      - --max-port=49200
+      - --no-multicast-peers
+      - --no-cli
+      - --stale-nonce=600
+      # 默认不开 TLS。要支持 turns:（企业网只放行 443 时的保命通道）：
+      #   1) 把证书挂进来：./docker/turn/certs/fullchain.pem 与 privkey.pem
+      #   2) 把 --no-tls 换成：
+      #      - --tls-listening-port=5349
+      #      - --cert=/etc/coturn/certs/fullchain.pem
+      #      - --pkey=/etc/coturn/certs/privkey.pem
+      #   3) ports 增加 "5349:5349/tcp"
+      - --no-tls
 
   web:
     build:

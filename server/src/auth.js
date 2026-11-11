@@ -78,8 +78,7 @@ export async function authRequired(req, res, next) {
 /* ---------- 用户出参（不含密码） ---------- */
 /** 公开字段清单 —— 只在这一处维护，避免各路由 SELECT 漏字段导致资料悄悄丢 */
 export const USER_COLS =
-  'id, username, nickname, avatar, profile_cover, bio, gender, birthday, region, tags, phone, email, ' +
-  'city, city_lat, city_lng, city_public'
+  'id, username, nickname, avatar, profile_cover, bio, gender, birthday, region, tags, phone, email'
 
 /** tags 在 DB 里是 JSON 文本；解析失败一律当空数组，不让脏数据把接口打挂 */
 export function parseTags(v) {
@@ -95,10 +94,6 @@ export function parseTags(v) {
 
 export function publicUser(row) {
   if (!row) return null
-  /* 位置相关的三个字段**必须在这里做闸门**，不能指望调用方自觉：
-     `cityPublic = 0` 时连坐标都不出现在响应里。
-     ⚠️ 只把 `cityPublic` 置 false 而照旧返回坐标是没用的 —— 前端抓包就知道你在哪。 */
-  const cityPublic = !!Number(row.city_public)
   return {
     id: row.id,
     username: row.username,
@@ -112,13 +107,8 @@ export function publicUser(row) {
     region: row.region || null,
     tags: parseTags(row.tags),
     /* ⚠️ 这里**故意没有** phone。`publicUser` 是「别人看到的你」，
-       手机号一旦写进来，`/users/:id`、发现页、群成员列表就全都在泄露它。
+       手机号一旦写进来，`/users/:id`、群成员列表就全都在泄露它。
        自己的手机号走 `selfUser()`，只有 /auth/me 与登录这两个出口用它。 */
-    city: row.city || null,
-    cityPublic,
-    ...(cityPublic && Number.isFinite(row.city_lat) && Number.isFinite(row.city_lng)
-      ? { cityLat: row.city_lat, cityLng: row.city_lng }
-      : {}),
   }
 }
 

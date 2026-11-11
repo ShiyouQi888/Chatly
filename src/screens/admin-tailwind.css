@@ -51,6 +51,12 @@ html[data-app="admin"] {
   --op-danger: #f18e99;
   --op-danger-soft: #f18e9912;
   --op-warning: #e9c489;
+  --op-blue: #93bfee;
+  --op-violet: #b7acec;
+  --op-rose: #efa0ad;
+  --op-success: #7ad7b1;
+  --op-panel-shadow: 0 14px 38px #00000018;
+  --op-popover-shadow: 0 24px 72px #00000050;
   --op-focus: #a3eed0;
   --op-radius-sm: 8px;
   --op-radius: 12px;

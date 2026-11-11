@@ -89,7 +89,16 @@ const MESSAGES_GEO_COLS = `
 const MESSAGES_POLL_COLS = `
   poll_id         INTEGER
 `
-const MESSAGES_DDL = `CREATE TABLE IF NOT EXISTS messages (${MESSAGES_COLS}, ${MESSAGES_GEO_COLS}, ${MESSAGES_POLL_COLS});`
+/* 通话记录（kind='call'）的两列。
+   `call_media` 存 audio / video，`call_state` 存 ended / missed / declined / cancelled。
+   **不塞进 content**：content 参与全文搜索的 LIKE 匹配，塞 'missed' 进去会让搜
+   "miss" 之类的词命中一堆通话记录；而且 content 在加密设置下会被加密，通话记录不该受影响。
+   时长复用 `audio_duration_ms`（毫秒），它本来就是「这行的音频有多长」，语义一致。 */
+const MESSAGES_CALL_COLS = `
+  call_media      TEXT,
+  call_state      TEXT
+`
+const MESSAGES_DDL = `CREATE TABLE IF NOT EXISTS messages (${MESSAGES_COLS}, ${MESSAGES_GEO_COLS}, ${MESSAGES_POLL_COLS}, ${MESSAGES_CALL_COLS});`
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS users (
@@ -172,14 +181,6 @@ CREATE TABLE IF NOT EXISTS moment_cards (
 );
 CREATE INDEX IF NOT EXISTS idx_moment_cards_kind ON moment_cards(kind, moment_id);
 CREATE INDEX IF NOT EXISTS idx_moments_topic_created ON moments(topic, created_at DESC);
-
-CREATE TABLE IF NOT EXISTS moment_topic_views (
-  topic     TEXT NOT NULL,
-  user_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  viewed_at INTEGER NOT NULL,
-  PRIMARY KEY (topic, user_id)
-);
-CREATE INDEX IF NOT EXISTS idx_moment_topic_views_recent ON moment_topic_views(viewed_at DESC);
 
 CREATE TABLE IF NOT EXISTS moment_card_votes (
   moment_id  INTEGER NOT NULL REFERENCES moments(id) ON DELETE CASCADE,
@@ -584,10 +585,17 @@ function ensureMessageKinds() {
   db.exec('PRAGMA foreign_keys = OFF')
   db.exec('BEGIN')
   try {
+    /* 新表用**全量列**（含后来加的 poll_id / call_*），搬家只搬交集。
+       旧版这里只建 MESSAGES_COLS + GEO，却拿旧表的全部列做 INSERT ——
+       只要旧表比新表多一列（poll_id 就是），重建就会以
+       "table messages_new has no column named poll_id" 直接失败。
+       加 'call' 会再触发一次重建，所以这条必须先修好。 */
+    db.exec(`CREATE TABLE messages_new (${MESSAGES_COLS}, ${MESSAGES_GEO_COLS}, ${MESSAGES_POLL_COLS}, ${MESSAGES_CALL_COLS});`)
+    const newCols = db.prepare('PRAGMA table_info(messages_new)').all().map((c) => c.name)
+    const shared = cols.filter((c) => newCols.includes(c))
     db.exec(`
-      CREATE TABLE messages_new (${MESSAGES_COLS}, ${MESSAGES_GEO_COLS});
-      INSERT INTO messages_new (${cols.join(', ')})
-        SELECT ${cols.join(', ')} FROM messages;
+      INSERT INTO messages_new (${shared.join(', ')})
+        SELECT ${shared.join(', ')} FROM messages;
       DROP TABLE messages;
       ALTER TABLE messages_new RENAME TO messages;
       CREATE INDEX IF NOT EXISTS idx_messages_conv_id ON messages(conversation_id, id);
@@ -745,9 +753,19 @@ db.exec('CREATE INDEX IF NOT EXISTS idx_messages_burn_at ON messages(burn_at) WH
   }
 }
 
-/* 位置隐私：**只存城市级坐标**，绝不存用户的精确位置。
-   `city_*` 只有用户明确开启「参与附近」后才保留；关闭开关时坐标立即清空。
-   清理旧版本在关闭状态仍保存的坐标，避免默认关闭却继续留存位置数据。 */
+/* 通话记录（kind='call'）的两列。老库走 addColumn，新库在 MESSAGES_DDL 里已经带上，
+   两条路径都幂等 —— 和 poll_id 同一个写法。 */
+{
+  const added = []
+  if (addColumnIfMissing('messages', 'call_media', 'call_media TEXT')) added.push('call_media')
+  if (addColumnIfMissing('messages', 'call_state', 'call_state TEXT')) added.push('call_state')
+  if (added.length) console.log(`[db] messages 表已补充字段：${added.join(', ')}`)
+}
+
+/* 「附近的人」已随发现页一起移除，`city_*` 这四列**不再有任何消费方**。
+   列本身保留在库里（SQLite 删列要重建表，代价远大于收益），但每次启动都把
+   坐标清空 —— 功能没了还留着「某人在哪」的数据，是纯负担。
+   判重字段 is_banned / ban_* 与它们无关，仍照常补列。 */
 {
   const added = []
   if (addColumnIfMissing('users', 'city', 'city TEXT')) added.push('city')
@@ -760,7 +778,7 @@ db.exec('CREATE INDEX IF NOT EXISTS idx_messages_burn_at ON messages(burn_at) WH
   if (addColumnIfMissing('users', 'ban_reason', 'ban_reason TEXT')) added.push('ban_reason')
   if (addColumnIfMissing('users', 'banned_at', 'banned_at INTEGER')) added.push('banned_at')
   if (addColumnIfMissing('users', 'banned_by', 'banned_by INTEGER REFERENCES users(id) ON DELETE SET NULL')) added.push('banned_by')
-  db.exec('UPDATE users SET city_lat = NULL, city_lng = NULL WHERE city_public = 0')
+  db.exec('UPDATE users SET city = NULL, city_lat = NULL, city_lng = NULL, city_public = 0')
   if (added.length) console.log(`[db] users 表已补充字段：${added.join(', ')}`)
 }
 
@@ -771,6 +789,11 @@ db.exec('CREATE INDEX IF NOT EXISTS idx_messages_burn_at ON messages(burn_at) WH
   if (addColumnIfMissing('feedbacks', 'handled_at', 'handled_at INTEGER')) added.push('handled_at')
   if (added.length) console.log(`[db] feedbacks 表已补充字段：${added.join(', ')}`)
 }
+
+/* 「发现页」已整体移除（改成社群 = 群聊聚合）。
+   `moment_topic_views` 只服务于话题榜的浏览去重，功能没了它就是纯僵尸表 —— 直接删。
+   `IF EXISTS` 保证幂等：新建的库压根不会建它。 */
+db.exec('DROP TABLE IF EXISTS moment_topic_views')
 
 /* 动态的地点坐标：选了 POI 才有，手输的位置名没有 —— 这时坐标留 NULL，
    界面照旧只显示名字，**不假装它在地图上有位置**。 */

@@ -10,6 +10,7 @@
  */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { api, fallbackAvatar, formatRelative, formatTime, resolveAvatarValue } from '../api/client.js'
+import { callMediaLabel, callText } from '../lib/call.js'
 import { useAuth } from './AuthContext.jsx'
 import { useChatSocket, sendTyping as emitTyping } from '../hooks/useChatSocket.js'
 
@@ -69,6 +70,10 @@ function previewFromMessage(m, conv) {
   if (m.revoked) return who + '消息已撤回'
   /* 投票消息的 text 就是题目 —— 和 lastBody 里的分流保持一致 */
   if (m.kind === 'poll') return who + `[投票] ${m.text || ''}`.trim()
+  /* 通话记录：内容和主叫/被叫方向有关，统一走 lib/call.js。
+     服务端在 lastMessage 里已经格式化过一份（拉列表时用），这里管的是
+     「WS 刚推来一条新记录」的那条路径 —— 两条路径文案必须一致。 */
+  if (m.kind === 'call') return who + `[${callMediaLabel(m.callMedia)}] ${callText(m)}`
   return who + lastBody({ kind: m.kind, text: m.text }, m.geo?.name)
 }
 
@@ -137,6 +142,9 @@ function mapMessage(raw, meId) {
     /* 投票消息只带 id：详情（选项 / 票数 / 投票人）在 `polls` 缓存里，由 loadPolls 批量补。
        塞进消息体的话，拉一页历史就要连带拉一页投票明细。 */
     pollId: raw.pollId || null,
+    /* 通话记录（kind='call'）：媒体类型与结果。时长复用 audioDurationMs。 */
+    callMedia: raw.kind === 'call' ? raw.callMedia || 'audio' : null,
+    callState: raw.kind === 'call' ? raw.callState || 'ended' : null,
     /**
      * 我收藏了这条没。
      * ⚠️ 用 `=== true` 而不是 `!!raw.favorited`：**只有服务端明确说 true 才算收藏**。

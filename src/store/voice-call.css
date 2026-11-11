@@ -1,0 +1,324 @@
+.voice-call-audio {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.voice-call-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(16, 19, 31, 0.56);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  animation: voiceCallFadeIn 180ms ease-out both;
+}
+
+.voice-call-card {
+  position: relative;
+  isolation: isolate;
+  width: min(100%, 348px);
+  min-height: 376px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 40px 26px 30px;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 30px;
+  background:
+    radial-gradient(circle at 50% 15%, rgba(126, 109, 252, 0.15), transparent 48%),
+    var(--surface-1, #fff);
+  box-shadow: 0 32px 90px rgba(17, 24, 39, 0.3);
+  color: var(--text-1, #202033);
+  animation: voiceCallCardIn 240ms cubic-bezier(.2,.8,.2,1) both;
+}
+
+.voice-call-card > .av-wrap {
+  position: relative;
+  z-index: 1;
+  margin-top: 16px;
+  box-shadow: 0 12px 36px rgba(54, 61, 111, 0.18);
+}
+
+.voice-call-card h2 {
+  position: relative;
+  z-index: 1;
+  max-width: 100%;
+  margin: 22px 0 7px;
+  overflow: hidden;
+  color: var(--text-1, #202033);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.voice-call-status {
+  position: relative;
+  z-index: 1;
+  min-height: 22px;
+  margin: 0;
+  color: var(--text-3, #88889b);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.voice-call-actions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  margin-top: 38px;
+}
+
+.voice-call-action {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  color: white;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(33, 39, 69, 0.17);
+  transition: transform 140ms ease, filter 140ms ease, box-shadow 140ms ease;
+}
+
+.voice-call-action:active {
+  transform: scale(0.94);
+  filter: brightness(0.94);
+}
+
+.voice-call-action.is-reject {
+  background: #ec5265;
+}
+
+.voice-call-action.is-accept {
+  background: #23b96f;
+}
+
+.voice-call-action.is-mute {
+  background: #eef0f7;
+  color: #41445b;
+}
+
+.voice-call-action.is-mute.is-muted {
+  background: #f8dbe0;
+  color: #c9354b;
+}
+
+.voice-call-action .is-hangup {
+  transform: rotate(135deg);
+}
+
+.voice-call-audio-unlock {
+  position: relative;
+  z-index: 1;
+  margin-top: 12px;
+  padding: 8px 13px;
+  border: 1px solid var(--line, #e8e8ef);
+  border-radius: 999px;
+  background: var(--surface-1, #fff);
+  color: var(--brand-2, #6f5cf5);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.voice-call-wave {
+  position: absolute;
+  top: 49px;
+  left: 50%;
+  z-index: 0;
+  width: 180px;
+  height: 180px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.voice-call-wave i {
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgba(117, 99, 245, 0.14);
+  border-radius: 50%;
+  animation: voiceCallPulse 2.4s ease-out infinite;
+}
+
+.voice-call-wave i:nth-child(2) { animation-delay: 0.8s; }
+.voice-call-wave i:nth-child(3) { animation-delay: 1.6s; }
+
+.voice-call-card.is-active .voice-call-wave i {
+  border-color: rgba(35, 185, 111, 0.16);
+  animation-duration: 3s;
+}
+
+@keyframes voiceCallPulse {
+  0% { opacity: 0; transform: scale(0.58); }
+  18% { opacity: 1; }
+  100% { opacity: 0; transform: scale(1.08); }
+}
+
+@keyframes voiceCallFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes voiceCallCardIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (max-width: 480px) {
+  .voice-call-backdrop { padding: 14px; }
+  .voice-call-card {
+    width: min(100%, 360px);
+    min-height: 390px;
+    border-radius: 28px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-call-backdrop,
+  .voice-call-card,
+  .voice-call-wave i {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+/* ================= 视频通话层 ================= */
+
+/* 视频通话铺满整屏（桌面预览时也是整个应用可视区），
+   不再套那张 348px 的卡片 —— 视频要的是画面，不是一张卡片。 */
+.voice-call-backdrop.is-video {
+  padding: 0;
+  background: #0b0d14;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.vc-video {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #0b0d14;
+  color: #fff;
+}
+
+/* 远端画面铺满并裁切：竖屏手机用 cover 才不会两边留黑边 */
+.vc-video-remote {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #0b0d14;
+}
+
+/* 顶部/底部各压一层暗角，保证白字在任何画面上都读得清 */
+.vc-video-shade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(to bottom, rgba(8, 10, 18, 0.55), rgba(8, 10, 18, 0) 28%),
+    linear-gradient(to top, rgba(8, 10, 18, 0.62), rgba(8, 10, 18, 0) 34%);
+}
+
+.vc-video-head {
+  position: absolute;
+  z-index: 2;
+  top: calc(20px + env(safe-area-inset-top));
+  right: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+  pointer-events: none;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.45);
+}
+
+.vc-video-head b { font-size: 17px; font-weight: 650; letter-spacing: -0.01em; }
+.vc-video-head span { font-size: 12px; font-variant-numeric: tabular-nums; opacity: 0.82; }
+
+/* 本地小窗：右下角，避开底部控制条 */
+.vc-video-local {
+  position: absolute;
+  z-index: 3;
+  right: 16px;
+  bottom: calc(122px + env(safe-area-inset-bottom));
+  width: 104px;
+  height: 148px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 16px;
+  background: #12141c;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.34);
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+/* 前置摄像头是镜像的，关掉预览时不需要再翻 */
+.vc-video-local.is-off { opacity: 0.32; }
+
+.vc-video-cam-off {
+  position: absolute;
+  z-index: 3;
+  right: 16px;
+  bottom: calc(278px + env(safe-area-inset-bottom));
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(12, 14, 22, 0.62);
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.vc-video-actions {
+  position: absolute;
+  z-index: 4;
+  right: 0;
+  bottom: calc(30px + env(safe-area-inset-bottom));
+  left: 0;
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 视频层里的按钮是深色玻璃 + 半透明白，和浅色卡片上的那一套区分开 */
+.vc-video-actions .voice-call-action {
+  width: 58px;
+  height: 58px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(28, 32, 44, 0.72);
+  color: #fff;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.vc-video-actions .voice-call-action.is-muted {
+  background: rgba(255, 255, 255, 0.92);
+  color: #1a1c26;
+}
+
+.vc-video-actions .voice-call-action.is-reject {
+  background: var(--danger-action, #e5484d);
+  border-color: transparent;
+  color: #fff;
+}
+
+.vc-video-actions .is-hangup { transform: rotate(135deg); }

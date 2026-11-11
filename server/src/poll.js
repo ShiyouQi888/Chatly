@@ -1,7 +1,7 @@
 /**
  * 群投票业务逻辑（PRD §14）
  *
- * 只管数据，不做 HTTP —— 与 chat.js / moment.js / discover.js 同一套分层。
+ * 只管数据，不做 HTTP —— 与 chat.js / moment.js / community.js 同一套分层。
  * DB 层 snake_case，出参 camelCase。
  *
  * ## 四条硬规矩

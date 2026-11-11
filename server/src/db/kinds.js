@@ -9,11 +9,15 @@
  *   · 前端 `isVideoMessage()` / 位置气泡的判断
  *   · PG 的 `messages_kind_check` 约束
  *
+ * ⚠️ `call` 是**服务端专用**类型：通话结束时由 `recordCallMessage()` 直接写库。
+ *    它必须在 MESSAGE_KINDS 里（否则撞 CHECK），但**必须排除在发送白名单之外** ——
+ *    否则客户端可以伪造一条「通话 99 分钟」的记录塞进任意会话。
+ *
  * SQLite 改 CHECK 只能整表重建、PG 是删了约束再加 —— 两边路径完全不同，
  * 但**判据（全量比对 MESSAGE_KINDS）必须是同一个**，否则会出现
  * 「本地库升到位了、线上库少一个 kind」这种只在一边炸的问题。
  */
-export const MESSAGE_KINDS = ['text', 'image', 'file', 'video', 'location', 'poll']
+export const MESSAGE_KINDS = ['text', 'image', 'file', 'video', 'location', 'poll', 'call']
 
 /**
  * 允许的通知类型 —— 和 MESSAGE_KINDS 同一个理由抽在这里只写一份。

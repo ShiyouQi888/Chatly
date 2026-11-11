@@ -36,6 +36,7 @@ import { uploadExists } from '../upload.js'
 import { favoritedMessageIds } from '../favorite.js'
 import { notifyAnnouncement } from '../notification.js'
 import { privatePairGate } from '../friends.js'
+import { notifyMessagePush } from '../message-push.js'
 
 const r = Router()
 r.use(authRequired)
@@ -49,6 +50,8 @@ async function publishAnnouncementMessage(conversationId, senderId, text) {
     content: `📢 群公告\n${text}`,
   })
   broadcastToUsers(await memberIds(conversationId), 'message.new', { message })
+  /* 群公告对离线成员同样要推：它比普通消息更需要被看到。 */
+  void notifyMessagePush({ conversationId, senderId, message })
 }
 
 /** 我的会话列表 */

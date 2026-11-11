@@ -158,7 +158,7 @@ const sendFriendRequest = async (req, res) => {
   const source = typeof req.body?.source === 'string' ? req.body.source.trim() : ''
   /* 不带 source = 没有声明渠道 → 不设闸（「查得到 ≠ 加得上」）。
      只有声明了渠道才校验：未知渠道 400，已知渠道走对应开关。
-     前端发现页的关注按钮就是不带 source 的，这里必须放行。 */
+     群成员列表里的关注按钮就是不带 source 的，这里必须放行。 */
   if (source && !Object.hasOwn(CHANNEL_KEY, source)) {
     return res.status(400).json({ error: '添加来源无效', code: 'invalid_source' })
   }

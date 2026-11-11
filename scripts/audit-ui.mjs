@@ -247,12 +247,11 @@ await audit('动态列表')
 await ev(`[...document.querySelectorAll('.mc-act')].find(b=>b.textContent.includes('评论'))?.click()`); await sleep(600)
 await audit('动态-展开评论')
 
-console.log('\n【Tab 3 发现】')
-await clickText('发现', '.tab'); await sleep(800)
-await audit('发现-推荐')
-await clickText('附近'); await sleep(700); await audit('发现-附近')
-await clickText('活动'); await sleep(700); await audit('发现-活动')
-await clickText('用户'); await sleep(700); await audit('发现-用户')
+console.log('\n【Tab 3 社群】')
+await clickText('社群', '.tab'); await sleep(900)
+await audit('社群-我的群聊')
+/* 可加入的群是真实接口数据，演示库可能一个都没有 —— 只做布局审计，不断言存在 */
+await audit('社群-可加入')
 
 console.log('\n【Tab 4 我】')
 await clickText('我', '.tab'); await sleep(900)

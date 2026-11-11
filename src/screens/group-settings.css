@@ -6,7 +6,7 @@
   z-index: var(--z-modal);
   display: flex;
   flex-direction: column;
-  background: var(--bg);
+  background: var(--chat-canvas);
   animation: gsIn var(--dur) var(--ease) both;
 }
 
@@ -59,11 +59,11 @@
 }
 
 .gs-card {
-  background: var(--surface);
+  background: var(--chat-surface);
   border-radius: var(--r-md);
   padding: var(--space-4);
   margin-bottom: var(--space-4);
-  box-shadow: 0 1px 2px rgba(22, 22, 31, 0.04);
+  box-shadow: none;
 }
 
 .gs-card-title {
@@ -90,7 +90,7 @@
   margin: var(--space-4) 0 0;
   text-align: center;
   font-size: var(--fs-micro);
-  color: var(--text-4);
+  color: var(--text-3);
 }
 
 /* ===== 群名片 ===== */
@@ -123,9 +123,9 @@
   display: grid;
   place-items: center;
   border-radius: var(--r-full);
-  color: #fff;
+  color: var(--text-on-brand);
   background: var(--brand-grad);
-  box-shadow: 0 2px 8px rgba(109, 93, 246, 0.4);
+  box-shadow: none;
 }
 
 .gs-title-row {
@@ -185,13 +185,13 @@
 }
 
 .gs-ann.is-empty {
-  color: var(--text-4);
+  color: var(--text-3);
 }
 
 .gs-ann-time {
   margin-top: var(--space-3);
   font-size: var(--fs-micro);
-  color: var(--text-4);
+  color: var(--text-3);
 }
 
 .gs-ann-acts {
@@ -247,7 +247,7 @@
 
 .gs-role {
   font-style: normal;
-  font-size: 10px;
+  font-size: var(--fs-micro);
   line-height: 1.5;
   padding: 0 var(--space-2);
   border-radius: var(--r-full);
@@ -309,18 +309,18 @@
 }
 
 .gs-row-ic.is-amber {
-  color: #d98a12;
-  background: rgba(255, 180, 63, 0.16);
+  color: var(--warning-ink);
+  background: var(--warning-soft);
 }
 
 .gs-row-ic.is-cyan {
-  color: #1f9fc9;
-  background: rgba(57, 201, 245, 0.16);
+  color: var(--info-ink);
+  background: var(--info-soft);
 }
 
 .gs-row-ic.is-danger {
-  color: #e05252;
-  background: rgba(224, 82, 82, 0.12);
+  color: var(--danger-ink);
+  background: var(--danger-soft);
 }
 
 .gs-row-body {
@@ -340,7 +340,7 @@
 .gs-row-body em {
   font-style: normal;
   font-size: var(--fs-micro);
-  color: var(--text-4);
+  color: var(--text-3);
   line-height: 1.45;
 }
 
@@ -349,7 +349,7 @@
   display: flex;
   align-items: center;
   font-size: var(--fs-cap);
-  color: var(--text-4);
+  color: var(--text-3);
 }
 
 /* 静态行：里面放的是 Switch（它自己就是 button），外层不能也是 button */
@@ -399,11 +399,11 @@
 }
 
 .gs-note.is-warn {
-  color: var(--accent-pink);
+  color: var(--warning-ink);
 }
 
 .gs-row.is-danger .gs-row-body b {
-  color: #e05252;
+  color: var(--danger-ink);
 }
 
 .gs-row.is-disabled {
@@ -465,7 +465,7 @@
 
 .gfiles-heading span {
   overflow: hidden;
-  color: var(--text-4);
+  color: var(--text-3);
   font-size: var(--fs-micro);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -523,7 +523,7 @@
   display: flex;
   justify-content: space-between;
   padding: var(--space-3) var(--space-1) var(--space-4);
-  color: var(--text-4);
+  color: var(--text-3);
   font-size: var(--fs-micro);
 }
 
@@ -561,8 +561,8 @@
 }
 
 .gfiles-file-icon.is-video {
-  color: #1f9fc9;
-  background: rgba(57, 201, 245, 0.14);
+  color: var(--info-ink);
+  background: var(--info-soft);
 }
 
 .gfiles-file-meta {
@@ -588,7 +588,7 @@
 
 .gfiles-file-meta em,
 .gfiles-size {
-  color: var(--text-4);
+  color: var(--text-3);
   font-size: var(--fs-micro);
   font-style: normal;
 }
@@ -599,7 +599,7 @@
 
 .gfiles-state {
   padding: var(--space-7) var(--space-4);
-  color: var(--text-4);
+  color: var(--text-3);
   font-size: var(--fs-sub);
   text-align: center;
 }
@@ -640,7 +640,7 @@
 
 .gfiles-more-state {
   padding: var(--space-4);
-  color: var(--text-4);
+  color: var(--text-3);
   text-align: center;
 }
 
@@ -684,7 +684,7 @@
 .gs-hint {
   margin-top: var(--space-3);
   font-size: var(--fs-micro);
-  color: var(--text-4);
+  color: var(--text-3);
 }
 
 .gs-note {
@@ -697,7 +697,7 @@
   padding: var(--space-5) 0;
   text-align: center;
   font-size: var(--fs-sub);
-  color: var(--text-4);
+  color: var(--text-3);
 }
 
 .gs-sheet-acts {
@@ -719,14 +719,14 @@
 }
 
 .gs-btn.is-primary {
-  color: #fff;
+  color: var(--chat-outgoing-text);
   background: var(--brand-grad);
-  box-shadow: 0 8px 20px -10px rgba(107, 92, 246, 0.9);
+  box-shadow: var(--chat-outgoing-shadow);
 }
 
 .gs-btn.is-danger {
-  color: #fff;
-  background: #e05252;
+  color: var(--on-danger);
+  background: var(--danger-action);
 }
 
 .gs-btn:disabled {
@@ -772,7 +772,7 @@
 .gs-pick-body em {
   font-style: normal;
   font-size: var(--fs-micro);
-  color: var(--text-4);
+  color: var(--text-3);
 }
 
 .gs-pick-check {
@@ -782,7 +782,7 @@
   display: grid;
   place-items: center;
   border-radius: var(--r-full);
-  color: #fff;
+  color: var(--text-on-brand);
   background: var(--brand-grad);
 }
 

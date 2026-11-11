@@ -10,7 +10,6 @@ import { q } from './db.js'
 import { normalizeUserId, validUserId, claimUserId, resolveUserId, userIdTransaction } from './user-ids.js'
 import { publicUser, USER_COLS } from './auth.js'
 import { uploadExists } from './upload.js'
-import { parseGeoPair } from '../../shared/geo-math.mjs'
 
 export const LIMITS = {
   nickname: 20,
@@ -143,47 +142,12 @@ export function sanitizeProfile(patch = {}) {
   }
 
   /* ---------- 位置 ----------
-     ⚠️ 这四个字段是**服务端替用户存下来的「行政区划中心点」**，不是实时位置。
-     允许客户端写，是因为只有客户端拿得到浏览器定位；但必须卡死形态：
-     坐标成对出现、在合法范围内、且**只能是自己**（PATCH /auth/me 本来就只改自己）。
+     「附近的人」已随发现页一起移除，所以这里**不再接受任何坐标或城市中心点**。
+     资料里的地区只是一段文字（`region`），由用户手填或客户端定位后自己填进来 ——
+     服务端不保存坐标，也就没有「谁在哪」的数据可泄露。
 
-     为什么要卡得这么死：这是个能写成「把某人定位到任意地点」的入口，
-     而位置数据一旦被随手放宽，就是合规问题（不得收集、存储他人的位置数据）。
-     `city` 存的也必须是行政区划名（由 /geo/locate 返回），不是任意字符串。 */
-  if (patch.city !== undefined) {
-    const v = patch.city === null || patch.city === '' ? null : String(patch.city).trim()
-    if (v !== null && [...v].length > 20) errors.push('城市名不能超过 20 个字符')
-    else out.city = v
-  }
-
-  if (patch.cityLat !== undefined || patch.cityLng !== undefined) {
-    /* 数值校验统一走 `parseGeoPair()`（和消息 / 动态用同一份），别在这里再写一遍
-       `Number.isFinite(Number(v))` —— `Number(null) === 0`，会把「清空坐标」
-       判成合法的 (0, 0)。资料这边只多一条语义：**要能区分「清空」和「给错了」**，
-       所以先判是不是两边都空。 */
-    const empty = (v) => v === null || v === undefined || v === ''
-    const bothEmpty = empty(patch.cityLat) && empty(patch.cityLng)
-    const pair = parseGeoPair(patch.cityLat, patch.cityLng)
-    if (!bothEmpty && !pair) errors.push('城市坐标必须成对给出，且在合法经纬度范围内')
-    else if (pair && patch.cityPublic !== true) errors.push('请先明确开启「参与附近」再保存城市中心点')
-    else {
-      /* 存到 4 位小数就够了（≈11 m）。库里不需要比这更细 ——
-         反正它代表的是行政区划中心点，多存几位只会让人误以为这是「精确位置」。
-         （`parseGeoPair` 给的是 5 位，这里再收一位。） */
-      out.city_lat = pair ? Math.round(pair.lat * 1e4) / 1e4 : null
-      out.city_lng = pair ? Math.round(pair.lng * 1e4) / 1e4 : null
-    }
-  }
-
-  if (patch.cityPublic !== undefined && typeof patch.cityPublic !== 'boolean') {
-    errors.push('附近分享设置必须是布尔值')
-  } else if (patch.cityPublic !== undefined) {
-    out.city_public = patch.cityPublic ? 1 : 0
-    if (!patch.cityPublic) {
-      out.city_lat = null
-      out.city_lng = null
-    }
-  }
+     客户端若仍传 city / cityLat / cityLng / cityPublic，直接忽略：
+     老版本缓存的页面不该因为多传一个字段就报错，但也不该把它写进库。 */
 
   return { fields: Object.keys(out).length ? out : null, errors }
 }

@@ -12,6 +12,7 @@
  *   user.updated   — 同会话某人改了昵称/头像，前端据此刷新本地缓存
  *   conversation.updated — 群资料 / 成员变了
  *   poll.updated   — 群里有人投票 / 改票 / 结束投票，payload 是**整份投票**（见 polls.js）
+ *   call.*         — 一对一语音邀请、接听状态与 WebRTC SDP / ICE 信令
  *
  * ## 两层在线的分工（Redis 是可选的，见 redis.js）
  *   - `online`（本进程的 Map）永远是**权威快路径**：判断「在不在线」先看它，零成本、同步。
@@ -25,15 +26,71 @@
  */
 import { WebSocketServer } from 'ws'
 import crypto from 'node:crypto'
-import { q } from './db.js'
-import { memberIds } from './chat.js'
+import { q, tx } from './db.js'
+import { memberIds, recordCallMessage } from './chat.js'
 import { peersOf } from './profile.js'
 import { privacyOf, onlineVisible } from './privacy.js'
 import { markLocalPresence, publishTo, onRemoteEvent, remotePresent, isEnabled as redisOn } from './redis.js'
+import { privatePairGate } from './friends.js'
+import { hasPushSubscription, pushIsConfigured, sendPushToUser } from './push.js'
 
 /** userId -> Set<WebSocket> */
 const online = new Map()
 let ticketSchemaReady
+let voiceCallSchemaReady
+const callExpiryTimers = new Map()
+const CALL_RING_TIMEOUT = 90_000
+const CALL_MAX_DURATION = 4 * 60 * 60 * 1000
+
+async function ensureVoiceCallSchema() {
+  if (!voiceCallSchemaReady) {
+    voiceCallSchemaReady = (async () => {
+      await q.run(`CREATE TABLE IF NOT EXISTS voice_calls (
+        call_id TEXT PRIMARY KEY,
+        conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        caller_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        callee_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        state TEXT NOT NULL CHECK (state IN ('ringing', 'accepted', 'rejected', 'cancelled', 'ended', 'expired')),
+        media TEXT NOT NULL DEFAULT 'audio',
+        created_at BIGINT NOT NULL,
+        expires_at BIGINT NOT NULL,
+        started_at BIGINT,
+        ended_at BIGINT,
+        duration_sec INTEGER,
+        end_reason TEXT
+      )`)
+      /* 老库补列。跨驱动只能用 try/catch —— SQLite 报 "duplicate column name"，
+         PG 报 "column ... already exists"，两边都当成功处理，其余错误照抛。 */
+      for (const [name, ddl] of [
+        ['media', "TEXT NOT NULL DEFAULT 'audio'"],
+        ['started_at', 'BIGINT'],
+        ['ended_at', 'BIGINT'],
+        ['duration_sec', 'INTEGER'],
+        ['end_reason', 'TEXT'],
+      ]) {
+        try {
+          await q.run(`ALTER TABLE voice_calls ADD COLUMN ${name} ${ddl}`)
+        } catch (e) {
+          if (!/duplicate column|already exists/i.test(String(e.message || ''))) throw e
+        }
+      }
+      await q.run(`CREATE TABLE IF NOT EXISTS voice_call_participants (
+        user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        call_id TEXT NOT NULL REFERENCES voice_calls(call_id) ON DELETE CASCADE
+      )`)
+      await q.run("CREATE UNIQUE INDEX IF NOT EXISTS voice_calls_active_caller_idx ON voice_calls(caller_id) WHERE state IN ('ringing', 'accepted')")
+      await q.run("CREATE UNIQUE INDEX IF NOT EXISTS voice_calls_active_callee_idx ON voice_calls(callee_id) WHERE state IN ('ringing', 'accepted')")
+      await q.run('CREATE INDEX IF NOT EXISTS voice_calls_participants_idx ON voice_calls(caller_id, callee_id, state)')
+      // Without Redis this process is the only call router; any active row was
+      // left by a previous process and cannot still represent a live call.
+      if (!redisOn()) {
+        await q.run("UPDATE voice_calls SET state = 'ended' WHERE state IN ('ringing', 'accepted')")
+        await q.run('DELETE FROM voice_call_participants')
+      }
+    })()
+  }
+  return voiceCallSchemaReady
+}
 
 async function ensureWsTicketSchema() {
   if (!ticketSchemaReady) {
@@ -104,9 +161,14 @@ export function attachWs(server) {
       ws.ping()
     }
   }, 30000)
+  const callTimer = setInterval(() => {
+    void expireVoiceCalls().catch((e) => console.warn('[ws] 通话超时清理失败：', e.message))
+  }, 5000)
+  callTimer.unref()
 
   wss.on('close', () => {
     clearInterval(timer)
+    clearInterval(callTimer)
     offRemote()
   })
 
@@ -137,6 +199,7 @@ async function acceptSocket(ws, req) {
 
     send(ws, 'hello', { userId })
     void announcePresence(userId, true)
+    void sendPendingVoiceCalls(ws, userId)
 
     ws.on('pong', () => (ws.isAlive = true))
 
@@ -147,13 +210,16 @@ async function acceptSocket(ws, req) {
       } catch {
         return
       }
-      // 目前仅处理 typing（发消息走 REST，便于落库与返回 id）
+      if (Buffer.byteLength(raw) > 256 * 1024) return
+      // 发消息走 REST，便于落库与返回 id；实时事件只走已认证的 WS。
       if (msg.type === 'typing' && msg.conversationId) {
         /* 成员表是异步查的，所以真正的工作放在一个独立 async 函数里，
            而不是把 `ws.on('message')` 的回调标成 async —— 后者抛出来的错
            会变成一个**没人接的 promise rejection**，在 WS 场景里就是悄无声息。
            `void` 明确表示「不关心它的完成」。 */
         void relayTyping(userId, Number(msg.conversationId))
+      } else if (typeof msg.type === 'string' && msg.type.startsWith('call.')) {
+        void handleVoiceCallMessage(ws, userId, msg.type, msg.payload || {})
       }
     })
 
@@ -165,6 +231,7 @@ async function acceptSocket(ws, req) {
           online.delete(userId)
           markLocalPresence(userId, false)
           void announcePresence(userId, false)
+          void endVoiceCallsForUser(userId)
         }
       }
     })
@@ -204,6 +271,319 @@ async function relayTyping(userId, conversationId) {
     }
   } catch (e) {
     console.warn('[ws] typing 转发失败（已忽略）：', e.message)
+  }
+}
+
+/* ================= 一对一语音通话信令 ================= */
+/* ================= 通话收尾（唯一出口） ================= */
+
+/**
+ * 结束一通电话的唯一出口。
+ *
+ * 为什么必须收敛成一个函数：原来「拒接 / 取消 / 超时 / 挂断 / 断线 / 4 小时到期」
+ * 各写了一段 UPDATE，各自清理 participants、各自决定广播什么。加通话记录之后，
+ * 任何一条路径漏调就会变成「我明明挂了，聊天里没有这通电话」——
+ * 而这种缺失只在特定结束方式下出现，最难被发现。
+ *
+ * 幂等：UPDATE 带 `state IN ('ringing','accepted')`，重复调用第二次 changes=0 直接返回，
+ * 不会落两条记录。
+ */
+const CALL_RECORD_STATE = { ended: 'ended', rejected: 'declined', cancelled: 'cancelled', expired: 'missed' }
+
+async function finishVoiceCall(callId, { state, reason = null, broadcastType = null, broadcastExtra = {} }) {
+  const call = await q.get(
+    `SELECT call_id AS callId, conversation_id AS conversationId, caller_id AS callerId, callee_id AS calleeId,
+            state, media, started_at AS startedAt
+       FROM voice_calls WHERE call_id = ?`,
+    callId
+  )
+  if (!call) return false
+
+  const now = Date.now()
+  /* 只有接通过（有 started_at）才有通话时长。振铃时间不算 —— 「打了 12 秒没人接」
+     记成 12 秒通话是最容易糊弄、也最没用的一个数字。 */
+  const durationSec = call.startedAt ? Math.max(0, Math.round((now - Number(call.startedAt)) / 1000)) : 0
+
+  const updated = await q.run(
+    `UPDATE voice_calls
+        SET state = ?, ended_at = ?, duration_sec = ?, end_reason = ?
+      WHERE call_id = ? AND state IN ('ringing', 'accepted')`,
+    state, now, durationSec, reason, callId
+  )
+  if (!updated.changes) return false
+
+  await q.run('DELETE FROM voice_call_participants WHERE call_id = ?', callId)
+  clearTimeout(callExpiryTimers.get(callId))
+  callExpiryTimers.delete(callId)
+  dismissCallPush([Number(call.calleeId)], callId)
+
+  const recordState = CALL_RECORD_STATE[state] || 'ended'
+  let message = null
+  try {
+    message = await recordCallMessage({
+      conversationId: Number(call.conversationId),
+      callerId: Number(call.callerId),
+      media: call.media || 'audio',
+      state: recordState,
+      durationSec: recordState === 'ended' ? durationSec : 0,
+      endedAt: now,
+    })
+  } catch (e) {
+    /* 记录写失败不能把通话状态卡住：用户挂断这件事已经发生了。 */
+    console.warn('[ws] 通话记录写入失败：', e.message)
+  }
+
+  const parties = [Number(call.callerId), Number(call.calleeId)]
+  if (broadcastType) broadcastToUsers(parties, broadcastType, { callId, ...broadcastExtra })
+  if (message) broadcastToUsers(parties, 'message.new', { message })
+  return true
+}
+
+function dismissCallPush(userIds, callId) {
+  for (const userId of new Set(userIds.map(Number))) {
+    void sendPushToUser(userId, { type: 'call.dismiss', payload: { callId } }, { ttl: 30 })
+      .catch((e) => console.warn('[ws] 来电通知清理失败：', e.message))
+  }
+}
+
+async function sendPendingVoiceCalls(ws, userId) {
+  try {
+    await ensureVoiceCallSchema()
+    const rows = await q.all(
+      `SELECT vc.call_id AS callId, vc.conversation_id AS conversationId, vc.expires_at AS expiresAt, vc.media AS media,
+              u.id AS callerId, u.username AS callerUsername, u.nickname AS callerNickname, u.avatar AS callerAvatar
+       FROM voice_calls vc JOIN users u ON u.id = vc.caller_id
+       WHERE vc.callee_id = ? AND vc.state = 'ringing' AND vc.expires_at > ?`,
+      Number(userId), Date.now()
+    )
+    for (const row of rows) {
+      send(ws, 'call.incoming', {
+        callId: row.callId,
+        conversationId: Number(row.conversationId),
+        expiresAt: Number(row.expiresAt),
+        media: row.media === 'video' ? 'video' : 'audio',
+        caller: { id: Number(row.callerId), username: row.callerUsername, nickname: row.callerNickname, avatar: row.callerAvatar },
+      })
+    }
+  } catch (e) {
+    console.warn('[ws] 等待中的来电恢复失败：', e.message)
+  }
+}
+
+async function expireVoiceCall(callId) {
+  try {
+    await ensureVoiceCallSchema()
+    const call = await q.get(
+      "SELECT call_id AS callId FROM voice_calls WHERE call_id = ? AND state = 'ringing' AND expires_at <= ?",
+      callId, Date.now()
+    )
+    clearTimeout(callExpiryTimers.get(callId))
+    callExpiryTimers.delete(callId)
+    if (!call) return
+    await finishVoiceCall(callId, { state: 'expired', reason: 'timeout', broadcastType: 'call.timeout' })
+  } catch (e) {
+    console.warn('[ws] 通话超时处理失败：', e.message)
+  }
+}
+
+async function expireVoiceCalls() {
+  await ensureVoiceCallSchema()
+  const now = Date.now()
+  const expired = await q.all(
+    "SELECT call_id AS callId, state FROM voice_calls WHERE state IN ('ringing', 'accepted') AND expires_at <= ?",
+    now
+  )
+  for (const call of expired) {
+    /* 振铃超时是「没接」；接通过却撞到 4 小时上限，是「正常结束」。 */
+    if (call.state === 'ringing') {
+      await finishVoiceCall(call.callId, { state: 'expired', reason: 'timeout', broadcastType: 'call.timeout' })
+    } else {
+      await finishVoiceCall(call.callId, { state: 'ended', reason: 'max_duration', broadcastType: 'call.ended' })
+    }
+  }
+}
+
+async function endVoiceCallsForUser(userId) {
+  try {
+    if (await isOnlineAnywhere(userId)) return
+    await ensureVoiceCallSchema()
+    const calls = await q.all(
+      "SELECT call_id AS callId, caller_id AS callerId, callee_id AS calleeId, state FROM voice_calls WHERE state IN ('ringing', 'accepted') AND (caller_id = ? OR callee_id = ?)",
+      userId, userId
+    )
+    for (const call of calls) {
+      const isCaller = Number(call.callerId) === Number(userId)
+      /* 振铃阶段断线要区分是谁断的：
+         主叫断线 → 已取消；被叫断线 → 未接。都记成 ended 会出现
+         「[语音通话]」这种没有时长、也没说清结果的空记录。 */
+      const state = call.state === 'accepted' ? 'ended' : isCaller ? 'cancelled' : 'expired'
+      await finishVoiceCall(call.callId, {
+        state,
+        reason: 'disconnect',
+        broadcastType: 'call.ended',
+        broadcastExtra: { reason: 'disconnect' },
+      })
+    }
+  } catch (e) {
+    console.warn('[ws] 断线通话清理失败：', e.message)
+  }
+}
+
+async function handleVoiceCallMessage(ws, userId, type, payload) {
+  const callId = typeof payload.callId === 'string' ? payload.callId : ''
+  try {
+    await ensureVoiceCallSchema()
+
+    if (type === 'call.invite') {
+      const conversationId = Number(payload.conversationId)
+      /* 只认 audio / video。其它值一律当语音 —— 免得一个拼错的 media
+         让前端等一路永远不来的视频轨。 */
+      const media = payload.media === 'video' ? 'video' : 'audio'
+      if (!/^[a-zA-Z0-9_-]{12,80}$/.test(callId) || !Number.isSafeInteger(conversationId) || conversationId <= 0) {
+        send(ws, 'call.error', { callId, message: '通话请求无效' })
+        return
+      }
+      await expireVoiceCalls()
+      const conversation = await q.get("SELECT type FROM conversations WHERE id = ?", conversationId)
+      const members = conversation?.type === 'private' ? await memberIds(conversationId) : []
+      if (conversation?.type !== 'private' || members.length !== 2 || !members.includes(Number(userId))) {
+        send(ws, 'call.error', { callId, message: '语音通话仅支持会话双方' })
+        return
+      }
+      const calleeId = Number(members.find((id) => Number(id) !== Number(userId)))
+      const denied = await privatePairGate(Number(userId), calleeId)
+      if (denied) {
+        send(ws, 'call.error', { callId, message: denied.error || '当前无法呼叫该用户' })
+        return
+      }
+      const online = await isOnlineAnywhere(calleeId)
+      let pushAvailable = false
+      try {
+        pushAvailable = pushIsConfigured() && await hasPushSubscription(calleeId)
+      } catch (e) {
+        console.warn('[ws] 来电推送订阅检查失败，仍保留在线呼叫：', e.message)
+      }
+      if (!online && !pushAvailable) {
+        send(ws, 'call.unavailable', { callId, message: '对方当前不在线' })
+        return
+      }
+
+      const caller = await q.get('SELECT id, username, nickname, avatar FROM users WHERE id = ?', userId)
+      const now = Date.now()
+      try {
+        await tx(async () => {
+          await q.run(
+            "INSERT INTO voice_calls (call_id, conversation_id, caller_id, callee_id, state, media, created_at, expires_at) VALUES (?, ?, ?, ?, 'ringing', ?, ?, ?)",
+            callId, conversationId, Number(userId), calleeId, media, now, now + CALL_RING_TIMEOUT
+          )
+          await q.run('INSERT INTO voice_call_participants (user_id, call_id) VALUES (?, ?)', Number(userId), callId)
+          await q.run('INSERT INTO voice_call_participants (user_id, call_id) VALUES (?, ?)', calleeId, callId)
+        })
+      } catch (error) {
+        if (error.code === '23505' || /SQLITE_CONSTRAINT|unique|duplicate|constraint/i.test(`${error.code || ''} ${error.message || ''}`)) {
+          send(ws, 'call.busy', { callId, message: '你或对方正在通话中' })
+          return
+        }
+        throw error
+      }
+
+      const incoming = {
+        callId,
+        conversationId,
+        expiresAt: now + CALL_RING_TIMEOUT,
+        media,
+        caller: caller ? { id: Number(caller.id), username: caller.username, nickname: caller.nickname, avatar: caller.avatar } : { id: Number(userId), nickname: '联系人' },
+      }
+      broadcastToUsers([calleeId], 'call.incoming', incoming)
+      broadcastToUsers([Number(userId)], 'call.ringing', { callId, conversationId })
+      if (pushAvailable) {
+        void sendPushToUser(calleeId, { type: 'call.incoming', payload: incoming }, { ttl: Math.ceil(CALL_RING_TIMEOUT / 1000) })
+          .catch((e) => console.warn('[ws] 来电推送失败：', e.message))
+      }
+      const timeout = setTimeout(() => void expireVoiceCall(callId), CALL_RING_TIMEOUT + 100)
+      timeout.unref()
+      callExpiryTimers.set(callId, timeout)
+      return
+    }
+
+    if (!/^[a-zA-Z0-9_-]{12,80}$/.test(callId)) return
+    const call = await q.get(
+      'SELECT call_id AS callId, conversation_id AS conversationId, caller_id AS callerId, callee_id AS calleeId, state, media, expires_at AS expiresAt FROM voice_calls WHERE call_id = ?',
+      callId
+    )
+    if (!call || (Number(call.callerId) !== Number(userId) && Number(call.calleeId) !== Number(userId))) {
+      send(ws, 'call.error', { callId, message: '通话已结束或无权操作' })
+      return
+    }
+    if (payload.conversationId != null && Number(payload.conversationId) !== Number(call.conversationId)) {
+      send(ws, 'call.error', { callId, message: '通话会话校验失败' })
+      return
+    }
+
+    const isCaller = Number(call.callerId) === Number(userId)
+    const peerId = isCaller ? Number(call.calleeId) : Number(call.callerId)
+    if (call.state === 'ringing' && Number(call.expiresAt) <= Date.now()) {
+      await expireVoiceCall(callId)
+      return
+    }
+
+    if (type === 'call.accept') {
+      if (isCaller || call.state !== 'ringing') return
+      /* 接听时刻就是计费/计时的起点。`COALESCE` 保证重复的 accept 不会把起点往后推。 */
+      const acceptedAt = Date.now()
+      const updated = await q.run(
+        "UPDATE voice_calls SET state = 'accepted', started_at = COALESCE(started_at, ?), expires_at = ? WHERE call_id = ? AND state = 'ringing' AND expires_at > ?",
+        acceptedAt, acceptedAt + CALL_MAX_DURATION, callId, acceptedAt
+      )
+      if (!updated.changes) return
+      clearTimeout(callExpiryTimers.get(callId))
+      callExpiryTimers.delete(callId)
+      broadcastToUsers([peerId, Number(userId)], 'call.accepted', {
+        callId,
+        conversationId: Number(call.conversationId),
+        media: call.media === 'video' ? 'video' : 'audio',
+      })
+      dismissCallPush([Number(call.calleeId)], callId)
+      return
+    }
+
+    if (type === 'call.reject' || type === 'call.cancel') {
+      const allowed = type === 'call.reject' ? !isCaller : isCaller
+      if (!allowed || call.state !== 'ringing') return
+      const rejected = type === 'call.reject'
+      await finishVoiceCall(callId, {
+        state: rejected ? 'rejected' : 'cancelled',
+        reason: rejected ? 'declined' : 'cancelled',
+        broadcastType: rejected ? 'call.rejected' : 'call.cancelled',
+        broadcastExtra: { by: Number(userId) },
+      })
+      return
+    }
+
+    if (type === 'call.end') {
+      if (call.state !== 'accepted') return
+      await finishVoiceCall(callId, { state: 'ended', reason: 'hangup', broadcastType: 'call.ended' })
+      return
+    }
+
+    const relayTypes = new Set(['call.offer', 'call.answer', 'call.ice'])
+    if (!relayTypes.has(type) || call.state !== 'accepted') return
+    if (type === 'call.offer' && !isCaller) return
+    if (type === 'call.answer' && isCaller) return
+
+    if (type === 'call.offer' || type === 'call.answer') {
+      const sdp = payload.description
+      if (!sdp || typeof sdp.sdp !== 'string' || sdp.sdp.length > 96_000 || sdp.type !== (type === 'call.offer' ? 'offer' : 'answer')) return
+      broadcastToUsers([peerId], type, { callId, conversationId: Number(call.conversationId), description: sdp })
+    } else {
+      const candidate = payload.candidate
+      if (candidate != null && JSON.stringify(candidate).length <= 4096) {
+        broadcastToUsers([peerId], type, { callId, conversationId: Number(call.conversationId), candidate })
+      }
+    }
+  } catch (e) {
+    console.warn('[ws] 通话信令处理失败：', e.message)
+    send(ws, 'call.error', { callId, message: '通话服务暂时不可用' })
   }
 }
 

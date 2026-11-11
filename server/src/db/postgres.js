@@ -88,7 +88,8 @@ async function initSchema() {
     for (const [table, ddl] of BACKFILL_COLUMNS) {
       await pool.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${ddl}`)
     }
-    await pool.query('UPDATE users SET city_lat = NULL, city_lng = NULL WHERE city_public = 0')
+    /* 「附近的人」已移除，city_* 不再有消费方：每次启动清空遗留坐标。 */
+    await pool.query('UPDATE users SET city = NULL, city_lat = NULL, city_lng = NULL, city_public = 0')
     await pool.query('CREATE INDEX IF NOT EXISTS idx_messages_burn_at ON messages(burn_at) WHERE burn_at IS NOT NULL')
     await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_user_devices_session ON user_devices(session_id) WHERE session_id IS NOT NULL')
     await ensureMessageKinds(MESSAGE_KINDS)
@@ -287,7 +288,7 @@ CREATE TABLE IF NOT EXISTS messages (
   conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
   sender_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   kind            TEXT    NOT NULL DEFAULT 'text'
-                  CONSTRAINT messages_kind_check CHECK (kind IN ('text','image','file','video','location','poll')),
+                  CONSTRAINT messages_kind_check CHECK (kind IN ('text','image','file','video','location','poll','call')),
   content         TEXT,
   file_url        TEXT,
   file_name       TEXT,
@@ -302,7 +303,9 @@ CREATE TABLE IF NOT EXISTS messages (
   geo_address     TEXT,
   geo_lat         DOUBLE PRECISION,
   geo_lng         DOUBLE PRECISION,
-  poll_id         INTEGER
+  poll_id         INTEGER,
+  call_media      TEXT,
+  call_state      TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_messages_conv_id ON messages(conversation_id, id);
 CREATE INDEX IF NOT EXISTS idx_members_user ON conversation_members(user_id);
@@ -344,14 +347,6 @@ CREATE TABLE IF NOT EXISTS moment_cards (
 );
 CREATE INDEX IF NOT EXISTS idx_moment_cards_kind ON moment_cards(kind, moment_id);
 CREATE INDEX IF NOT EXISTS idx_moments_topic_created ON moments(topic, created_at DESC);
-
-CREATE TABLE IF NOT EXISTS moment_topic_views (
-  topic     TEXT NOT NULL,
-  user_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  viewed_at BIGINT NOT NULL,
-  PRIMARY KEY (topic, user_id)
-);
-CREATE INDEX IF NOT EXISTS idx_moment_topic_views_recent ON moment_topic_views(viewed_at DESC);
 
 CREATE TABLE IF NOT EXISTS moment_card_votes (
   moment_id  INTEGER NOT NULL REFERENCES moments(id) ON DELETE CASCADE,
@@ -654,6 +649,8 @@ const BACKFILL_COLUMNS = [
   ['messages', 'geo_lat DOUBLE PRECISION'],
   ['messages', 'geo_lng DOUBLE PRECISION'],
   ['messages', 'poll_id INTEGER'],
+  ['messages', 'call_media TEXT'],
+  ['messages', 'call_state TEXT'],
   ['moment_media', 'width INTEGER'],
   ['moment_media', 'height INTEGER'],
   ['moment_media', 'duration DOUBLE PRECISION'],

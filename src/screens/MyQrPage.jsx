@@ -105,9 +105,12 @@ export default function MyQrPage() {
 
     /* 顶部品牌条 */
     const grad = ctx.createLinearGradient(0, 0, W, 0)
-    grad.addColorStop(0, '#9b8cfb')
-    grad.addColorStop(0.5, '#7b5cf6')
-    grad.addColorStop(1, '#5b6ef5')
+    const brand = getComputedStyle(document.documentElement)
+    const brandStart = brand.getPropertyValue('--brand-1').trim() || '#6d5df6'
+    const brandEnd = brand.getPropertyValue('--brand-3').trim() || '#5b4bd8'
+    grad.addColorStop(0, brandStart)
+    grad.addColorStop(0.5, brandStart)
+    grad.addColorStop(1, brandEnd)
     ctx.fillStyle = grad
     ctx.fillRect(0, 0, W, 10)
 

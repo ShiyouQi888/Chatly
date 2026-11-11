@@ -60,7 +60,7 @@
 .lv-stage {
   flex: 1;
   min-height: 0;
-  padding: 12px 14px 0;
+  padding: 12px 16px 0;
 }
 
 .lv-stage .mv-wrap,
@@ -73,7 +73,7 @@
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
   padding: 12px 16px calc(14px + env(safe-area-inset-bottom));
 }
 

@@ -19,8 +19,13 @@ server/.env
 # 测试与截图脚本的临时产物（CDP profile、探针文件、截图）
 .tmp/
 shots/
+output/
 .playwright-cli/
-output/playwright/
+
+# Android 构建缓存与产物（Gradle 缓存、APK 中间文件）
+ChatlyApp/.gradle/
+ChatlyApp/build/
+ChatlyApp/app/build/
 
 # 编辑器 / 系统
 .vscode/

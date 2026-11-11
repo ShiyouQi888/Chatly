@@ -56,6 +56,18 @@ export const IconContacts = (p) => (
   </S>
 )
 
+/* 社群：三个人形 + 外圈 —— 和「通讯录」的一对一清单区分开，
+   底栏缩到 23px 时也要能看出是「多人群」而不是「一个人」 */
+export const IconCommunity = (p) => (
+  <S {...p}>
+    <circle cx="12" cy="7.4" r="3.1" />
+    <path d="M6.6 18.4a5.4 5.4 0 0 1 10.8 0" />
+    <circle cx="5.2" cy="10.2" r="2.2" />
+    <circle cx="18.8" cy="10.2" r="2.2" />
+    <path d="M1.9 17.6a3.6 3.6 0 0 1 3.6-3.1M22.1 17.6a3.6 3.6 0 0 0-3.6-3.1" />
+  </S>
+)
+
 /* ===== 顶栏 ===== */
 export const IconSearch = (p) => (
   <S {...p}>
@@ -114,6 +126,39 @@ export const IconVideo = (p) => (
   <S {...p}>
     <rect x="2.6" y="6.2" width="12.8" height="11.6" rx="3" />
     <path d="m15.4 12 6-3.4v6.8l-6-3.4Z" />
+  </S>
+)
+
+/* 关摄像头 / 切换前后摄：通话控制条上的两个开关。
+   关掉的那个用一条斜线，和「静音」保持同一套视觉语言（都是「当前不可用」）。 */
+export const IconVideoOff = (p) => (
+  <S {...p}>
+    <path d="M3.2 7.4A3 3 0 0 1 6.1 5h6.6a3 3 0 0 1 3 3v.8l3.7-2.1v8.6l-2.3-1.3" />
+    <path d="M15.7 15.7a3 3 0 0 1-3 2.3H6.1a3 3 0 0 1-3-3V8.8" />
+    <path d="m3 3 18 18" />
+  </S>
+)
+
+export const IconSwitchCamera = (p) => (
+  <S {...p}>
+    <rect x="2.8" y="6.6" width="12.4" height="10.8" rx="2.8" />
+    <path d="m15.2 12 6-3.4v6.8l-6-3.4Z" />
+    <path d="M6.4 11.9a3 3 0 0 1 5-2.3M11.6 12.1a3 3 0 0 1-5 2.3" />
+  </S>
+)
+
+/* 通话记录的方向：呼出用「向上右」、呼入用「向下左」，和大多数 IM 一致 */
+export const IconCallOut = (p) => (
+  <S {...p}>
+    <path d="M6.2 17.8 17 7" />
+    <path d="M9.4 6.6H17.4V14.6" />
+  </S>
+)
+
+export const IconCallIn = (p) => (
+  <S {...p}>
+    <path d="M17.8 6.2 7 17" />
+    <path d="M6.6 9.4V17.4H14.6" />
   </S>
 )
 

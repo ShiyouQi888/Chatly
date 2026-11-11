@@ -17,6 +17,41 @@ export async function listUsers(exceptId) {
 
 /* ================= 会话 ================= */
 
+/** 通话时长 → 列表里那一段短文本。未接通的通话没有时长。 */
+function callDurationLabel(ms) {
+  const total = Math.max(0, Math.round(Number(ms) || 0) / 1000)
+  if (!total) return ''
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = Math.floor(total % 60)
+  const pad = (n) => String(n).padStart(2, '0')
+  return h ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`
+}
+
+/**
+ * 会话列表里的通话预览。
+ *
+ * 同一条记录对主叫/被叫的含义不同 —— 「未接来电」只对被叫成立，
+ * 主叫看到的是「未接通」。所以这里必须带上浏览者 id 判方向，
+ * 不能只按 state 写死一句。
+ */
+function callPreview(last, viewerId) {
+  const label = last.callMedia === 'video' ? '视频通话' : '语音通话'
+  const outgoing = Number(last.senderId) === Number(viewerId)
+  switch (last.callState) {
+    case 'missed':
+      return outgoing ? `[${label}] 未接通` : `[${label}] 未接来电`
+    case 'declined':
+      return outgoing ? `[${label}] 对方已拒绝` : `[${label}] 已拒绝`
+    case 'cancelled':
+      return outgoing ? `[${label}] 已取消` : `[${label}] 未接来电`
+    default: {
+      const dur = callDurationLabel(last.audioDurationMs)
+      return dur ? `[${label}] ${dur}` : `[${label}]`
+    }
+  }
+}
+
 /** 我参与的会话列表（含最后一条消息、未读数） */
 export async function listConversations(userId) {
   const convs = await q.all(
@@ -39,14 +74,19 @@ export async function listConversations(userId) {
     convs.map(async (c) => {
       const last = await q.get(
         `SELECT id, sender_id AS senderId, kind, content, content_encrypted AS contentEncrypted, file_name AS fileName, geo_name AS geoName,
+                call_media AS callMedia, call_state AS callState, audio_duration_ms AS audioDurationMs,
                 created_at AS createdAt, revoked_at AS revokedAt
          FROM messages WHERE conversation_id = ? AND (burn_at IS NULL OR burn_at > ?) ORDER BY id DESC LIMIT 1`,
         c.id, Date.now()
       )
+      /* 通话记录不计未读：它是「发生过的事」，不是等你回的消息。
+         算进未读的话，每通没接的电话都会在对方会话上留一个红点，
+         而点进去没有任何可读内容 —— 那是通知噪音，不是提醒。 */
       const unread = (
         await q.get(
           `SELECT COUNT(*) AS n FROM messages
            WHERE conversation_id = ? AND sender_id != ? AND id > ? AND revoked_at IS NULL
+             AND kind != 'call'
              AND (burn_at IS NULL OR burn_at > ?)`,
           c.id,
           userId,
@@ -96,7 +136,12 @@ export async function listConversations(userId) {
                   ? `[位置] ${last.geoName || ''}`.trim()
                   : last.kind === 'poll'
                     ? `[投票] ${last.content || ''}`.trim()
-                    : last.contentEncrypted ? '[加密消息]' : last.content || last.fileName || '',
+                    : last.kind === 'call'
+                      ? callPreview(last, userId)
+                      : last.contentEncrypted ? '[加密消息]' : last.content || last.fileName || '',
+              callMedia: last.kind === 'call' ? last.callMedia || 'audio' : null,
+              callState: last.kind === 'call' ? last.callState || 'ended' : null,
+              audioDurationMs: last.kind === 'call' ? Number(last.audioDurationMs) || 0 : null,
               createdAt: last.createdAt,
             }
           : null,
@@ -496,6 +541,45 @@ export async function createMessage({
   return getMessage(id)
 }
 
+/**
+ * 写一条通话记录（kind='call'）。
+ *
+ * ⚠️ **只能由服务端在通话收尾时调用**。`routes/messages.js` 的发送白名单里没有 'call' ——
+ * 否则任何客户端都能给自己伪造一条「通话 99 分钟」，而通话记录的价值就在于它是事实。
+ *
+ * 四个结果的口径（和 ws.js 的状态机一一对应）：
+ *   ended      接通后正常结束（含对方断线）
+ *   missed     振铃超时，被叫没接
+ *   declined   被叫拒接
+ *   cancelled  主叫在接通前取消
+ */
+export async function recordCallMessage({
+  conversationId,
+  callerId,
+  media = 'audio',
+  state = 'ended',
+  durationSec = 0,
+  endedAt = Date.now(),
+}) {
+  const mediaValue = media === 'video' ? 'video' : 'audio'
+  const stateValue = ['ended', 'missed', 'declined', 'cancelled'].includes(state) ? state : 'ended'
+  /* 只有接通过的通话才有「时长」；未接通一律 0，不要拿振铃时间冒充通话时间。 */
+  const durationMs = stateValue === 'ended' ? Math.max(0, Math.round(Number(durationSec) || 0)) * 1000 : 0
+  const id = await insert(
+    `INSERT INTO messages
+       (conversation_id, sender_id, kind, content, content_encrypted, audio_duration_ms, call_media, call_state, created_at)
+     VALUES (?, ?, 'call', NULL, 0, ?, ?, ?, ?)`,
+    conversationId,
+    callerId,
+    durationMs,
+    mediaValue,
+    stateValue,
+    endedAt
+  )
+  await touchConversation(conversationId)
+  return getMessage(id)
+}
+
 export async function getMessage(id) {
   const m = await q.get(
     `SELECT id, conversation_id AS conversationId, sender_id AS senderId, kind,
@@ -503,7 +587,7 @@ export async function getMessage(id) {
             file_url AS fileUrl, file_name AS fileName, file_size AS fileSize, audio_duration_ms AS audioDurationMs,
             reply_to_id AS replyToId, created_at AS createdAt, revoked_at AS revokedAt,
             geo_name AS geoName, geo_address AS geoAddress, geo_lat AS geoLat, geo_lng AS geoLng,
-            poll_id AS pollId
+            poll_id AS pollId, call_media AS callMedia, call_state AS callState
      FROM messages WHERE id = ?`,
     id
   )
@@ -533,6 +617,10 @@ export async function getMessage(id) {
        票数是会变的，塞进消息出参就意味着「拉一页历史 = 拉一页投票明细」，
        而聊天记录里绝大多数消息根本不是投票。前端拿 id 集合走 `GET /polls?ids=` 批量换。 */
     pollId: m.kind === 'poll' ? m.pollId : null,
+    /* 通话记录：媒体类型 + 结果。时长复用 audioDurationMs —— 对通话来说它就是「通话多长」，
+       没必要再加一列。前端据此画气泡（未接 / 已拒绝 / 03:12）。 */
+    callMedia: m.kind === 'call' ? m.callMedia || 'audio' : null,
+    callState: m.kind === 'call' ? m.callState || 'ended' : null,
     replyTo: replied
       ? { id: replied.id, senderName: replied.sender.nickname, text: replied.text.slice(0, 40) }
       : null,
@@ -577,9 +665,12 @@ export async function assertReplyTo(conversationId, replyToId) {
 
 /** 撤回：仅本人、仅 2 分钟内 */
 export async function revokeMessage(messageId, userId) {
-  const m = await q.get('SELECT id, sender_id AS senderId, created_at AS createdAt FROM messages WHERE id = ?', messageId)
+  const m = await q.get('SELECT id, sender_id AS senderId, created_at AS createdAt, kind FROM messages WHERE id = ?', messageId)
   if (!m) return { ok: false, status: 404, error: '消息不存在' }
   if (m.senderId !== userId) return { ok: false, status: 403, error: '只能撤回自己的消息' }
+  /* 通话记录是事实，不是用户发出去的内容：撤掉它等于把「打过这通电话」抹掉，
+     而对方那边已经响过铃、进过通话页。 */
+  if (m.kind === 'call') return { ok: false, status: 400, error: '通话记录不能撤回' }
 
   const MAX = 2 * 60 * 1000
   if (Date.now() - m.createdAt > MAX) return { ok: false, status: 400, error: '超过 2 分钟无法撤回' }
