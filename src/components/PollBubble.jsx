@@ -308,13 +308,31 @@ export function PollBubble({ poll, loading, me, onVote, onClose, onOpenDetail })
       setNote('投票已结束，不能再投了')
       return
     }
-    if (hasVoted) {
-      setNote('你已经投过票，不能修改或撤销')
-      return
-    }
-    /* 单选：点一下即提交，提交后锁定。 */
+    /* 单选：点一下即提交。
+       ⚠️ 已经投过也允许再点 —— 那就是**改票**（optionIds = 完整状态）。
+       服务端把新提交当作「我现在的完整选择」，旧票会被替换掉。
+       锁死投票是过时的做法：群里投票能改票才是常态，
+       而 README 的接口契约也写明「投票 / 改票 / 取消（optionIds = 完整状态）」。
+
+       ★ **再点一次已选中的那一项 = 取消投票**。
+       这是界面上唯一的「反悔」入口（单选没有多选那样的确认按钮），
+       取消就靠「点回原来那个选项」这个动作表达。 */
     if (!poll.multi) {
       const next = [optId]
+      /* 点回已选的那一项 → 取消投票（提交空选择）。 */
+      if (mine.has(optId)) {
+        setBusy(true)
+        try {
+          await onVote?.([])
+          setPending(null)
+        } catch (e) {
+          setNote(e?.message || '取消投票失败')
+        } finally {
+          setBusy(false)
+        }
+        return
+      }
+      /* 选了另一个 → 改票。 */
       setBusy(true)
       try {
         await onVote?.(next)
@@ -335,7 +353,9 @@ export function PollBubble({ poll, loading, me, onVote, onClose, onOpenDetail })
   }
 
   const submitMulti = async () => {
-    if (busy || !poll.multi || hasVoted) return
+    /* ⚠️ 不再因为 hasVoted 拦着 —— 已投票的人也能改票（多选要能增删选项）。
+       提交的是「完整选择」，服务端据此替换旧票。 */
+    if (busy || !poll.multi) return
     setBusy(true)
     setNote('')
     try {
@@ -383,7 +403,7 @@ export function PollBubble({ poll, loading, me, onVote, onClose, onOpenDetail })
               type="button"
               key={o.id}
               className={`pb-opt ${on ? 'is-on' : ''}`}
-              disabled={busy || closed || hasVoted}
+              disabled={busy || closed}
               onClick={() => tap(o.id)}
               data-testid={`pb-opt-${o.id}`}
               data-selected={on ? '1' : '0'}
@@ -432,10 +452,10 @@ export function PollBubble({ poll, loading, me, onVote, onClose, onOpenDetail })
         </button>
       </div>
 
-      {poll.multi && !closed && !hasVoted && (
+      {poll.multi && !closed && (
         <div className="pb-actions">
           <span className="pb-tip">
-            {pending === null ? '可以选多项' : `已选 ${pending.length} 项`}
+            {pending === null ? (mine.size ? '可修改你的选择' : '可以选多项') : `已选 ${pending.length} 项`}
           </span>
           <button
             type="button"
@@ -449,12 +469,41 @@ export function PollBubble({ poll, loading, me, onVote, onClose, onOpenDetail })
         </div>
       )}
 
-      {hasVoted && !closed && <p className="pb-note" data-testid="poll-locked">你已投票，不能再次修改</p>}
+      {hasVoted && !closed && <p className="pb-note" data-testid="poll-locked">你已投票，可再次选择以修改</p>}
 
       {(note || (closed && !mine.size)) && (
         <p className="pb-note" data-testid="poll-note">
           {note || '投票已结束'}
         </p>
+      )}
+
+      {/* 多选的「取消我的投票」：单选不需要它 —— 单选点回已选的那一项就是取消。
+          多选因为要点多个项才能提交，没有「点一下就取消」的天然入口，
+          所以给一个显式按钮。 */}
+      {hasVoted && !closed && poll.multi && (
+        <button
+          type="button"
+          className="pb-cancel-vote"
+          disabled={busy}
+          onClick={async () => {
+            /* 取消投票 = 提交一份**空选择**（optionIds = 完整状态的另一种取值）。
+               服务端会删掉我的票，并把我从「谁投过」的名册里移除 ——
+               否则会出现「0 票却有头像」的矛盾状态。 */
+            setBusy(true)
+            setNote('')
+            try {
+              await onVote?.([])
+              setPending(null)
+            } catch (e) {
+              setNote(e?.message || '取消投票失败')
+            } finally {
+              setBusy(false)
+            }
+          }}
+          data-testid="poll-cancel-vote"
+        >
+          取消我的投票
+        </button>
       )}
 
       {isMine && !closed && (

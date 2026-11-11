@@ -273,13 +273,34 @@ export async function listPolls(conversationId, viewerId = null) {
  *
  * @returns {{ok:true, poll:object, changed:boolean}}
  */
+/**
+ * 投票 / 改票 / 取消投票。
+ *
+ * ## 语义（optionIds = 完整状态）
+ *
+ * 再次提交时，`optionIds` 表示「我现在的完整选择」：
+ * - 与上次不同 → **改票**：旧票删掉，换成新票（不是叠加）。
+ * - 与上次相同 → 无变化（`changed: false`），不重复计数。
+ * - 传空数组 → **取消投票**：删掉我的票，并从名册里移除我。
+ *
+ * ⚠️ 这是 README 声明的接口契约（`POST /polls/:id/vote  投票 / 改票 / 取消`）。
+ * 早先的实现是「投过就不能再投」（409），与契约和群聊的常识都不符 ——
+ * 群里投票能改票才是常态。
+ *
+ * ## 名册（poll_replies）的作用
+ *
+ * 它记录「**谁投过**」，用于显示参与者（匿名投票时只显示头像）。
+ * 改票**不动**名册（还是同一个人投的），取消投票才把名册行删掉 ——
+ * 否则会出现「0 票却有头像」的矛盾状态。
+ *
+ * @returns {{ok:true, poll:object, changed:boolean}}
+ */
 export async function votePoll(pollId, userId, optionIds) {
   const p = await rawPoll(pollId)
   if (!p) throw bad(404, '投票不存在')
   if (isClosed(p)) throw bad(400, '投票已结束')
 
   const wanted = Array.from(new Set((Array.isArray(optionIds) ? optionIds : []).map(Number).filter(Boolean)))
-  if (!wanted.length) throw bad(400, '至少选择一个选项，投票提交后不能撤销')
   const valid = (await q.all('SELECT id FROM poll_options WHERE poll_id = ?', pollId)).map((r) => r.id)
   const validSet = new Set(valid)
 
@@ -289,16 +310,54 @@ export async function votePoll(pollId, userId, optionIds) {
   if (!p.multi && wanted.length > 1) throw bad(400, '这是单选投票，只能选一个')
 
   const now = Date.now()
-  /* 名册行同时作为「已投过」的永久标记。先在事务里尝试占位，唯一索引可挡住
-     并发重复提交；若已有记录，整笔事务回滚，旧票保持原样。 */
+  let changed = false
+
+  /* ⚠️ 写票、删旧票、改名册放在同一事务里，失败时一起回滚。
+     PG 那边靠 AsyncLocalStorage 把同一条连接传给下面每个 q.*（见 db/postgres.js），
+     所以这里必须用 await q.run / await insert，**不能**直接用 pool.query。 */
   await tx(async () => {
     const prev = await q.all(
       'SELECT option_id AS id FROM poll_votes WHERE poll_id = ? AND user_id = ?',
       pollId,
       userId
     )
-    if (prev.length) throw bad(409, '你已经投过票，不能修改或撤销')
+    const prevIds = prev.map((r) => Number(r.id)).sort((a, b) => a - b)
+    const nextIds = [...wanted].sort((a, b) => a - b)
 
+    /* 取消投票：清票 + 清名册（名册留着就会出现「0 票却有头像」）。 */
+    if (!nextIds.length) {
+      if (!prevIds.length) {
+        /* 本来就没投 —— 不该有这一路（路由层已挡掉空数组），
+           但真走到了也不能报错：当作「没变化」。 */
+        return
+      }
+      await q.run('DELETE FROM poll_votes WHERE poll_id = ? AND user_id = ?', pollId, userId)
+      await q.run('DELETE FROM poll_replies WHERE poll_id = ? AND user_id = ?', pollId, userId)
+      changed = true
+      return
+    }
+
+    /* 选了跟上次一样的 → 没有变化，不重复计数（但要把名册补上，
+       因为名册可能因历史原因缺失）。 */
+    const sameAsBefore =
+      prevIds.length === nextIds.length && prevIds.every((id, i) => id === nextIds[i])
+    if (sameAsBefore) {
+      const marker = await q.run(
+        `INSERT OR IGNORE INTO poll_replies (poll_id, user_id, content, created_at)
+         VALUES (?, ?, '', ?)`,
+        pollId,
+        userId,
+        now
+      )
+      void marker
+      changed = false
+      return
+    }
+
+    /* 改票：旧票全删，再写新票。名册保留（还是同一个人投的）。 */
+    if (prevIds.length) {
+      await q.run('DELETE FROM poll_votes WHERE poll_id = ? AND user_id = ?', pollId, userId)
+    }
     const marker = await q.run(
       `INSERT OR IGNORE INTO poll_replies (poll_id, user_id, content, created_at)
        VALUES (?, ?, '', ?)`,
@@ -306,12 +365,9 @@ export async function votePoll(pollId, userId, optionIds) {
       userId,
       now
     )
-    if (marker.changes !== 1) throw bad(409, '你已经投过票，不能修改或撤销')
+    void marker
 
-    /* ⚠️ 写票和名册标记放在同一事务里，失败时两者一起回滚。
-     PG 那边靠 AsyncLocalStorage 把同一条连接传给下面每个 q.*（见 db/postgres.js），
-     所以这里必须用 await q.run / await insert，**不能**直接用 pool.query。 */
-    for (const optionId of wanted) {
+    for (const optionId of nextIds) {
       await insert(
         'INSERT INTO poll_votes (poll_id, user_id, option_id, created_at) VALUES (?, ?, ?, ?)',
         pollId,
@@ -320,9 +376,10 @@ export async function votePoll(pollId, userId, optionIds) {
         now
       )
     }
+    changed = true
   })
 
-  return { ok: true, poll: await viewPoll(pollId, userId), changed: true }
+  return { ok: true, poll: await viewPoll(pollId, userId), changed }
 }
 
 /**

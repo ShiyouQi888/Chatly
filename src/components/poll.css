@@ -566,6 +566,24 @@
   font-weight: 600;
 }
 
+/* 「取消我的投票」：与「结束投票」并列，但用中性色 —— 它是给自己的操作，
+   不是对整个投票的管理动作，视觉上不该跟发起人的「结束投票」一样重。 */
+.pb-cancel-vote {
+  align-self: flex-start;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: var(--r-full);
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--text-3);
+  font-size: var(--fs-micro);
+  font-weight: 500;
+}
+
+.pb-cancel-vote:disabled {
+  opacity: 0.5;
+}
+
 /* ---------- 骨架（详情还没拉到时） ---------- */
 
 .poll-bubble.is-skeleton {

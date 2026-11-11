@@ -43,6 +43,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { db, insertSync as insert, qSync as q } from '../server/src/db.js'
 import { purgeDebris, purgeMoments } from './lib/debris.mjs'
 import { freePort, waitAppTarget, connectCdp, launchChrome, shoot } from './lib/cdp.mjs'
+import { ensureLoggedIn } from './lib/session.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.join(HERE, '..')
@@ -130,7 +131,16 @@ console.log(`\n临时群 #${CID}「${TMP_TITLE}」，基线 message#${maxMsgBefo
 console.log('\n─── A. 老库迁移 ───')
 
 const MIG_TMP = path.join(ROOT, '.tmp', 'poll-selftest-mig')
-fs.rmSync(MIG_TMP, { recursive: true, force: true })
+/* ⚠️ 删不掉的目录不能当成致命错误 ——
+   有些环境（Windows + 回收站 shim）删目录会走「移到回收站」，
+   而回收站操作可能失败并抛错。这里删不掉就继续：
+   下面的 mkdirSync(recursive) 会复用已有目录，
+   而真正需要「干净」的那几个文件（old.db / probe.mjs）都会被覆盖写。 */
+try {
+  fs.rmSync(MIG_TMP, { recursive: true, force: true })
+} catch {
+  /* 删不掉就复用旧目录 —— 里面的关键文件都会被覆盖写 */
+}
 fs.mkdirSync(MIG_TMP, { recursive: true })
 
 const OLD_DDL = `
@@ -197,6 +207,17 @@ const inspectWith = (d) => ({
 const migrateAndInspect = async (dbFile) => {
   const dbjs = pathToFileURL(path.join(ROOT, 'server/src/db.js')).href
   const probe = path.join(MIG_TMP, 'probe.mjs')
+  /* ⚠️ probe.mjs 写在 MIG_TMP 下，它 import 的 './lib/session.mjs' 是**相对探针文件**的路径 ——
+     所以必须在 MIG_TMP 下真的有一份 scripts/lib 的副本。
+     以前这个副本是「上一次运行残留的」（MIG_TMP 结尾才 rmSync），
+     一旦 .tmp 被清理，第一次跑就会 ERR_MODULE_NOT_FOUND。
+     这里显式复制，不依赖任何残留。 */
+  const libDst = path.join(MIG_TMP, 'lib')
+  fs.mkdirSync(libDst, { recursive: true })
+  for (const name of fs.readdirSync(path.join(ROOT, 'scripts', 'lib'))) {
+    if (!name.endsWith('.mjs')) continue
+    fs.copyFileSync(path.join(ROOT, 'scripts', 'lib', name), path.join(libDst, name))
+  }
   fs.writeFileSync(
     probe,
     `
@@ -991,7 +1012,14 @@ const pollRows = q.get('SELECT COUNT(*) n FROM polls WHERE id > ?', maxPollBefor
 db.prepare('DELETE FROM polls WHERE id > ?').run(maxPollBefore)
 q.run('DELETE FROM messages WHERE id > ?', maxMsgBefore)
 await purgeDebris({ quiet: true })
-fs.rmSync(MIG_TMP, { recursive: true, force: true })
+/* 删不掉临时目录不算失败 —— 有些环境（Windows + 回收站 shim）删目录会走
+   「移到回收站」，而回收站操作可能失败并抛错。
+   这里是收尾清理，残留一个临时目录不影响任何断言。 */
+try {
+  fs.rmSync(MIG_TMP, { recursive: true, force: true })
+} catch {
+  /* 留着就好，下次运行会覆盖 */
+}
 
 const pollsAfter = q.get('SELECT COUNT(*) n FROM polls').n
 const messagesAfter = q.get('SELECT COUNT(*) n FROM messages').n

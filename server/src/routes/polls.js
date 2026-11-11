@@ -115,8 +115,11 @@ r.post('/', async (req, res) => {
   res.status(201).json({ message, poll: created.poll })
 })
 
-/* ---------- 一次性投票 ----------
-   每位成员只能提交一次，服务端拒绝改票与取消。 */
+/* ---------- 投票 / 改票 / 取消 ----------
+   `optionIds` 表示「我现在的完整选择」：
+   - 与上次不同 → 改票（旧票被替换）
+   - 与上次相同 → changed=false，不重复计数
+   - 空数组 → 取消投票（同时把我从「谁投过」的名册里移除） */
 r.post('/:id/vote', async (req, res) => {
   const id = Number(req.params.id)
   const poll = await viewPoll(id, null)
