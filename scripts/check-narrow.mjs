@@ -6,18 +6,23 @@ import http from 'node:http'
 import fs from 'node:fs'
 import { URL as NodeURL } from 'node:url'
 import { ensureLoggedIn } from './lib/session.mjs'
+import { launchChrome } from './lib/cdp.mjs'
 
 const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe'
 const PORT = 9414
 const OUT = 'D:/BS-chat-os/shots'
 fs.mkdirSync(OUT, { recursive: true })
 
-const chrome = spawn(CHROME, [
-  '--headless=new', `--remote-debugging-port=${PORT}`,
-  '--disable-gpu', '--no-sandbox', '--hide-scrollbars',
-  '--window-size=900,1000', '--force-device-scale-factor=2',
-  'http://127.0.0.1:5198/',
-], { stdio: 'ignore' })
+/* ⚠️ 走 cdp.mjs 的 launchChrome —— 它注册了进程退出钩子，
+   保证脚本崩了 Chrome 也不会变成孤儿进程占着内存。 */
+const chrome = launchChrome({
+  url: 'http://127.0.0.1:5198/',
+  port: PORT,
+  profileDir: 'D:/BS-chat-os/.tmp/chrome-narrow',
+  width: 900,
+  height: 1000,
+  extra: ['--force-device-scale-factor=2'],
+})
 
 const jget = (p) => new Promise((res, rej) => {
   http.get({ host: '127.0.0.1', port: PORT, path: p }, (r) => {

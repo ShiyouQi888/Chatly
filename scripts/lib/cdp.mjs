@@ -72,8 +72,60 @@ export function foreignTarget(list, appHost) {
 export const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe'
 
 /** 拉起一个开着调试端口的无头 Chrome，并打开 url */
+/**
+ * 启动一个 headless Chrome 实例。
+ *
+ * ## 自动清理（重要）
+ *
+ * 每个通过本函数启动的 Chrome 都会被登记到进程级注册表，
+ * 并挂上 `exit` / `SIGINT` / `SIGTERM` 钩子 —— **无论脚本怎么结束
+ * （正常退出、抛异常崩掉、被 Ctrl+C 中断），Chrome 都会被杀掉**。
+ *
+ * ## 为什么必须有这个
+ *
+ * 自检脚本里 Chrome 是「起一个、用完 kill 掉」的临时实例，
+ * 但 `await proc.kill()` 那行只有在脚本**顺利跑完**时才会执行。
+ * 中途任何一条断言抛错都会跳过它 —— Chrome 就成了孤儿进程。
+ *
+ * 后果比想象的严重：一次完整回归能攒出十几个孤儿 Chrome，
+ * 它们占着 CPU 与内存，让后续套件莫名超时。
+ * 表现是「随机有一批套件失败」，而且**每次失败的套件都不一样**，
+ * 极难定位（我在这上面绕了很久才查到）。
+ *
+ * 顺带一提：孤儿进程还会在 `.tmp/` 下留下巨大的 profile 目录
+ * （实测一次回归能涨到数 GB），磁盘也会被吃满。
+ */
+const liveChrome = new Set()
+let chromeCleanupHooked = false
+
+function hookChromeCleanup() {
+  if (chromeCleanupHooked) return
+  chromeCleanupHooked = true
+  const killAll = () => {
+    for (const proc of liveChrome) {
+      try { proc.kill() } catch { /* 已退出 */ }
+    }
+    liveChrome.clear()
+  }
+  process.on('exit', killAll)
+  process.on('SIGINT', () => { killAll(); process.exit(130) })
+  process.on('SIGTERM', () => { killAll(); process.exit(143) })
+  /* 未捕获异常也要清 —— 否则脚本崩了 Chrome 还活着。 */
+  process.on('uncaughtException', (error) => {
+    killAll()
+    console.error('[cdp] 未捕获异常：', error)
+    process.exit(1)
+  })
+  process.on('unhandledRejection', (error) => {
+    killAll()
+    console.error('[cdp] 未处理的 Promise 拒绝：', error)
+    process.exit(1)
+  })
+}
+
 export function launchChrome({ url, profileDir, width = 390, height = 844, port, extra = [] }) {
-  return spawn(CHROME, [
+  hookChromeCleanup()
+  const proc = spawn(CHROME, [
     '--headless=new',
     /* 测试里点元素用的是 `el.click()`，不算用户手势 ——
        没有这个开关，`video.play()` 会被自动播放策略拦掉，
@@ -96,6 +148,23 @@ export function launchChrome({ url, profileDir, width = 390, height = 844, port,
     ...extra,
     url,
   ], { stdio: 'ignore' })
+
+  liveChrome.add(proc)
+  /* 进程自己退出时从注册表里摘掉（否则注册表会越积越多）。 */
+  proc.on('exit', () => liveChrome.delete(proc))
+  return proc
+}
+
+/**
+ * 立刻杀掉所有由本进程启动的 Chrome。
+ *
+ * 供「这个套件已经跑完了，别留着实例占资源」的场景显式调用。
+ */
+export function killAllChrome() {
+  for (const proc of liveChrome) {
+    try { proc.kill() } catch { /* 已退出 */ }
+  }
+  liveChrome.clear()
 }
 
 /** 取调试端口上的 target 列表（/json/list） */

@@ -7,6 +7,7 @@ import http from 'node:http'
 import { URL as NodeURL } from 'node:url'
 import { purgeMessagesAfter, maxMessageId, purgeOrphanUploads } from './lib/debris.mjs'
 import { ensureLoggedIn } from './lib/session.mjs'
+import { launchChrome } from './lib/cdp.mjs'
 
 /* 这个脚本是「遍历所有界面并点开能点的一切」—— 包括表情面板的大表情格子，
    点下去就是真发一条消息。所以它会往演示库里留东西（实测一轮留下一条
@@ -16,13 +17,15 @@ const msgBaseline = await maxMessageId()
 const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe'
 const PORT = 9420
 
-const chrome = spawn(CHROME, [
-  '--headless=new', `--remote-debugging-port=${PORT}`,
-  '--user-data-dir=D:/BS-chat-os/.tmp/chrome-audit',
-  '--disable-gpu', '--no-sandbox', '--hide-scrollbars',
-  '--window-size=900,1000',
-  'http://127.0.0.1:5198/',
-], { stdio: 'ignore' })
+/* ⚠️ 走 cdp.mjs 的 launchChrome —— 它注册了进程退出钩子，
+   保证脚本崩了 Chrome 也不会变成孤儿进程占着内存。 */
+const chrome = launchChrome({
+  url: 'http://127.0.0.1:5198/',
+  port: PORT,
+  profileDir: 'D:/BS-chat-os/.tmp/chrome-audit',
+  width: 900,
+  height: 1000,
+})
 
 const jget = (p) => new Promise((res, rej) => {
   http.get({ host: '127.0.0.1', port: PORT, path: p }, (r) => {

@@ -6,18 +6,24 @@ import http from 'node:http'
 import fs from 'node:fs'
 import { URL as NodeURL } from 'node:url'
 import { ensureLoggedIn } from './lib/session.mjs'
+import { launchChrome } from './lib/cdp.mjs'
 
 const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe'
 const PORT = 9415
 const OUT = 'D:/BS-chat-os/shots'
 fs.mkdirSync(OUT, { recursive: true })
 
-const chrome = spawn(CHROME, [
-  '--headless=new', `--remote-debugging-port=${PORT}`,
-  '--disable-gpu', '--no-sandbox', '--hide-scrollbars',
-  '--window-size=900,1000', '--force-device-scale-factor=2',
-  'http://127.0.0.1:5198/',
-], { stdio: 'ignore' })
+/* ⚠️ 走 cdp.mjs 的 launchChrome —— 它注册了进程退出钩子，
+   保证脚本崩了 Chrome 也不会变成孤儿进程占着内存。
+   以前这里直接 spawn(CHROME)，崩了就漏一个。 */
+const chrome = launchChrome({
+  url: 'http://127.0.0.1:5198/',
+  port: PORT,
+  profileDir: 'D:/BS-chat-os/.tmp/chrome-align',
+  width: 900,
+  height: 1000,
+  extra: ['--force-device-scale-factor=2'],
+})
 
 const jget = (p) => new Promise((res, rej) => {
   http.get({ host: '127.0.0.1', port: PORT, path: p }, (r) => {
@@ -107,7 +113,16 @@ try {
 }
 console.log('login:', loginState === 'already' ? '已登录' : loginState === 'seeded' ? '已用 API 登录演示账号' : '失败')
 
-// 打开第一个会话
+/* 打开第一个会话。
+   ⚠️ 要等会话列表**真的渲染出来**再点 —— 登录后 ChatStore 是异步拉会话的，
+   直接 querySelector('.chat-row').click() 会在列表还没到时拿到 null，
+   报「Cannot read properties of null (reading 'click')」。
+   那个报错极具误导性：看起来像脚本写错了，其实是时序没等。 */
+for (let i = 0; i < 40; i++) {
+  const has = await evalJs(`!!document.querySelector('.chat-row')`).catch(() => false)
+  if (has) break
+  await sleep(300)
+}
 await evalJs(`document.querySelector('.chat-row').click()`)
 await sleep(1400)
 

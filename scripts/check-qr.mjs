@@ -303,6 +303,27 @@ const decodeRegion = async (sel, { retries = 2 } = {}) => {
 
 const ctx = { async close() { cdp.close(); proc.kill() } }
 
+/* ⚠️ Chrome 必须在**任何**退出路径都被杀掉 ——
+   脚本中途抛错时 `await ctx.close()` 那行到不了，
+   Chrome 就会变成孤儿进程留在后台（一次回归能攒出十几个）。
+   这些进程占着 CPU 与内存，会让后面的套件莫名超时 ——
+   表现是「随机有一批套件失败」，极难定位。
+   所以挂一个退出钩子兜底。 */
+const killChromeInstances = []
+let chromeClosed = false
+function killChrome() {
+  if (chromeClosed) return
+  chromeClosed = true
+  for (const fn of killChromeInstances) {
+    try { fn() } catch { /* noop */ }
+  }
+}
+killChromeInstances.push(() => { try { cdp.close() } catch { /* noop */ } })
+killChromeInstances.push(() => { try { proc.kill() } catch { /* noop */ } })
+process.on('exit', killChrome)
+process.on('SIGINT', () => { killChrome(); process.exit(130) })
+process.on('SIGTERM', () => { killChrome(); process.exit(143) })
+
 /* ================= 上号 ================= */
 await ensureLoggedIn(js)
 await sleep(700)
@@ -600,6 +621,8 @@ console.log('\n─── G. 无摄像头环境（不带合成设备再起一次�
   const dir2 = 'D:/BS-chat-os/.tmp/chrome-qr-nocam'
   fs.mkdirSync(dir2, { recursive: true })
   const proc2 = launchChrome({ url: APP, port: p2, profileDir: dir2 })
+  /* 第二个实例也要登记到退出钩子里 —— 否则它同样会变成孤儿进程。 */
+  killChromeInstances.push(() => { try { proc2.kill() } catch { /* noop */ } })
   const t2 = await waitAppTarget(p2, APP_HOST)
   const cdp2 = await connectCdp(t2.webSocketDebuggerUrl, () => {})
   const js2 = async (expr) => {
