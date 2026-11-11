@@ -226,40 +226,6 @@
   background: var(--brand-soft);
 }
 
-/* 统计 */
-.me-stats {
-  display: flex;
-  align-items: center;
-  padding: var(--space-3) var(--space-5) var(--space-1);
-  gap: var(--space-2);
-}
-
-.me-stats button {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-1);
-}
-
-.me-stats b {
-  font-size: var(--fs-h2);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-
-.me-stats em {
-  font-size: var(--fs-micro);
-  font-style: normal;
-  color: var(--text-3);
-}
-
-.me-stat-div {
-  width: 1px;
-  height: 22px;
-  background: var(--line-2);
-}
-
 /* ===== 当前状态 ===== */
 .me-status {
   display: flex;
@@ -331,6 +297,7 @@
 }
 
 .quick-ic {
+  position: relative;
   width: 36px;
   height: 36px;
   border-radius: var(--r-sm);
@@ -339,6 +306,26 @@
   justify-content: center;
   background: var(--brand-soft);
   color: var(--brand-2);
+}
+
+/* 数量角标：原来这一行数字单独占了一整行「会话 / 动态 / 收藏」，
+   与四宫格指向同一批页面。并入角标后概览与入口合一，也不再重复。 */
+.quick-count {
+  position: absolute;
+  top: -5px;
+  right: -7px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--r-full);
+  background: var(--brand-grad);
+  box-shadow: 0 0 0 2px var(--surface);
+  color: var(--text-on-brand);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
 }
 
 /* ===== 设置分组间距修正 ===== */

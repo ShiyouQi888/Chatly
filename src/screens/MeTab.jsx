@@ -5,7 +5,7 @@ import { useAuth } from '../store/AuthContext.jsx'
 import { useMoments } from '../store/MomentStore.jsx'
 import { useFavorites } from '../store/FavoriteStore.jsx'
 import { useWatchLater } from '../store/WatchLaterStore.jsx'
-import { avatarOf, useChat } from '../store/ChatStore.jsx'
+import { avatarOf } from '../store/ChatStore.jsx'
 import { THEMES } from '../data/themes.js'
 import { Avatar, Row, Group, Switch, Chip, Empty, SectionTitle } from '../components/ui.jsx'
 import ProfileEditor from '../components/ProfileEditor.jsx'
@@ -137,12 +137,12 @@ function MyPosts({ onManage }) {
 }
 
 /* ===== 快捷四宫格 ===== */
-function QuickGrid({ onOpen }) {
+function QuickGrid({ onOpen, counts = {} }) {
   const items = [
-    { key: 'posts', label: '我的动态', icon: <IconImage size={21} /> },
-    { key: 'fav', label: '收藏', icon: <IconStar size={21} /> },
-    { key: 'later', label: '稍后看', icon: <IconClock size={21} /> },
-    { key: 'files', label: '最近文件', icon: <IconFolder size={21} /> },
+    { key: 'posts', label: '我的动态', icon: <IconImage size={21} />, count: counts.posts },
+    { key: 'fav', label: '收藏', icon: <IconStar size={21} />, count: counts.fav },
+    { key: 'later', label: '稍后看', icon: <IconClock size={21} />, count: counts.later },
+    { key: 'files', label: '最近文件', icon: <IconFolder size={21} />, count: counts.files },
   ]
   return (
     <div className="quick-grid">
@@ -150,6 +150,7 @@ function QuickGrid({ onOpen }) {
         <button key={it.key} type="button" className="quick-item" onClick={() => onOpen(it.key)}>
           <span className="quick-ic">
             {it.icon}
+            {it.count > 0 && <i className="quick-count">{it.count > 99 ? '99+' : it.count}</i>}
           </span>
           <span>{it.label}</span>
         </button>
@@ -253,7 +254,6 @@ function SubPage({ title, onBack, children, action }) {
 export default function MeTab({ nav, notifySettingsSignal }) {
   const { showToast, dispatch } = useApp()
   const { user, logout, uploadCover, resetCover } = useAuth()
-  const { conversations } = useChat()
   /* setScope 是全局的（和动态 Tab 共用一个 store）——
      点「去动态页编辑」时顺手把筛选切到「我的」，落地就是自己那几条。 */
   const { setScope } = useMoments()
@@ -754,23 +754,9 @@ export default function MeTab({ nav, notifySettingsSignal }) {
             </div>
           )}
 
-          <div className="me-stats">
-            <button type="button" onClick={() => dispatch({ type: 'SET_TAB', tab: 'chat' })}>
-              <b>{conversations.length}</b>
-              <em>会话</em>
-            </button>
-            <span className="me-stat-div" />
-            <button type="button" onClick={() => setPage('posts')}>
-              <b>{myCount === null ? '—' : myCount > 99 ? '99+' : myCount}</b>
-              <em>动态</em>
-            </button>
-            <span className="me-stat-div" />
-            <button type="button" onClick={() => setPage('fav')}>
-              {/* 真数，不再是 mock 数组的长度（那个永远是 3） */}
-              <b>{favTotal > 99 ? '99+' : favTotal}</b>
-              <em>收藏</em>
-            </button>
-          </div>
+          {/* 这里原来有一行「会话 / 动态 / 收藏」的大数字，但下面四宫格里的
+              「我的动态 / 收藏」指向的是同一批页面 —— 同一个入口在一屏里出现两次，
+              点哪个都行，用户反而会犹豫。数字并入四宫格的角标，概览与入口合一。 */}
         </div>
 
         {/* 当前状态 */}
@@ -788,20 +774,30 @@ export default function MeTab({ nav, notifySettingsSignal }) {
         </button>
 
         {/* 快捷四宫格 */}
-        <QuickGrid onOpen={(k) => setPage(k)} />
+        <QuickGrid
+          onOpen={(k) => setPage(k)}
+          counts={{ posts: myCount, fav: favTotal }}
+        />
 
-        {/* 设置列表 */}
-        <Group>
-          <Row
-            icon={<IconShield size={19} />}
-            label="账号与安全"
-            onClick={() => setPage('security')}
-          />
-          <Row icon={<IconPhone size={19} />} label="通话记录" onClick={() => setPage('calls')} />
-          <Row icon={<IconLock size={19} />} label="隐私设置" onClick={() => setPage('privacy')} />
-          <Row icon={<IconGear size={19} />} label="通用设置" onClick={() => setPage('general')} />
-          <Row icon={<IconPalette size={19} />} label="主题外观" value={theme} onClick={() => setPage('theme')} />
+        {/* 设置：按「账号 → 消息 → 通用 → 支持」四组归类。
+            原先 8 行平铺在同一个列表里，找「隐私设置」要逐行扫，
+            而且「通话记录」夹在「账号与安全」和「隐私设置」中间，语义是断的。 */}
+        <Group title="账号">
+          <Row icon={<IconShield size={19} />} label="账号与安全" onClick={() => setPage('security')} />
+          <Row icon={<IconLock size={19} />} label="隐私设置" onClick={() => setPage('privacy')} last />
+        </Group>
+
+        <Group title="消息">
           <Row icon={<IconBell size={19} />} label="消息通知" onClick={() => setPage('notify')} />
+          <Row icon={<IconPhone size={19} />} label="通话记录" onClick={() => setPage('calls')} last />
+        </Group>
+
+        <Group title="通用">
+          <Row icon={<IconGear size={19} />} label="通用设置" onClick={() => setPage('general')} />
+          <Row icon={<IconPalette size={19} />} label="主题外观" value={theme} onClick={() => setPage('theme')} last />
+        </Group>
+
+        <Group title="支持">
           <Row icon={<IconHelp size={19} />} label="帮助与反馈" onClick={() => setPage('help')} />
           <Row icon={<IconInfo size={19} />} label="关于我们" value="v1.0.0" onClick={() => setPage('about')} last />
         </Group>
