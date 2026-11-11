@@ -10,6 +10,7 @@
  * 存成模块级变量：useAlert 与 Phone 的 WS 回调不在同一棵组件子树里，
  * 用一个共享的 setter 比到处传 props 干净。 */
 import { useCallback } from 'react'
+import { haptics } from '../platform/index.js'
 
 let prefs = { sound: true, vibrate: true, dnd_enabled: false, dnd_start: '23:00', dnd_end: '08:00' }
 
@@ -87,9 +88,10 @@ function buzz() {
   try {
     /* Headless browser suites and first-load sessions have no activation; calling
        vibrate in that state is blocked with a console error by Chromium. Once the
-       user has interacted with the app, realtime notification vibration is allowed. */
-    if (navigator.userActivation && !navigator.userActivation.hasBeenActive) return false
-    return navigator.vibrate?.(30) !== false && !!navigator.vibrate
+       user has interacted with the app, realtime notification vibration is allowed.
+       原生端没有这条限制（系统触感马达不需要用户激活）。 */
+    if (!haptics.hasUserActivation()) return false
+    return haptics.vibrate(30)
   } catch {
     return false
   }

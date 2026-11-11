@@ -31,6 +31,7 @@
  * 共用一个回调。不是二选一。
  */
 import { useCallback, useRef } from 'react'
+import { haptics } from '../platform/index.js'
 
 /** 480ms：短于这个数，滚动列表时容易误触；长于它，手感会觉得「按了半天没反应」 */
 export const LONG_PRESS_MS = 480
@@ -71,9 +72,12 @@ export function useLongPress(onLongPress, opts = {}) {
          hasn't tapped on the frame..."）—— 那是浏览器策略不是我们的 bug，
          但它会污染 check-console 的结论（headless 里跑长按自检必然触发）。
          真机上用户已经在触摸页面，`userActivation.isActive` 为真，照常震动。
-         `navigator.userActivation` 不存在的老浏览器直接跳过（不是错误）。 */
+         `userActivation` 不存在的老浏览器直接跳过（不是错误）。
+
+         原生端没有这条限制（系统触感马达不需要用户激活），
+         由适配层按运行环境决定。 */
       try {
-        if (navigator.userActivation?.isActive) navigator.vibrate?.(15)
+        if (haptics.hasUserActivation()) haptics.vibrate(15)
       } catch {
         /* 不支持 / 被策略拦下都无所谓 */
       }

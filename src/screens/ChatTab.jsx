@@ -6,6 +6,7 @@ import { api } from '../api/client.js'
 import { Avatar, Badge, ActionMenu, Empty } from '../components/ui.jsx'
 import StatusStories from '../components/StatusStories.jsx'
 import { useLongPress } from '../hooks/useLongPress.js'
+import { storage } from '../platform/index.js'
 import {
   IconSearch,
   IconPlus,
@@ -264,11 +265,11 @@ export default function ChatTab({ nav, statusComposeSignal = 0 }) {
   )
 
   /* 「聊天列表左滑删除」关掉后，长按菜单里也不再给删除项。
-     读 localStorage 而不用 state：ChatTab 和设置页是两个独立页面，
+     读本地存储而不用 state：ChatTab 和设置页是两个独立页面，
      关掉开关切回来时要**立刻**生效，不等人为刷新。 */
   const swipeDeleteEnabled = (() => {
     try {
-      return localStorage.getItem('chatly-swipe-delete') !== 'false'
+      return storage.get('chatly-swipe-delete') !== 'false'
     } catch {
       return true
     }

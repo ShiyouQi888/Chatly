@@ -20,6 +20,7 @@ import ForwardSheet from '../components/ForwardSheet.jsx'
 import { useFavorites } from '../store/FavoriteStore.jsx'
 import { useWatchLater } from '../store/WatchLaterStore.jsx'
 import { useLongPress } from '../hooks/useLongPress.js'
+import { storage, media, clipboard, share } from '../platform/index.js'
 import {
   IconBack,
   IconVideo,
@@ -156,7 +157,8 @@ function FileCard({ m, mine }) {
   const open = () => {
     if (m.uploading) return showToast('文件上传完成后即可打开')
     if (!m.fileUrl || m.fileUrl.startsWith('blob:')) return showToast('文件地址缺失')
-    window.open(mediaUrl(m.fileUrl), '_blank', 'noopener')
+    /* 原生壳里 window.open 会被 WebView 拦截，改由适配层用系统浏览器打开。 */
+    void share.openExternal(mediaUrl(m.fileUrl))
   }
 
   return (
@@ -257,7 +259,7 @@ function ImageBubble({ m, onOpen }) {
      用一个共享状态的话，点一张会把这个会话里所有图一起放出来 ——
      用户点的是「这一张」，不是「全部」。 */
   const [locked, setLocked] = useState(
-    () => localStorage.getItem(AUTO_DOWNLOAD_KEY) === 'false'
+    () => storage.get(AUTO_DOWNLOAD_KEY) === 'false'
   )
 
   if (broken) {
@@ -962,7 +964,7 @@ const Composer = forwardRef(function Composer(
             onBlur={() => setFocus(false)}
             onKeyDown={(e) => {
               // 读取设置：回车是发送还是换行
-              const enterToSend = localStorage.getItem('chatly-enter-to-send') !== 'false'
+              const enterToSend = storage.get('chatly-enter-to-send') !== 'false'
               if (e.key === 'Enter' && !e.shiftKey && enterToSend) {
                 e.preventDefault()
                 submit()
@@ -1624,19 +1626,18 @@ export default function ChatRoom({ chat, onBack, jumpTo, onJumped }) {
     if (voiceHoldActiveRef.current || recording) return
     voiceHoldActiveRef.current = true
     voiceCanceledRef.current = false
-    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+    if (!media.isSupported() || typeof MediaRecorder === 'undefined') {
       voiceHoldActiveRef.current = false
-      showToast('当前浏览器不支持语音录制')
+      showToast('当前环境不支持语音录制')
       return
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const stream = await media.getUserMedia({ audio: true })
       if (!voiceHoldActiveRef.current) {
         stream.getTracks().forEach((track) => track.stop())
         return
       }
-      const candidates = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus']
-      const mimeType = candidates.find((type) => MediaRecorder.isTypeSupported?.(type))
+      const mimeType = media.pickAudioMime()
       let recorder
       try {
         recorder = new MediaRecorder(stream, { ...(mimeType ? { mimeType } : {}), audioBitsPerSecond: 32_000 })
@@ -1794,9 +1795,8 @@ export default function ChatRoom({ chat, onBack, jumpTo, onJumped }) {
           label: '复制',
           icon: <IconCopy size={20} />,
           onClick: () => {
-            navigator.clipboard?.writeText(menuState.m.text || '').then(
-              () => showToast('已复制到剪贴板'),
-              () => showToast('复制失败')
+            clipboard.writeText(menuState.m.text || '').then(
+              (ok) => showToast(ok ? '已复制到剪贴板' : '复制失败')
             )
           },
         },

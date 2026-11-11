@@ -1,3 +1,5 @@
+import { storage } from '../platform/index.js'
+
 const DEFAULT_ON_PRIMARY = '#ffffff'
 
 export function hexToRgba(hex, alpha) {
@@ -104,7 +106,7 @@ let systemModeHandler
 
 export function getSavedAppearanceMode() {
   try {
-    const saved = localStorage.getItem(APPEARANCE_MODE_KEY) || 'system'
+    const saved = storage.get(APPEARANCE_MODE_KEY) || 'system'
     return validModes.has(saved) ? saved : 'system'
   } catch {
     return 'system'
@@ -142,20 +144,20 @@ export function applyMotion(on) {
 
 export function applySavedAppearance() {
   try {
-    applyFontSize(localStorage.getItem('chatly-font-size') || 'standard')
-    applyMotion(localStorage.getItem(MOTION_KEY) !== 'off')
+    applyFontSize(storage.get('chatly-font-size') || 'standard')
+    applyMotion(storage.get(MOTION_KEY) !== 'off')
   } catch {}
   applyAppearanceMode(getSavedAppearanceMode())
 }
 
 export function applySavedTheme(themes) {
   try {
-    const saved = localStorage.getItem('chatly-theme') || '极光'
+    const saved = storage.get('chatly-theme') || '极光'
     const legacyNames = { '海盐': '薄荷', '暮色': '蜜桃', '云朵': '极光', '午夜': '石墨' }
     const resolved = legacyNames[saved] || saved
     const found = (themes || []).find((theme) => theme.name === resolved)
     if (found) {
-      if (resolved !== saved) localStorage.setItem('chatly-theme', resolved)
+      if (resolved !== saved) storage.set('chatly-theme', resolved)
       applyThemeColors(found)
     }
   } catch {}

@@ -497,7 +497,14 @@ async function handleVoiceCallMessage(ws, userId, type, payload) {
       broadcastToUsers([calleeId], 'call.incoming', incoming)
       broadcastToUsers([Number(userId)], 'call.ringing', { callId, conversationId })
       if (pushAvailable) {
-        void sendPushToUser(calleeId, { type: 'call.incoming', payload: incoming }, { ttl: Math.ceil(CALL_RING_TIMEOUT / 1000) })
+        /* 来电推送也要按设备判定：被叫人的手机在线（他在看屏幕）→ 不推给手机；
+           但他电脑上的那台（人不在电脑前）该响 —— 否则他在电脑上完全不知道有人打来。
+           语义与消息推送一致：**逐设备**，在线的不推，离线的照推。 */
+        void sendPushToUser(
+          calleeId,
+          { type: 'call.incoming', payload: incoming },
+          { ttl: Math.ceil(CALL_RING_TIMEOUT / 1000), skipDeviceIds: onlineDeviceIds(calleeId) }
+        )
           .catch((e) => console.warn('[ws] 来电推送失败：', e.message))
       }
       const timeout = setTimeout(() => void expireVoiceCall(callId), CALL_RING_TIMEOUT + 100)
@@ -688,6 +695,52 @@ export async function isOnlineAnywhere(userId) {
   if (online.has(id)) return true
   if (!redisOn()) return false
   return (await remotePresent([id])).has(id)
+}
+
+/**
+ * 这个用户**当前在线的设备 id 集合**（本进程内）。
+ *
+ * ## 用途：多端推送路由
+ *
+ * 多端场景下，「用户在线」太粗 —— 手机在线就把电脑的通知也吞了。
+ * 正确的判定是逐设备：某个推送订阅属于设备 D，D 在线就不推给 D。
+ *
+ * ## 跨实例的局限
+ *
+ * 这里只看**本进程**的连接。多实例部署时，用户可能在 A 实例、
+ * 设备在 B 实例 —— 那台设备在 A 看来是「离线」，会收到一条推送。
+ *
+ * 这不会造成「收不到通知」，只会造成「多收一条」——
+ * 而多收的那条，内容与实时消息重复，用户看得见但不至于困惑。
+ * 反过来如果为了精确而查 Redis，则每条推送都要等一次 Redis 往返，
+ * 延迟与可靠性都不划算。**宁可多推一条，不要漏推**。
+ *
+ * @param {number} userId
+ * @returns {Set<number>} 在线设备 id 集合（可能为空）
+ */
+export function onlineDeviceIds(userId) {
+  const id = Number(userId)
+  const out = new Set()
+  if (!id) return out
+  const set = online.get(id)
+  if (!set) return out
+  for (const ws of set) {
+    if (ws.deviceId) out.add(Number(ws.deviceId))
+  }
+  return out
+}
+
+/**
+ * 这个用户是否有**任何一台设备**在本进程在线。
+ *
+ * 与 `onlineDeviceIds` 配套：推送时要同时看「这个用户整体在线吗」
+ * （老订阅没有 device_id，只能按整体判）与「这台设备在线吗」。
+ *
+ * @param {number} userId
+ * @returns {boolean}
+ */
+export function isOnlineHere(userId) {
+  return online.has(Number(userId))
 }
 
 /**

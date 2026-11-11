@@ -4,15 +4,10 @@ import { inDnd } from '../utils/notifyAlert.js'
 import { IconBack } from '../components/Icon.jsx'
 import { Row, Group, Switch } from '../components/ui.jsx'
 import { api } from '../api/client.js'
+import { push, storage, isNative } from '../platform/index.js'
 import './me-tab.css'
 
 const PUSH_ENDPOINT_KEY = 'chatly.push.endpoint'
-
-function vapidKeyBytes(value) {
-  const normalized = String(value || '').replace(/-/g, '+').replace(/_/g, '/')
-  const raw = atob(normalized + '='.repeat((4 - normalized.length % 4) % 4))
-  return Uint8Array.from(raw, (char) => char.charCodeAt(0))
-}
 
 /* ===== 消息通知设置 =====
  *
@@ -46,10 +41,15 @@ export default function NotificationSettings({ onBack }) {
   const [saving, setSaving] = useState({})
   const [saveMessage, setSaveMessage] = useState('')
   const [pushConfig, setPushConfig] = useState(null)
-  const [pushPermission, setPushPermission] = useState(() => typeof Notification === 'undefined' ? 'unsupported' : Notification.permission)
+  const [pushPermission, setPushPermission] = useState(() => {
+    if (isNative) return 'unsupported'
+    return typeof Notification === 'undefined' ? 'unsupported' : Notification.permission
+  })
   const [pushEnabled, setPushEnabled] = useState(false)
   const [pushBusy, setPushBusy] = useState(false)
-  const pushSupported = typeof window !== 'undefined' && 'Notification' in window && 'serviceWorker' in navigator && 'PushManager' in window
+  /* 推送能力：Web 端要 Service Worker + PushManager + Notification 三样；
+     原生端要 PushNotifications 插件（本阶段未接，会显示为不支持）。 */
+  const pushSupported = push.isSupported()
 
   useEffect(() => {
     if (!prefs) loadPrefs()
@@ -59,8 +59,8 @@ export default function NotificationSettings({ onBack }) {
     let active = true
     api.pushConfig().then((config) => active && setPushConfig(config)).catch(() => active && setPushConfig({ enabled: false }))
     if (pushSupported) {
-      setPushPermission(Notification.permission)
-      navigator.serviceWorker.getRegistration('/').then((registration) => registration?.pushManager?.getSubscription())
+      if (!isNative) setPushPermission(Notification.permission)
+      push.getSubscription()
         .then((subscription) => {
           if (active) setPushEnabled(!!subscription)
         })
@@ -75,34 +75,28 @@ export default function NotificationSettings({ onBack }) {
     setSaveMessage('')
     try {
       if (enabled) {
-        if (!pushSupported) throw new Error('此浏览器不支持后台推送')
-        if (!pushConfig?.enabled || !pushConfig.publicKey) throw new Error('服务端尚未配置 Web Push 密钥')
-        let permission = Notification.permission
-        if (permission === 'default') permission = await Notification.requestPermission()
-        setPushPermission(permission)
-        if (permission !== 'granted') throw new Error(permission === 'denied' ? '通知权限已拒绝，请在浏览器站点设置中开启' : '需要允许通知权限才能接收来电推送')
-
-        const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' })
-        await navigator.serviceWorker.ready
-        let subscription = await registration.pushManager.getSubscription()
-        if (!subscription) {
-          subscription = await registration.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: vapidKeyBytes(pushConfig.publicKey),
-          })
+        if (!pushSupported) throw new Error('此设备不支持系统通知')
+        if (!isNative) {
+          if (!pushConfig?.enabled || !pushConfig.publicKey) throw new Error('服务端尚未配置 Web Push 密钥')
+          let permission = Notification.permission
+          if (permission === 'default') permission = await Notification.requestPermission()
+          setPushPermission(permission)
+          if (permission !== 'granted') throw new Error(permission === 'denied' ? '通知权限已拒绝，请在浏览器站点设置中开启' : '需要允许通知权限才能接收来电推送')
         }
+
+        const subscription = await push.subscribe({ publicKey: pushConfig?.publicKey })
+        if (!subscription) throw new Error('通知订阅失败，请检查系统权限设置')
         await api.savePushSubscription(subscription.toJSON())
-        try { localStorage.setItem(PUSH_ENDPOINT_KEY, subscription.endpoint) } catch { /* browser storage may be disabled */ }
+        try { storage.set(PUSH_ENDPOINT_KEY, subscription.endpoint) } catch { /* storage may be unavailable */ }
         setPushEnabled(true)
         setSaveMessage('此设备已开启语音来电推送')
       } else {
-        const registration = await navigator.serviceWorker.getRegistration('/')
-        const subscription = await registration?.pushManager?.getSubscription()
+        const subscription = await push.getSubscription()
         if (subscription) {
           await api.deletePushSubscription(subscription.endpoint)
-          await subscription.unsubscribe()
         }
-        try { localStorage.removeItem(PUSH_ENDPOINT_KEY) } catch { /* browser storage may be disabled */ }
+        await push.unsubscribe()
+        try { storage.remove(PUSH_ENDPOINT_KEY) } catch { /* storage may be unavailable */ }
         setPushEnabled(false)
         setSaveMessage('此设备已关闭语音来电推送')
       }

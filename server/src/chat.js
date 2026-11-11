@@ -629,11 +629,43 @@ export async function getMessage(id) {
   }
 }
 
-export async function listMessages(conversationId, { limit = 50, beforeId = null } = {}) {
+/**
+ * 取会话里的消息。
+ *
+ * ## 两个方向
+ *
+ * - `beforeId`：**向前翻历史**（聊到上面去）。
+ * - `afterId`：**向后取增量**（多端同步用）。
+ *
+ * ## 为什么需要 afterId
+ *
+ * 多端场景下，新设备登录、或某台设备断网很久后重连，
+ * 它需要知道「我错过的那些消息」—— 只向前翻是翻不出来的
+ * （那是历史方向）。`messages.id` 是全局自增主键，
+ * 所以「id > 我最后看到的那条」天然就是增量区间，且不漏不重。
+ *
+ * 两个参数**互斥**：同时给会以 afterId 为准（增量优先 ——
+ * 客户端在重连时更可能想要「补齐错过的」）。
+ *
+ * @param {number} conversationId
+ * @param {{ limit?: number, beforeId?: number|null, afterId?: number|null }} [options]
+ */
+export async function listMessages(conversationId, { limit = 50, beforeId = null, afterId = null } = {}) {
+  let rows
+  if (afterId != null) {
+    /* 增量方向：取 id > afterId 的，**按 id 升序**返回（客户端按顺序追加）。 */
+    rows = await q.all(
+      `SELECT id FROM messages WHERE conversation_id = ? AND id > ? AND (burn_at IS NULL OR burn_at > ?) ORDER BY id ASC LIMIT ?`,
+      conversationId, afterId, Date.now(), limit
+    )
+    /* getMessage 是逐条查的（每条还要查发送者），Promise.all 保持入参顺序。 */
+    return Promise.all(rows.map((r) => getMessage(r.id)))
+  }
+
   const sql = beforeId
     ? `SELECT id FROM messages WHERE conversation_id = ? AND id < ? AND (burn_at IS NULL OR burn_at > ?) ORDER BY id DESC LIMIT ?`
     : `SELECT id FROM messages WHERE conversation_id = ? AND (burn_at IS NULL OR burn_at > ?) ORDER BY id DESC LIMIT ?`
-  const rows = beforeId ? await q.all(sql, conversationId, beforeId, Date.now(), limit) : await q.all(sql, conversationId, Date.now(), limit)
+  rows = beforeId ? await q.all(sql, conversationId, beforeId, Date.now(), limit) : await q.all(sql, conversationId, Date.now(), limit)
   /* Promise.all 保持入参顺序 —— 这里靠它，`getMessage` 是逐条查的（每条还要查发送者）。 */
   return (await Promise.all(rows.map((r) => getMessage(r.id)))).reverse()
 }

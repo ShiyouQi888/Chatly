@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { api, formatRelative, mediaUrl } from '../api/client.js'
 import { useApp } from '../store/AppContext.jsx'
 import { IconBack, IconFile, IconFolder, IconImage, IconPlus, IconVideo } from '../components/Icon.jsx'
+import { share } from '../platform/index.js'
 
 const CATEGORIES = [
   { id: 'all', label: '全部', icon: IconFolder },
@@ -79,7 +80,8 @@ export default function GroupFilesPage({ chat, sendMessage, onBack }) {
   }
 
   const openFile = (file) => {
-    window.open(mediaUrl(file.file_url), '_blank', 'noopener,noreferrer')
+    /* 原生壳里 window.open 会被 WebView 拦截，改由适配层用系统浏览器打开。 */
+    void share.openExternal(mediaUrl(file.file_url))
   }
 
   return (

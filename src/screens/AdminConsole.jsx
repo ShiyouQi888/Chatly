@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import AdminPrivateMessages from './AdminPrivateMessages.jsx'
 import { api, adminTokenStore } from '../api/client.js'
+import { storage } from '../platform/index.js'
 import { Badge as UiBadge } from '../components/ui/badge.jsx'
 import { Button } from '../components/ui/button.jsx'
 import { Card } from '../components/ui/card.jsx'
@@ -544,7 +545,7 @@ export default function AdminConsole() {
   const [admin, setAdmin] = useState(null)
   const [active, setActive] = useState(() => NAV.some((item) => item.id === window.location.hash.slice(1)) ? window.location.hash.slice(1) : 'overview')
   const [isMobileSidebar, setIsMobileSidebar] = useState(() => window.matchMedia('(max-width: 760px)').matches)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => window.localStorage.getItem('admin-sidebar-collapsed') === '1')
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => storage.get('admin-sidebar-collapsed') === '1')
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const sidebarRef = useRef(null)
@@ -654,7 +655,7 @@ export default function AdminConsole() {
   }, [])
 
   useEffect(() => {
-    window.localStorage.setItem('admin-sidebar-collapsed', sidebarCollapsed ? '1' : '0')
+    storage.set('admin-sidebar-collapsed', sidebarCollapsed ? '1' : '0')
   }, [sidebarCollapsed])
 
   useEffect(() => {

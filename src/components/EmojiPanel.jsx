@@ -16,6 +16,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EMOJI_TABS, EMOJI_NAMES, EMOJI_BIG, EMOJI_ALL, emojiUrl, EMOJI_BASE } from '../data/emoji.js'
 import { animUrl, EMOJI_ANIM_DIR } from '../data/emoji-anim.js'
 import { IconSearch, IconClose } from './Icon.jsx'
+import { storage } from '../platform/index.js'
 import './emoji-panel.css'
 
 const RECENT_KEY = 'chatly.emoji.recent'
@@ -46,10 +47,10 @@ export function isEmojiSticker(url) {
   return url.startsWith(`${EMOJI_BASE}/`) || url.startsWith(`${EMOJI_ANIM_DIR}/`)
 }
 
-/* ---------- 最近使用（localStorage，不进后端：这是纯本地偏好） ---------- */
+/* ---------- 最近使用（本地存储，不进后端：这是纯本地偏好） ---------- */
 function readRecent() {
   try {
-    const v = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]')
+    const v = JSON.parse(storage.get(RECENT_KEY) || '[]')
     if (!Array.isArray(v)) return []
     // 清单可能会重生成、删掉旧表情；过滤掉已经不存在的码点，别渲染出破图
     return v.filter((c) => typeof c === 'string' && EMOJI_NAMES[c])
@@ -60,9 +61,9 @@ function readRecent() {
 
 function writeRecent(codes) {
   try {
-    localStorage.setItem(RECENT_KEY, JSON.stringify(codes))
+    storage.set(RECENT_KEY, JSON.stringify(codes))
   } catch {
-    /* 隐私模式下 localStorage 会抛错，最近用不了不影响其它功能 */
+    /* 存储不可用时最近用不了，不影响其它功能 */
   }
 }
 

@@ -5,6 +5,26 @@ import { q } from './db.js'
 
 let schemaReady
 
+/**
+ * 推送订阅表 —— **绑定到设备**。
+ *
+ * ## 为什么必须绑设备
+ *
+ * 多端场景下，「用户在线」是个**过于粗的判据**：只要他在手机上看消息，
+ * 电脑上的那条通知就不该被推掉（他可能已经离开电脑了）。
+ * 正确的语义是：
+ *
+ * > 对用户的每个订阅（= 一台设备）：**这台设备**当前没有活跃 WS 连接 → 推给它；
+ * > 这台设备在线 → 不推给它（它自己会收到 WS 实时消息）。
+ *
+ * 所以订阅表要记 device_id，推送时逐条比对在线设备集合。
+ *
+ * ## 迁移方式
+ *
+ * 老库没有 device_id 列 → 用 `addColumnIfMissing` 补（见 db/sqlite.js 的做法），
+ * 补出来的旧记录 device_id 为 NULL：它们属于「设备绑定功能上线前」的订阅，
+ * 推送时按「老设备」处理 —— 只要该用户任一设备在线就不推（与旧行为一致）。
+ */
 async function ensurePushSchema() {
   if (!schemaReady) {
     schemaReady = (async () => {
@@ -17,9 +37,60 @@ async function ensurePushSchema() {
         updated_at BIGINT NOT NULL
       )`)
       await q.run('CREATE INDEX IF NOT EXISTS web_push_subscriptions_user_idx ON web_push_subscriptions(user_id)')
+      /* ⚠️ SQLite 没有 `ADD COLUMN IF NOT EXISTS`，且 PG 与 SQLite 的列定义语法不同 ——
+         所以走 db.js 的 addColumnIfMissing（它按驱动分别处理）。
+         见 server/src/db/sqlite.js 与 db/postgres.js 里的同名实现。 */
+      await addColumnIfMissing('web_push_subscriptions', 'device_id', 'device_id INTEGER')
     })()
   }
   return schemaReady
+}
+
+/**
+ * 补一个列（不存在才加）。
+ *
+ * 为什么不直接复用 db.js 导出的那个：db.js 的 addColumnIfMissing 是给
+ * 「建表时就要有」的表用的，而推送表是**运行时按需**创建的（ensurePushSchema），
+ * 两者要能各自独立工作。这里做一份最小实现，两边逻辑一致。
+ *
+ * @param {string} table 表名
+ * @param {string} column 列名
+ * @param {string} definition 列定义（SQLite 与 PG 通用：`<名> <类型>`）
+ */
+async function addColumnIfMissing(table, column, definition) {
+  try {
+    const rows = await q.all(`PRAGMA table_info(${table})`)
+    /* PG 驱动下 PRAGMA 不存在，会走到 catch → 用另一种方式确认 */
+    if (rows && rows.length) {
+      if (rows.some((r) => r.name === column)) return
+      await q.run(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
+      return
+    }
+  } catch {
+    /* PG：走 information_schema */
+  }
+  try {
+    const existing = await q.all(
+      `SELECT column_name FROM information_schema.columns WHERE table_name = ? AND column_name = ?`,
+      table, column
+    )
+    if (existing && existing.length) return
+    await q.run(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
+  } catch (error) {
+    /* 加不上就算了 —— 推送会退回到「用户级在线判定」，功能不崩 */
+    console.warn('[push] 补列失败（推送将按用户级在线判定）：', error.message)
+  }
+}
+
+/**
+ * 确保推送表结构就绪（含 device_id 补列）。
+ *
+ * 导出给自检脚本用 —— 它需要先建好表再往里写假订阅。
+ * 名字带 ForTest 是为了表明「这不是业务路径」，
+ * 但它做的事和业务完全一样（同一个 ensurePushSchema），没有第二份实现。
+ */
+export async function ensurePushSchemaForTest() {
+  await ensurePushSchema()
 }
 
 function configuredVapid() {
@@ -88,7 +159,14 @@ async function assertSafeEndpoint(value) {
   return value
 }
 
-export async function savePushSubscription(userId, raw) {
+/**
+ * 保存推送订阅。
+ *
+ * @param {number} userId
+ * @param {object} raw 浏览器给的订阅对象
+ * @param {number|null} deviceId 这台设备的 id（来自 authRequired 的 req.deviceId）
+ */
+export async function savePushSubscription(userId, raw, deviceId = null) {
   const endpoint = await assertSafeEndpoint(raw?.endpoint)
   const p256dh = String(raw?.keys?.p256dh || '')
   const auth = String(raw?.keys?.auth || '')
@@ -97,11 +175,14 @@ export async function savePushSubscription(userId, raw) {
   }
   await ensurePushSchema()
   const now = Date.now()
+  /* device_id 一起 upsert：同一台设备重新订阅时覆盖掉旧记录，
+     换设备登录则各存一条 —— 这正是多端推送需要的数据结构。 */
   await q.run(
-    `INSERT INTO web_push_subscriptions (endpoint, user_id, p256dh, auth_secret, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT(endpoint) DO UPDATE SET user_id = excluded.user_id, p256dh = excluded.p256dh, auth_secret = excluded.auth_secret, updated_at = excluded.updated_at`,
-    endpoint, Number(userId), p256dh, auth, now, now
+    `INSERT INTO web_push_subscriptions (endpoint, user_id, p256dh, auth_secret, device_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(endpoint) DO UPDATE SET user_id = excluded.user_id, p256dh = excluded.p256dh,
+       auth_secret = excluded.auth_secret, device_id = excluded.device_id, updated_at = excluded.updated_at`,
+    endpoint, Number(userId), p256dh, auth, deviceId ? Number(deviceId) : null, now, now
   )
   return { ok: true }
 }
@@ -119,18 +200,55 @@ export async function hasPushSubscription(userId) {
   return !!(await q.get('SELECT 1 FROM web_push_subscriptions WHERE user_id = ? LIMIT 1', Number(userId)))
 }
 
-export async function sendPushToUser(userId, payload, { ttl = 90, urgency = 'high' } = {}) {
-  if (!configuredVapid()) return { sent: 0, configured: false }
+/**
+ * 给用户推送，但**逐设备**判定该不该推。
+ *
+ * ## 语义（多端的核心）
+ *
+ * 对该用户的每个推送订阅（即一台设备）：
+ * - 这台设备**在线**（有活跃 WS 连接）→ 不推给它（它自己会收到 WS 实时消息）；
+ * - 这台设备**离线** → 推给它。
+ *
+ * 旧实现是「任一设备在线就整体不推」——那在单端时代是对的，
+ * 多端就成了 bug：你在手机上看消息，电脑上那条通知也被吞了。
+ *
+ * ## 老订阅（device_id 为 NULL）
+ *
+ * 设备绑定功能上线前建立的订阅，device_id 是 NULL。
+ * 它们无法定位到具体设备 → 保守处理：**该用户任一设备在线就不推**
+ * （与旧行为一致，不会造成重复打扰）。
+ *
+ * @param {number} userId
+ * @param {object} payload 推送内容
+ * @param {{ ttl?: number, urgency?: string, skipDeviceIds?: Set<number>|number[] }} [options]
+ *        skipDeviceIds：额外要跳过的设备（该设备已有活跃连接）
+ * @returns {Promise<{ sent: number, configured: boolean, skipped: number }>}
+ */
+export async function sendPushToUser(userId, payload, { ttl = 90, urgency = 'high', skipDeviceIds = null } = {}) {
+  if (!configuredVapid()) return { sent: 0, configured: false, skipped: 0 }
   await ensurePushSchema()
   const rows = await q.all(
-    'SELECT endpoint, p256dh, auth_secret AS auth FROM web_push_subscriptions WHERE user_id = ?',
+    'SELECT endpoint, p256dh, auth_secret AS auth, device_id FROM web_push_subscriptions WHERE user_id = ?',
     Number(userId)
   )
   /* TTL 上限放到 24 小时：来电是 90 秒（错过就没意义），但离线消息要能被
      推送服务保留到用户下次打开手机。超过 24 小时的消息本来也过期了。 */
   const safeTtl = Math.max(1, Math.min(86400, Number(ttl) || 90))
   const safeUrgency = urgency === 'normal' ? 'normal' : 'high'
+
+  /* 在线设备集合：调用方传进来（ws.js 那边有权威数据）。
+     没传就退化为「不跳过任何设备」——宁可多推一次，也不要漏推。 */
+  const skip = skipDeviceIds
+    ? new Set([...skipDeviceIds].map(Number).filter(Boolean))
+    : null
+
+  let skipped = 0
   const result = await Promise.all(rows.map(async (row) => {
+    /* 设备级判定：这台设备在线就不推 */
+    if (row.device_id != null && skip?.has(Number(row.device_id))) {
+      skipped += 1
+      return false
+    }
     try {
       await assertSafeEndpoint(row.endpoint)
       await webpush.sendNotification(
@@ -154,5 +272,5 @@ export async function sendPushToUser(userId, payload, { ttl = 90, urgency = 'hig
       return false
     }
   }))
-  return { sent: result.filter(Boolean).length, configured: true }
+  return { sent: result.filter(Boolean).length, configured: true, skipped }
 }

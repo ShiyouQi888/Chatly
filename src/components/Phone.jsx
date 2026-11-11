@@ -15,6 +15,7 @@ import ScanPage from '../screens/ScanPage.jsx'
 import LoginScreen from '../screens/LoginScreen.jsx'
 import { IconChat, IconContacts, IconMoment, IconCommunity, IconUser } from './Icon.jsx'
 import { Badge, Toast } from './ui.jsx'
+import { deepLink, push, isNative } from '../platform/index.js'
 import './phone.css'
 
 const TABS = [
@@ -97,32 +98,55 @@ export default function Phone() {
     }
   }, [ready, user?.id])
 
-  /* 从系统通知点进来：冷启动读 `?conv=`，热启动等 SW 发消息。
-     两条路都要，缺一条就会出现「点了通知只回到首页，还得自己找那个会话」。 */
+  /* 从系统通知 / 深链点进来：冷启动读初始链接，热启动订阅后续事件。
+     两条路都要，缺一条就会出现「点了通知只回到首页，还得自己找那个会话」。
+
+     适配层把 Web 端的 `?conv=` 与原生端的 `chatly://conversation/{id}`
+     统一成同一个目标对象，所以这里不用关心是从哪条路进来的。 */
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const convId = Number(params.get('conv'))
-    if (!convId) return
-    dispatch({ type: 'SET_TAB', tab: 'chat' })
-    setOpenChatId(convId)
-    /* 用完就把参数抹掉：刷新页面不该又跳一次，用户也可能已经切走了 */
-    params.delete('conv')
-    const qs = params.toString()
-    window.history.replaceState(null, '', `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash}`)
+    let alive = true
+
+    const openConversation = (target) => {
+      if (!alive || !target) return
+      const convId = Number(target.id)
+      if (!convId) return
+      dispatch({ type: 'SET_TAB', tab: 'chat' })
+      setOpenChatId(convId)
+    }
+
+    /* 冷启动：读壳带来的初始链接 */
+    void deepLink.getInitialTarget().then((target) => {
+      if (!alive) return
+      openConversation(target)
+      /* 用完就把参数抹掉：刷新页面不该又跳一次，用户也可能已经切走了 */
+      if (!isNative) {
+        const params = new URLSearchParams(window.location.search)
+        if (params.has('conv')) {
+          params.delete('conv')
+          const qs = params.toString()
+          window.history.replaceState(null, '', `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash}`)
+        }
+      }
+    })
+
+    /* 热启动：订阅后续深链事件 */
+    const off = deepLink.onTarget(openConversation)
+
+    return () => {
+      alive = false
+      off()
+    }
   }, [dispatch])
 
+  /* 后台脚本（Service Worker）发来的「打开某会话」消息 —— 仅 Web 端 */
   useEffect(() => {
-    if (!('serviceWorker' in navigator)) return undefined
-    const onMessage = (event) => {
-      const data = event.data
+    return push.onWorkerMessage((data) => {
       if (data?.type !== 'openConversation') return
       const convId = Number(data.payload?.conversationId)
       if (!convId) return
       dispatch({ type: 'SET_TAB', tab: 'chat' })
       setOpenChatId(convId)
-    }
-    navigator.serviceWorker.addEventListener('message', onMessage)
-    return () => navigator.serviceWorker.removeEventListener('message', onMessage)
+    })
   }, [dispatch])
 
   /* 会话对象从 store 里按 id 取，保证打开时拿到的是最新状态（预览/未读/在线） */

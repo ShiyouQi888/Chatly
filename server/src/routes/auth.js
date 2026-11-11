@@ -197,6 +197,41 @@ function recordLoginDevice(userId, req) {
   ).then(() => sessionId)
 }
 
+/**
+ * 清理同一用户**同一浏览器**的旧会话记录。
+ *
+ * ## 为什么需要
+ *
+ * 每次登录都插一条 user_devices —— 用户反复登录（换密码、清缓存、自动化脚本）
+ * 就会攒下几十上百条记录。实测演示库里某账号有 70+ 条，
+ * 「安全设置 → 登录设备」列表会变成一堵墙，用户根本没法用这个功能。
+ *
+ * ## 判据
+ *
+ * 同一用户 + **同一个 User-Agent** + 超过 24 小时没活动 → 视为同一次「设备重登」，
+ * 清掉旧记录。不同 UA（手机 vs 电脑）保留 —— 那是真的两台设备。
+ *
+ * ⚠️ 只删**不活跃**的：正在用的会话（有活跃 WS 连接）不能被踢掉。
+ * 这里用 last_active 判断，24 小时是安全的阈值。
+ */
+async function pruneStaleLoginDevices(userId, ua) {
+  try {
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000
+    const stale = await q.all(
+      'SELECT id FROM user_devices WHERE user_id = ? AND device_name = ? AND last_active < ?',
+      userId, ua, cutoff
+    )
+    if (!stale.length) return
+    for (const d of stale) {
+      await q.run('DELETE FROM user_devices WHERE id = ?', d.id)
+      revokeDeviceSockets(userId, d.id)
+    }
+  } catch (error) {
+    /* 清理失败不该挡住登录 —— 多一条记录只是列表难看，不影响功能 */
+    console.warn('[auth] 清理陈旧登录设备失败：', error.message)
+  }
+}
+
 r.post('/register', registerLimit, async (req, res) => {
   const { password, nickname } = req.body || {}
   const username = normalizeUserId(req.body?.username)
@@ -255,6 +290,8 @@ r.post('/login', loginLimit, async (req, res) => {
   if (Number(row.is_banned)) return res.status(403).json({ error: '账号已停用，请联系运营支持' })
 
   const user = await q.get(`SELECT ${USER_COLS} FROM users WHERE id = ?`, row.id)
+  /* 先清同浏览器的陈旧会话，再记新的 —— 否则「安全设置」里会堆满历史登录记录。 */
+  await pruneStaleLoginDevices(user.id, String(req.get('user-agent') || 'Unknown device').slice(0, 160))
   const sessionId = await recordLoginDevice(user.id, req)
   res.json({ user: selfUser(user), token: signToken(user, sessionId) })
 })

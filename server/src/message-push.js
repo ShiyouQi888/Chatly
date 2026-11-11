@@ -19,11 +19,16 @@
  *
  * - 群消息不做「只推 @」的收窄：那会让普通的群聊消息在离线时彻底静默，
  *   与 IM 的常识不符。真要收窄应该在产品层给「仅 @ 时提醒」的开关。
- * - 一个用户多台设备时，只要有一台在线就整体不推。按设备精确判定需要把
- *   订阅和 WS 连接绑定，当前两套表没打通。
+ * - 通话记录不推（见上面第 4 条）。
+ * - **多端推送按设备判定**（见 docs/MULTI-PLATFORM.md 的 5.1）：
+ *   订阅表已绑 device_id，推送时逐条比对「这台设备是否在线」——
+ *   在线的不推（它会收到 WS 实时消息），离线照推。
+ *   残留边界：`onlineDeviceIds` 只看**本进程**，多实例部署时
+ *   「用户在 A 实例、设备连在 B 实例」的那台设备会多收一条推送
+ *   （宁可多收，不要漏推）。
  */
 import { q } from './db.js'
-import { isOnlineAnywhere } from './ws.js'
+import { onlineDeviceIds } from './ws.js'
 import { pushIsConfigured, sendPushToUser } from './push.js'
 
 /** 推送正文的截断长度：锁屏上看不完，太长反而把关键信息挤掉 */
@@ -109,12 +114,30 @@ export async function notifyMessagePush({ conversationId, senderId, message }) {
     out.targets = candidates.length
     if (!candidates.length) return out
 
-    /* 在线判定和投递并行：判一个推一个，不让「某个人在线查询慢」拖住整批。 */
+    /* 在线判定和投递并行：判一个推一个，不让「某个人在线查询慢」拖住整批。
+
+       ⚠️⚠️ **多端推送的核心判定**（见 docs/MULTI-PLATFORM.md 的 5.1）：
+       旧逻辑是「这个用户任一设备在线 → 整体不推」，那在单端时代是对的，
+       多端就成了 bug —— 你在手机上看消息，电脑上那条通知也被吞了。
+
+       正确语义：**逐设备**判定 ——
+       - 某台设备在线 → 不推给它（它自己会收到 WS 实时消息）；
+       - 某台设备离线 → 推给它。
+
+       所以这里传的是「这个用户在线的**设备**集合」，
+       由 sendPushToUser 逐条订阅比对 device_id。 */
     await Promise.all(
       candidates.map(async (m) => {
         const userId = Number(m.userId)
         try {
-          if (await isOnlineAnywhere(userId)) return
+          /* 取这个用户在线的**设备**集合，交给下层逐条订阅比对。
+             为什么不再用「整体在线就跳过」：那在单端时代是对的，多端就成了 bug ——
+             你在手机上看消息，电脑上那条通知也被吞了。
+
+             跨实例的局限：onlineDeviceIds 只看本进程。用户可能在 A 实例、
+             设备连在 B 实例 → 那台设备在 A 看来离线，会多收一条推送。
+             「多收一条」比「漏推」可接受（漏推 = 用户完全不知道有消息）。 */
+          const onlineDevices = onlineDeviceIds(userId)
           const r = await sendPushToUser(
             userId,
             {
@@ -131,7 +154,7 @@ export async function notifyMessagePush({ conversationId, senderId, message }) {
               },
             },
             /* 离线消息最多等 24 小时；urgency 用 normal —— 消息不该像来电那样抢焦点。 */
-            { ttl: 86400, urgency: 'normal' }
+            { ttl: 86400, urgency: 'normal', skipDeviceIds: onlineDevices }
           )
           out.sent += r.sent
         } catch (e) {

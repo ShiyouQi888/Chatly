@@ -263,7 +263,15 @@ r.delete('/:id', async (req, res) => {
   res.json({ ok: true })
 })
 
-/** 历史消息（分页：beforeId 向前翻页） */
+/**
+ * 会话消息。
+ *
+ * 三个方向：
+ * - 默认 / `beforeId`：**向前翻历史**（往回看）。
+ * - `afterId`：**向后取增量**（多端同步 —— 补齐断线期间错过的消息）。
+ *
+ * `afterId` 与 `beforeId` 同时给时以 `afterId` 为准（见 chat.js 的 listMessages）。
+ */
 r.get('/:id/messages', async (req, res) => {
   const cid = Number(req.params.id)
   if (!(await isMember(cid, req.user.id))) return res.status(403).json({ error: '无权访问该会话' })
@@ -274,12 +282,20 @@ r.get('/:id/messages', async (req, res) => {
     return res.status(400).json({ error: 'limit 必须是 1 到 100 之间的正整数' })
   }
   const limit = Math.min(parsedLimit, 100)
+
   const rawBeforeId = req.query.beforeId
   const beforeId = rawBeforeId == null || rawBeforeId === '' ? null : Number(rawBeforeId)
   if (beforeId !== null && (!Number.isSafeInteger(beforeId) || beforeId < 1)) {
     return res.status(400).json({ error: 'beforeId 必须是正整数' })
   }
-  const messages = await listMessages(cid, { limit, beforeId })
+
+  const rawAfterId = req.query.afterId
+  const afterId = rawAfterId == null || rawAfterId === '' ? null : Number(rawAfterId)
+  if (afterId !== null && (!Number.isSafeInteger(afterId) || afterId < 1)) {
+    return res.status(400).json({ error: 'afterId 必须是正整数' })
+  }
+
+  const messages = await listMessages(cid, { limit, beforeId, afterId })
   const cursor = await readCursor(cid, req.user.id)
   /* 这一页里我收藏了哪些 —— 一次 IN 查询算完，别在出参里逐条查。
      长按菜单要靠它把「收藏」显示成「取消收藏」，没有这个字段前端只能
@@ -295,6 +311,10 @@ r.get('/:id/messages', async (req, res) => {
       read: m.sender.id === req.user.id ? m.id <= cursor : undefined,
       favorited: faved.has(m.id),
     })),
+    /* 增量方向下，「还有更多」指的是**后面**还有 ——
+       即取回的条数等于 limit，说明可能还有更新的没取完。
+       历史方向则是「前面还有」。两种语义都用同一个字段，
+       靠 afterId 是否存在来区分（见 chat.js 里的注释）。 */
     hasMore: messages.length === limit,
   })
 })

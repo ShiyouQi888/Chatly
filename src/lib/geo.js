@@ -43,17 +43,19 @@ import {
   roughGeo,
   parseGeoPair,
 } from '../../shared/geo-math.mjs'
+import { storage } from '../platform/index.js'
+import { geo as platformGeo, isNative } from '../platform/index.js'
 
 export { outOfChina, wgs84ToGcj02, gcj02ToWgs84, haversineKm, formatDistance, roughGeo, parseGeoPair }
 
-/* ---------- 浏览器定位 ---------- */
+/* ---------- 定位 ---------- */
 
 const KEY = 'chatly:mygeo'
 
 /** 本机缓存的我方坐标（GCJ-02）。**只读不传**，别把它塞进任何请求体。 */
 export function readMyGeo() {
   try {
-    const raw = localStorage.getItem(KEY)
+    const raw = storage.get(KEY)
     if (!raw) return null
     const o = JSON.parse(raw)
     if (!Number.isFinite(o?.lat) || !Number.isFinite(o?.lng)) return null
@@ -65,15 +67,15 @@ export function readMyGeo() {
 
 export function writeMyGeo(geo) {
   try {
-    localStorage.setItem(KEY, JSON.stringify({ ...geo, at: Date.now() }))
+    storage.set(KEY, JSON.stringify({ ...geo, at: Date.now() }))
   } catch {
-    /* 隐私模式下 localStorage 会抛 —— 定位本身还能用，没必要因此失败 */
+    /* 存储不可用 —— 定位本身还能用，没必要因此失败 */
   }
 }
 
 export function clearMyGeo() {
   try {
-    localStorage.removeItem(KEY)
+    storage.remove(KEY)
   } catch {
     /* 同上 */
   }
@@ -96,45 +98,46 @@ export function geoReason(err) {
   return err?.message || '定位失败'
 }
 
-/** `navigator.geolocation` 只在安全上下文（https / localhost）可用 —— 这条要提前拦，不然报错很难懂。 */
-export const canLocate = () =>
-  typeof navigator !== 'undefined' && !!navigator.geolocation && (window.isSecureContext ?? true)
+/** 定位能力是否可用 —— 原生端走系统定位服务，Web 端需要安全上下文。 */
+export const canLocate = () => {
+  if (!platformGeo.isSupported()) return false
+  /* ⚠️ 非 https 的局域网地址上，Chrome 会让 geolocation 直接不存在或被静默拒绝。
+     先说清楚，比让用户对着一个转圈的按钮等 10 秒强。
+     原生壳用 capacitor:// 或 https://localhost 协议，恒为安全上下文。 */
+  if (isNative) return true
+  return typeof navigator !== 'undefined' && (window.isSecureContext ?? true)
+}
 
 /**
  * 取当前位置，**返回 GCJ-02**。
+ *
+ * ⚠️ 坐标系：浏览器 geolocation 给 **WGS-84**，腾讯地图要 **GCJ-02**，
+ *    两者差 50–500 米。转换在 `wgs84ToGcj02` 里，适配层不碰坐标。
+ *
  * @returns {Promise<{lat:number,lng:number,accuracy:number,gcj:true}>}
  */
 export function getMyLocation({ timeout = 10000, maximumAge = 60000, highAccuracy = false } = {}) {
   return new Promise((resolve, reject) => {
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      const e = new Error('这个浏览器不支持定位')
-      e.name = 'NotSupportedError'
-      return reject(e)
-    }
-    /* ⚠️ 非 https 的局域网地址上，Chrome 会让 geolocation 直接不存在或被静默拒绝。
-       先说清楚，比让用户对着一个转圈的按钮等 10 秒强。 */
-    if (window.isSecureContext === false) {
-      const e = new Error('当前页面不是安全上下文（需要 https 或 localhost）')
+    if (!canLocate()) {
+      const e = new Error(isNative ? '当前环境不支持定位' : '这个浏览器不支持定位')
       e.name = 'NotSupportedError'
       return reject(e)
     }
 
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        /* ⚠️ 回调里**必须**包 try/catch。
-           这里的异常不在 Promise 执行器栈上 —— 抛出去既不会 reject 这个 Promise，
-           也不会被下层的 catch 接住，表现就是「一直转圈 + 控制台一条孤零零的异常」。
-           （`wgs84ToGcj02` 曾经因为 re-export 不产生本地绑定而在这里抛过。） */
+    /* 适配层负责取数（原生端走系统定位插件，Web 端走 geolocation），
+       这里只负责把 WGS-84 转成 GCJ-02 并包住回调里的异常 ——
+       回调里的异常不在 Promise 执行器栈上，抛出去既不会 reject，
+       也不会被下层 catch 接住（表现为「一直转圈 + 控制台一条孤零零的异常」）。 */
+    platformGeo
+      .getCurrentPosition({ enableHighAccuracy: highAccuracy, timeout })
+      .then((pos) => {
         try {
-          const c = pos.coords
-          const g = wgs84ToGcj02(c.latitude, c.longitude)
-          resolve({ lat: g.lat, lng: g.lng, accuracy: c.accuracy })
+          const g = wgs84ToGcj02(pos.latitude, pos.longitude)
+          resolve({ lat: g.lat, lng: g.lng, accuracy: pos.accuracy })
         } catch (e) {
           reject(e)
         }
-      },
-      (err) => reject(err),
-      { enableHighAccuracy: highAccuracy, timeout, maximumAge }
-    )
+      })
+      .catch(reject)
   })
 }

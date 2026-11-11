@@ -1,31 +1,61 @@
 import { compressImage } from '../lib/compress-image.js'
+import { storage } from '../platform/index.js'
+import { resolveApiBase, resolveWsBase } from '../platform/config.js'
 
 /**
  * 后端 API 客户端
- * 所有请求走 Vite 代理 /api/v1 → http://127.0.0.1:3002
+ *
+ * Web 端：所有请求走 Vite 代理 /api/v1 → http://127.0.0.1:3002
+ * 原生壳：BASE 由 `resolveApiBase()` 解析成绝对地址
+ *         （壳内相对路径会指向壳自己的资源目录，见 platform/config.js）
  */
-const BASE = '/api/v1'
+const BASE = resolveApiBase()
 const TOKEN_KEY = 'chatly.token'
 
 export const tokenStore = {
-  get: () => localStorage.getItem(TOKEN_KEY),
-  set: (t) => (t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY)),
-  clear: () => localStorage.removeItem(TOKEN_KEY),
+  get: () => storage.get(TOKEN_KEY),
+  set: (t) => (t ? storage.set(TOKEN_KEY, t) : storage.remove(TOKEN_KEY)),
+  clear: () => storage.remove(TOKEN_KEY),
 }
 
 export const adminTokenStore = {
-  get: () => localStorage.getItem('chatly.admin.token'),
-  set: (token) => token ? localStorage.setItem('chatly.admin.token', token) : localStorage.removeItem('chatly.admin.token'),
-  clear: () => localStorage.removeItem('chatly.admin.token'),
+  get: () => storage.get('chatly.admin.token'),
+  set: (token) => token ? storage.set('chatly.admin.token', token) : storage.remove('chatly.admin.token'),
+  clear: () => storage.remove('chatly.admin.token'),
 }
 
-/** Browser media tags cannot attach Authorization headers; pass the session token only for uploads. */
+/**
+ * 把后端返回的相对资源路径补成可直接加载的 URL。
+ *
+ * ⚠️ 浏览器 media 标签不能带 Authorization 头，所以私有文件靠 URL 上的
+ * `?token=` 鉴权（这个设计对原生壳同样成立 —— `<img src>` 一样带不了头）。
+ *
+ * 原生壳里 `/api/v1/files/private/x` 是相对路径，必须补成绝对地址，
+ * 否则 WebView 会去壳自己的 `capacitor://localhost` 找文件。
+ *
+ * @param {string} url
+ * @returns {string}
+ */
 export function mediaUrl(url) {
   const value = String(url || '')
   const token = tokenStore.get()
-  if (!token || (!value.startsWith('/uploads/') && !value.startsWith('/api/v1/files/private/'))) return value
-  const join = value.includes('?') ? '&' : '?'
-  return `${value}${join}token=${encodeURIComponent(token)}`
+
+  /* 只给「需要鉴权的私有资源」拼 token；公开资源（/uploads/）不需要登录态。 */
+  const isPrivate = value.startsWith('/api/v1/files/private/')
+  if (!isPrivate) {
+    /* 公开资源若也是相对路径，原生壳下要补绝对地址。 */
+    if (value.startsWith('/uploads/') && BASE.startsWith('http')) {
+      const origin = BASE.replace(/\/api\/v1$/, '')
+      return `${origin}${value}`
+    }
+    return value
+  }
+
+  /* 私有资源：拼绝对地址 + token */
+  const absolute = BASE.startsWith('http') ? `${BASE.replace(/\/api\/v1$/, '')}${value}` : value
+  if (!token) return absolute
+  const join = absolute.includes('?') ? '&' : '?'
+  return `${absolute}${join}token=${encodeURIComponent(token)}`
 }
 
 async function request(path, { method = 'GET', body, raw = false } = {}) {
@@ -180,9 +210,17 @@ export const api = {
     request(`/conversations/${conversationId}/members/${userId}`, { method: 'DELETE' }),
   setGroupRole: (conversationId, userId, role) =>
     request(`/conversations/${conversationId}/members/${userId}`, { method: 'PATCH', body: { role } }),
-  messages: (conversationId, { limit = 50, beforeId } = {}) => {
+  /**
+   * 取会话消息。
+   *
+   * 两个方向：
+   * - `beforeId`：**向前翻历史**（往回看）。
+   * - `afterId`：**向后取增量**（多端同步 —— 补齐断线期间错过的消息）。
+   */
+  messages: (conversationId, { limit = 50, beforeId, afterId } = {}) => {
     const qs = new URLSearchParams({ limit: String(limit) })
     if (beforeId) qs.set('beforeId', String(beforeId))
+    if (afterId) qs.set('afterId', String(afterId))
     return request(`/conversations/${conversationId}/messages?${qs}`)
   },
   searchMessages: ({ q, limit = 30, beforeId } = {}) => {
@@ -472,10 +510,15 @@ export const api = {
     }),
 }
 
-/** WebSocket 地址：沿用当前页面 origin，走 Vite 的 /ws 代理 */
+/**
+ * WebSocket 地址。
+ *
+ * Web 端沿用当前页面 origin，走 Vite 的 /ws 代理；
+ * 原生壳里 `location.host` 是壳自己的地址，必须从 API base 反推
+ * （见 platform/config.js 的 `resolveWsBase`）。
+ */
 export function wsUrl(ticket) {
-  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${proto}//${location.host}/ws?ticket=${encodeURIComponent(ticket)}`
+  return `${resolveWsBase()}?ticket=${encodeURIComponent(ticket)}`
 }
 
 /* ================= 时间格式化 ================= */

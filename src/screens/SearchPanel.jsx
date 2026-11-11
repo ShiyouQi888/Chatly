@@ -8,6 +8,7 @@ import { Avatar, Chip, Empty } from '../components/ui.jsx'
 import MomentDetail from './MomentDetail.jsx'
 import { isVideoItem } from '../components/MomentMedia.jsx'
 import { IconSearch, IconBack, IconClose, IconFire, IconUser, IconChat } from '../components/Icon.jsx'
+import { storage } from '../platform/index.js'
 import './search-panel.css'
 
 /* 「找人」是**全体用户**（走后端 /users/search），消息搜索只返回本人有权访问的文本消息，
@@ -68,7 +69,7 @@ export default function SearchPanel({ onBack, nav }) {
   const [q, setQ] = useState('')
   const [filter, setFilter] = useState('全部')
   const [history, setHistory] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('chatly-search-history') || '[]').filter((x) => typeof x === 'string').slice(0, 8) }
+    try { return JSON.parse(storage.get('chatly-search-history') || '[]').filter((x) => typeof x === 'string').slice(0, 8) }
     catch { return [] }
   })
   const [moments, setMoments] = useState([])
@@ -136,7 +137,7 @@ export default function SearchPanel({ onBack, nav }) {
     if (!term) return
     const next = [term, ...history.filter((item) => item !== term)].slice(0, 8)
     setHistory(next)
-    localStorage.setItem('chatly-search-history', JSON.stringify(next))
+    storage.set('chatly-search-history', JSON.stringify(next))
   }
 
   const loadMoreMessages = async () => {
@@ -409,7 +410,7 @@ export default function SearchPanel({ onBack, nav }) {
                   className="sp-clear-hist"
                   onClick={() => {
                     setHistory([])
-                    localStorage.removeItem('chatly-search-history')
+                    storage.remove('chatly-search-history')
                     showToast('已清除搜索历史')
                   }}
                 >

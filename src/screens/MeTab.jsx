@@ -7,6 +7,7 @@ import { useFavorites } from '../store/FavoriteStore.jsx'
 import { useWatchLater } from '../store/WatchLaterStore.jsx'
 import { avatarOf } from '../store/ChatStore.jsx'
 import { THEMES } from '../data/themes.js'
+import { storage } from '../platform/index.js'
 import { Avatar, Row, Group, Switch, Chip, Empty, SectionTitle } from '../components/ui.jsx'
 import ProfileEditor from '../components/ProfileEditor.jsx'
 import MyQrPage from './MyQrPage.jsx'
@@ -269,15 +270,15 @@ export default function MeTab({ nav, notifySettingsSignal }) {
   const [page, setPage] = useState(null)
   const [ownStatus, setOwnStatus] = useState(null)
   const [theme, setTheme] = useState(() => {
-    // 从 localStorage 恢复主题
-    return localStorage.getItem('chatly-theme') || '极光'
+    // 从本地存储恢复主题
+    return storage.get('chatly-theme') || '极光'
   })
   const [appearanceMode, setAppearanceMode] = useState(getSavedAppearanceMode)
   /* 「主题外观」里要显示**当前**的字体大小和动效状态 ——
      以前这两个值都是写死的（「标准」、开关恒为开），
      于是用户改了字体大小再回来看，这一页说「标准」，和实际不一致。 */
-  const [fontSize] = useState(() => localStorage.getItem('chatly-font-size') || 'standard')
-  const [motion, setMotion] = useState(() => localStorage.getItem(MOTION_KEY) !== 'off')
+  const [fontSize] = useState(() => storage.get('chatly-font-size') || 'standard')
+  const [motion, setMotion] = useState(() => storage.get(MOTION_KEY) !== 'off')
 
   useEffect(() => {
     let alive = true
@@ -407,9 +408,9 @@ export default function MeTab({ nav, notifySettingsSignal }) {
     }
   }, [user])
 
-  // 主题初始化：从 localStorage 恢复 CSS 变量
+  // 主题初始化：从本地存储恢复 CSS 变量
   useEffect(() => {
-    const savedTheme = localStorage.getItem('chatly-theme') || '极光'
+    const savedTheme = storage.get('chatly-theme') || '极光'
     const themeData = THEMES.find((t) => t.name === savedTheme)
     if (themeData) {
       // applyThemeColors 写的是全站真正用的 --brand-* 变量；
@@ -552,7 +553,7 @@ export default function MeTab({ nav, notifySettingsSignal }) {
    * 这一页有两件事容易做错，都写在下面：
    *   ① 「动效开关」以前是 `on` + `showToast('已切换动效')` ——
    *      开关永远是开的、点了只弹一句提示，属于**假功能**。
-   *      现在真存 localStorage 并真的停掉全站动画（见 utils/theme.js）。
+   *      现在真存本地存储并真的停掉全站动画（见 utils/theme.js）。
    *   ② 颜色主题与系统明暗模式都写入全局令牌，并在启动时恢复。
    *
    * ⚠️ 标题和列表里那一行**必须同名**：入口写「主题外观」、进来变成「外观主题」，
@@ -573,8 +574,8 @@ export default function MeTab({ nav, notifySettingsSignal }) {
               className={`theme-card ${theme === t.name ? 'is-on' : ''}`}
               onClick={() => {
                 setTheme(t.name)
-                // 持久化到 localStorage
-                localStorage.setItem('chatly-theme', t.name)
+                // 持久化到本地存储
+                storage.set('chatly-theme', t.name)
                 // 应用到全站主色（--brand-*），不只是「我」页新页面的 --primary
                 applyThemeColors(t)
                 showToast('已应用主题 · ' + t.name)
@@ -609,7 +610,7 @@ export default function MeTab({ nav, notifySettingsSignal }) {
               className={appearanceMode === option.value ? 'is-selected' : ''}
               onClick={() => {
                 setAppearanceMode(option.value)
-                localStorage.setItem(APPEARANCE_MODE_KEY, option.value)
+                storage.set(APPEARANCE_MODE_KEY, option.value)
                 applyAppearanceMode(option.value)
                 const selectedTheme = THEMES.find((item) => item.name === theme)
                 if (selectedTheme) applyThemeColors(selectedTheme)
@@ -638,7 +639,7 @@ export default function MeTab({ nav, notifySettingsSignal }) {
                 onChange={(v) => {
                   setMotion(v)
                   applyMotion(v)
-                  localStorage.setItem(MOTION_KEY, v ? 'on' : 'off')
+                  storage.set(MOTION_KEY, v ? 'on' : 'off')
                 }}
               />
             }

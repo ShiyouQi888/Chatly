@@ -96,6 +96,50 @@ const targetHadEdge = dbFollows(me.user.id, targetId)
 if (targetHadEdge) await j('DELETE', `/users/${targetId}/follow`, null, me.auth)
 ok(!dbFollows(me.user.id, targetId), `关注测试对象「${targetName}」已归一到未关注`, targetHadEdge ? '（原来关注过，收尾还原）' : '')
 
+/* ⚠️ 兜底还原：上面这行把「我 → 目标」的关注删掉了，正常路径会在脚本末尾还原。
+   但**中途任何一条断言抛错**（脚本直接崩掉）都会跳过末尾的还原 ——
+   演示库就此少一条关注边，而私聊消息要「双向关注」才发得出去。
+   后果很隐蔽：下一个跑「私聊发消息」的套件会报 403 friend_required，
+   看起来像是新功能坏了，实际是上一轮自检留下的脏数据。
+
+   ⚠️⚠️ **还原必须直写数据库，不能用 `POST /users/:id/follow`**：
+   那个接口现在的语义是「创建好友申请」（见 routes/users.js 的 sendFriendRequest），
+   **不会**直接建立关注关系 —— 用它还原会留下一条 pending 申请，
+   而关注边永远回不来（这正是这个 bug 当初溜过去的原因）。
+   `DELETE /users/:id/follow` 是单向删除，那个可以放心用。
+
+   所以这里挂一个退出钩子：**无论怎么退出都要还原**。
+   正常走到末尾时 restored 标记为 true，钩子里就什么都不做（避免重复还原）。 */
+let followRestored = false
+
+/**
+ * 直写数据库恢复关注边。
+ *
+ * @param {boolean} want true=要有关注边，false=不要
+ */
+function restoreFollowRow(want) {
+  const has = dbFollows(me.user.id, targetId)
+  if (has === want) return
+  if (want) {
+    db.prepare('INSERT OR IGNORE INTO follows (follower_id, followee_id, created_at) VALUES (?, ?, ?)').run(
+      me.user.id, targetId, Math.floor(Date.now() / 1000)
+    )
+  } else {
+    db.prepare('DELETE FROM follows WHERE follower_id = ? AND followee_id = ?').run(me.user.id, targetId)
+  }
+}
+
+process.on('exit', () => {
+  /* exit 钩子里不能 await —— 直接同步补一刀。 */
+  if (followRestored) return
+  try {
+    restoreFollowRow(targetHadEdge)
+    console.log('  ↩ 退出钩子还原了关注关系')
+  } catch {
+    /* 数据库都打不开就算了，不能让清理动作把退出码搞坏 */
+  }
+})
+
 /* ================= 造测试图 ================= */
 /** 把一段文本编成二维码 PNG，落盘；用来喂相册识图 */
 function makeQrPng(text, file) {
@@ -526,10 +570,14 @@ ok(await js(`!document.querySelector('.scan')`), '扫一扫覆盖层已让位（
 console.log('\n─── 收尾 ───')
 /* 必须**双向**还原：原来关注过就补回来，原来没关注就取关。
    只写 `if (targetHadEdge) POST` 的话，「原本没关注」这条路上
-   测试期间新加的关注就留在库里了 —— 演示库会被自检搞脏。 */
-if (targetHadEdge) await j('POST', `/users/${targetId}/follow`, null, me.auth)
-else await j('DELETE', `/users/${targetId}/follow`, null, me.auth)
+   测试期间新加的关注就留在库里了 —— 演示库会被自检搞脏。
+
+   ⚠️ 补回必须**直写数据库**：`POST /users/:id/follow` 现在的语义是
+   「创建好友申请」，不会直接建立关注关系，用它还原等于没还原。 */
+restoreFollowRow(targetHadEdge)
 ok(dbFollows(me.user.id, targetId) === targetHadEdge, '关注关系还原到跑之前的状态', `原状 ${targetHadEdge}`)
+/* 正常路径已还原 —— 标记一下，退出钩子就不会再动一次。 */
+followRestored = true
 fs.rmSync(IMG_TARGET, { force: true })
 fs.rmSync(IMG_SELF, { force: true })
 fs.rmSync(IMG_GROUP, { force: true })

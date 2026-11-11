@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react'
 import { IconBack } from '../components/Icon.jsx'
 import { applyFontSize } from '../utils/theme.js'
+import { storage } from '../platform/index.js'
 import './me-tab.css'
 
 /* ===== 通用设置 =====
- * 所有设置项持久化到 localStorage
+ * 所有设置项持久化到本地存储（Web 端 localStorage，原生端适配层）
  * 字体大小通过 CSS 变量 --font-scale 应用到全局
  *
  * 这一页最要紧的是**每个开关都得有代码读它**，否则关掉它什么都不会发生。
@@ -16,16 +17,16 @@ import './me-tab.css'
  */
 export default function GeneralSettings({ onBack, showToast }) {
   const [fontSize, setFontSize] = useState(() => {
-    return localStorage.getItem('chatly-font-size') || 'standard'
+    return storage.get('chatly-font-size') || 'standard'
   })
   const [swipeDelete, setSwipeDelete] = useState(() => {
-    return localStorage.getItem('chatly-swipe-delete') !== 'false'
+    return storage.get('chatly-swipe-delete') !== 'false'
   })
   const [enterToSend, setEnterToSend] = useState(() => {
-    return localStorage.getItem('chatly-enter-to-send') !== 'false'
+    return storage.get('chatly-enter-to-send') !== 'false'
   })
   const [autoDownload, setAutoDownload] = useState(() => {
-    return localStorage.getItem('chatly-auto-download') !== 'false'
+    return storage.get('chatly-auto-download') !== 'false'
   })
   const [cacheSize, setCacheSize] = useState('0 MB')
 
@@ -33,30 +34,25 @@ export default function GeneralSettings({ onBack, showToast }) {
     /* 复用 utils/theme.js 的 applyFontSize，不在这里再抄一份倍率表 ——
        两份 map 迟早会漂（改了 1.15 只改一处，另一个入口还是 1.1）。 */
     applyFontSize(fontSize)
-    localStorage.setItem('chatly-font-size', fontSize)
+    storage.set('chatly-font-size', fontSize)
   }, [fontSize])
 
   useEffect(() => {
-    localStorage.setItem('chatly-swipe-delete', swipeDelete)
+    storage.set('chatly-swipe-delete', swipeDelete)
   }, [swipeDelete])
 
   useEffect(() => {
-    localStorage.setItem('chatly-enter-to-send', enterToSend)
+    storage.set('chatly-enter-to-send', enterToSend)
   }, [enterToSend])
 
   useEffect(() => {
-    localStorage.setItem('chatly-auto-download', autoDownload)
+    storage.set('chatly-auto-download', autoDownload)
   }, [autoDownload])
 
-  // 计算缓存大小（简化版，实际应该扫描 IndexedDB / localStorage）
+  // 计算缓存大小（统计本地存储里各项的占用）
   useEffect(() => {
     const calculateCache = () => {
-      let total = 0
-      for (let key in localStorage) {
-        if (localStorage.hasOwnProperty(key)) {
-          total += localStorage[key].length * 2 // UTF-16
-        }
-      }
+      const total = storage.estimateBytes()
       setCacheSize(`${(total / 1024 / 1024).toFixed(2)} MB`)
     }
     calculateCache()
@@ -74,13 +70,7 @@ export default function GeneralSettings({ onBack, showToast }) {
       'chatly-auto-download',
       'chatly-theme',
     ]
-    const keysToRemove = []
-    for (let key in localStorage) {
-      if (localStorage.hasOwnProperty(key) && !keysToKeep.includes(key)) {
-        keysToRemove.push(key)
-      }
-    }
-    keysToRemove.forEach((key) => localStorage.removeItem(key))
+    storage.clearExcept(keysToKeep)
     setCacheSize('0.00 MB')
     showToast('缓存已清除')
   }

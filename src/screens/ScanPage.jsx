@@ -5,6 +5,7 @@ import { avatarOf, useChat } from '../store/ChatStore.jsx'
 import { Avatar } from '../components/ui.jsx'
 import { decodeQrImageData, decodeQrFromSource } from '../lib/qr.js'
 import { parseQrPayload, looksLikeUserId, normalizeUsernameInput } from '../lib/qrPayload.js'
+import { media, clipboard } from '../platform/index.js'
 import {
   IconBack,
   IconImage,
@@ -154,7 +155,7 @@ export default function ScanPage({ onBack, nav }) {
     }
 
     ;(async () => {
-      if (!navigator.mediaDevices?.getUserMedia) {
+      if (!media.isSupported()) {
         const msg = '当前环境不支持摄像头（需要用 https 或 localhost 打开）'
         setCam({ status: 'error', msg })
         debugRef.current.cam = 'error'
@@ -164,7 +165,7 @@ export default function ScanPage({ onBack, nav }) {
       setCam({ status: 'starting', msg: '' })
       debugRef.current.cam = 'starting'
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
+        stream = await media.getUserMedia({
           video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
           audio: false,
         })
@@ -292,13 +293,13 @@ export default function ScanPage({ onBack, nav }) {
   const onCopy = useCallback(async () => {
     const raw = result?.payload?.raw
     if (!raw) return
-    try {
-      await navigator.clipboard.writeText(raw)
+    /* 复制不了就别说复制好了 —— 适配层把失败收敛成 false。 */
+    const ok = await clipboard.writeText(raw)
+    if (ok) {
       setCopied(true)
       setTimeout(() => setCopied(false), 1600)
-    } catch {
-      /* 复制不了就别说复制好了 */
-      showToast('浏览器不允许自动复制，请长按选中下面的内容')
+    } else {
+      showToast('当前环境不允许自动复制，请长按选中下面的内容')
     }
   }, [result, showToast])
 

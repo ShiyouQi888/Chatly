@@ -7,6 +7,7 @@
  */
 import React, { createContext, useContext, useCallback, useEffect, useMemo, useState } from 'react'
 import { api, tokenStore } from '../api/client.js'
+import { storage, push } from '../platform/index.js'
 
 const AuthCtx = createContext(null)
 
@@ -60,16 +61,14 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(() => {
     let pushEndpoint = ''
-    try { pushEndpoint = localStorage.getItem('chatly.push.endpoint') || '' } catch { /* browser storage may be disabled */ }
+    try { pushEndpoint = storage.get('chatly.push.endpoint') || '' } catch { /* storage may be unavailable */ }
     if (pushEndpoint) {
       // Start authenticated deletion before clearing the token so this device
       // does not keep receiving account-specific call alerts after sign-out.
       void api.deletePushSubscription(pushEndpoint).catch(() => {})
-      try { localStorage.removeItem('chatly.push.endpoint') } catch { /* browser storage may be disabled */ }
-      if ('serviceWorker' in navigator) {
-        void navigator.serviceWorker.getRegistration('/').then((registration) => registration?.pushManager?.getSubscription())
-          .then((subscription) => subscription?.unsubscribe()).catch(() => {})
-      }
+      try { storage.remove('chatly.push.endpoint') } catch { /* storage may be unavailable */ }
+      /* 退订推送：Web 端走 Service Worker，原生端走原生插件（适配层统一处理）。 */
+      void push.unsubscribe().catch(() => {})
     }
     void api.logout().catch(() => {})
     tokenStore.clear()

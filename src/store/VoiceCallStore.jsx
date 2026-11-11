@@ -6,6 +6,7 @@ import { useChatSocket, sendChatSocketEvent } from '../hooks/useChatSocket.js'
 import { useApp } from './AppContext.jsx'
 import { useAuth } from './AuthContext.jsx'
 import { callMediaLabel } from '../lib/call.js'
+import { media, push, isNative } from '../platform/index.js'
 import './voice-call.css'
 
 const VoiceCallContext = createContext(null)
@@ -24,10 +25,10 @@ function elapsedLabel(seconds) {
 }
 
 function dismissCallNotification(callId) {
-  if (!callId || !('serviceWorker' in navigator)) return
-  const close = (registration) => registration?.active?.postMessage({ type: 'call.dismiss', payload: { callId } })
-  if (navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage({ type: 'call.dismiss', payload: { callId } })
-  else void navigator.serviceWorker.ready.then(close).catch(() => {})
+  if (!callId) return
+  /* 适配层统一处理：Web 端通知 Service Worker 撤掉通知横幅，
+     原生端走原生插件（本阶段未接，返回 false 即可）。 */
+  void push.postToWorker({ callId })
 }
 
 /**
@@ -178,12 +179,16 @@ export function VoiceCallProvider({ children }) {
       showToast('当前已有一通通话')
       return
     }
-    if (!window.isSecureContext && !['localhost', '127.0.0.1'].includes(window.location.hostname)) {
+    /* 安全上下文检查：Web 端要求 HTTPS（或 localhost）。
+       原生壳用 capacitor:// 或 http://localhost 协议，恒为安全上下文，
+       但 WebView 里 location.hostname 可能是 'localhost' —— 一并放行。 */
+    const isLocalHost = ['localhost', '127.0.0.1'].includes(window.location.hostname)
+    if (!isNative && !window.isSecureContext && !isLocalHost) {
       showToast('通话需要 HTTPS 安全连接')
       return
     }
-    if (!navigator.mediaDevices?.getUserMedia) {
-      showToast('当前浏览器不支持通话')
+    if (!media.isSupported()) {
+      showToast('当前环境不支持通话')
       return
     }
     if (typeof RTCPeerConnection === 'undefined') {
@@ -212,7 +217,7 @@ export function VoiceCallProvider({ children }) {
       inviteSent: false,
     })
     try {
-      const stream = await navigator.mediaDevices.getUserMedia(mediaConstraints(kind))
+      const stream = await media.getUserMedia(mediaConstraints(kind))
       if (callRef.current.callId !== callId) {
         stream.getTracks().forEach((track) => track.stop())
         return
@@ -247,7 +252,7 @@ export function VoiceCallProvider({ children }) {
     }
     try {
       /* 接听时才开摄像头：振铃期间就打开，等于对方还没同意就被看着。 */
-      const stream = await navigator.mediaDevices.getUserMedia(mediaConstraints(current.media, 'user'))
+      const stream = await media.getUserMedia(mediaConstraints(current.media, 'user'))
       if (callRef.current.callId !== current.callId) {
         stream.getTracks().forEach((track) => track.stop())
         return
@@ -316,7 +321,7 @@ export function VoiceCallProvider({ children }) {
     if (current.media !== 'video' || !current.localStream) return
     const facing = current.facing === 'user' ? 'environment' : 'user'
     try {
-      const fresh = await navigator.mediaDevices.getUserMedia({
+      const fresh = await media.getUserMedia({
         audio: false,
         video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
       })
@@ -503,14 +508,12 @@ export function VoiceCallProvider({ children }) {
   const socketConnected = useChatSocket(token, handleEvent)
 
   useEffect(() => {
-    if (!('serviceWorker' in navigator)) return undefined
-    const onMessage = (event) => {
-      if (event.data?.type === 'call.incoming') {
-        handleEvent({ type: 'call.incoming', payload: event.data.payload || {} })
+    /* 监听后台脚本推来的来电通知（仅 Web 端；原生端走原生通知通道）。 */
+    return push.onWorkerMessage((data) => {
+      if (data?.type === 'call.incoming') {
+        handleEvent({ type: 'call.incoming', payload: data.payload || {} })
       }
-    }
-    navigator.serviceWorker.addEventListener('message', onMessage)
-    return () => navigator.serviceWorker.removeEventListener('message', onMessage)
+    })
   }, [handleEvent])
 
   useEffect(() => {

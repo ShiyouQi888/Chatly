@@ -6,6 +6,7 @@ import { Avatar } from '../components/ui.jsx'
 import { drawQrToCanvas, encodeQr, decodeQrFromSource } from '../lib/qr.js'
 import { userPayload } from '../lib/qrPayload.js'
 import { IconDownload, IconCopy, IconCheck, IconScan } from '../components/Icon.jsx'
+import { clipboard } from '../platform/index.js'
 import './my-qr.css'
 
 /* ===== 我的二维码 =====
@@ -189,13 +190,14 @@ export default function MyQrPage() {
   const onCopy = useCallback(async () => {
     const id = String(user?.username || '')
     if (!id) return
-    try {
-      /* 无头 / 非安全上下文里 clipboard 会 reject —— 这时**不能**说「已复制」 */
-      await navigator.clipboard.writeText(id)
+    /* 无头 / 非安全上下文里剪贴板会失败 —— 这时**不能**说「已复制」。
+       适配层把失败收敛成 false，原生端走系统剪贴板不受此限制。 */
+    const ok = await clipboard.writeText(id)
+    if (ok) {
       setCopied(true)
       setTimeout(() => setCopied(false), 1600)
-    } catch {
-      showToast(`浏览器不允许自动复制，请长按选中上面的 ID（${id}）`)
+    } else {
+      showToast(`当前环境不允许自动复制，请长按选中上面的 ID（${id}）`)
     }
   }, [showToast, user])
 

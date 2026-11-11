@@ -19,7 +19,7 @@ if (!quick) {
     'check-favorite', 'check-longpress', 'check-privacy', 'check-presence', 'check-driver',
     'check-me', 'check-profile', 'check-community', 'check-call', 'check-push', 'check-video', 'check-moment', 'check-geo',
     'check-qr', 'check-readreceipt', 'check-emoji', 'check-scroll', 'check-align',
-    'check-narrow', 'check-console', 'audit-ui',
+    'check-narrow', 'check-console', 'audit-ui', 'check-platform',
   ]
   steps.push(...suites.map((name) => [name, process.execPath, [path.join(root, `scripts/${name}.mjs`)]]))
 }
