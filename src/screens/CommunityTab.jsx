@@ -91,8 +91,14 @@ export default function CommunityTab({ nav }) {
     () =>
       conversations
         .filter((c) => c.type === 'group' && (!key || norm(c.name).includes(key)))
-        /* 有未读的排前面，其余按最近活跃 —— 和聊天列表的直觉一致 */
-        .sort((a, b) => (b.unread || 0) - (a.unread || 0) || (b.updatedAt || 0) - (a.updatedAt || 0)),
+        /* 置顶 > 未读 > 最近活跃。这是「群的主页」，排序要和聊天列表一致，
+           否则同一个群在两页的位置不同，用户会觉得列表在乱跳。 */
+        .sort(
+          (a, b) =>
+            (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) ||
+            (b.unread || 0) - (a.unread || 0) ||
+            (b.updatedAt || 0) - (a.updatedAt || 0)
+        ),
     [conversations, key]
   )
 
@@ -145,6 +151,19 @@ export default function CommunityTab({ nav }) {
           </section>
         )}
 
+        {/* 一个群都没有时不要整块消失 —— 那会让页面看起来只有「加群」半屏，
+            用户不知道「我的群」这块本来就该在这儿。 */}
+        {myGroups.length === 0 && !loading && !key && (
+          <section className="cm-section">
+            <div className="cm-section-head"><span>我的群聊</span></div>
+            <Empty
+              icon={<IconCommunity size={26} />}
+              title="还没有加入任何群"
+              desc="在通讯录里「发起群聊」，或从下面加入一个公开群"
+            />
+          </section>
+        )}
+
         <section className="cm-section">
           <div className="cm-section-head">
             <span>可加入的群</span>
@@ -181,9 +200,7 @@ export default function CommunityTab({ nav }) {
           )}
         </section>
 
-        {!loading && !error && myGroups.length === 0 && joinable.length === 0 && !key && (
-          <p className="cm-foot">社群只聚合群聊，不推荐文章、活动或附近的人。</p>
-        )}
+        <p className="cm-foot">社群是群的主页：在这里找群、加群、进群；消息在「聊天」里看。</p>
       </div>
     </div>
   )

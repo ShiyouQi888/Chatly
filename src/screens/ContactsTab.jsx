@@ -5,7 +5,7 @@ import { useChat, avatarOf } from '../store/ChatStore.jsx'
 import { ActionMenu, Avatar, Empty } from '../components/ui.jsx'
 import UserProfile from './UserProfile.jsx'
 import FriendRequestsPage from './FriendRequestsPage.jsx'
-import { IconBack, IconChat, IconChevron, IconContacts, IconMore, IconPlus, IconSearch, IconScan, IconTrash, IconUser } from '../components/Icon.jsx'
+import { IconBack, IconChat, IconContacts, IconMore, IconPlus, IconSearch, IconScan, IconTrash, IconUser } from '../components/Icon.jsx'
 import './contacts-tab.css'
 
 function contactInitial(user) {
@@ -29,7 +29,6 @@ export default function ContactsTab({ nav, onIncomingCountChange }) {
   const [friendRequestsOpen, setFriendRequestsOpen] = useState(false)
   const [showAddMenu, setShowAddMenu] = useState(false)
   const [groupSheet, setGroupSheet] = useState(false)
-  const [groupsExpanded, setGroupsExpanded] = useState(false)
   const [groupTitle, setGroupTitle] = useState('')
   const [groupMembers, setGroupMembers] = useState([])
   const [busy, setBusy] = useState(false)
@@ -186,19 +185,13 @@ export default function ContactsTab({ nav, onIncomingCountChange }) {
             <span className="contacts-shortcut-meta">好友申请与添加</span>
             {incomingRequestCount > 0 && <span className="contacts-request-alert" role="img" aria-label={`有 ${incomingRequestCount} 个待处理好友申请`}>!</span>}
           </button>
-          <button type="button" onClick={() => setGroupSheet(true)}><span className="contacts-shortcut-icon is-group"><IconChat size={19} /></span><b>群聊</b><span>{groupChats.length} 个</span></button>
+          <button type="button" onClick={() => setGroupSheet(true)}><span className="contacts-shortcut-icon is-group"><IconChat size={19} /></span><b>发起群聊</b><span>{groupChats.length} 个群</span></button>
         </section>
 
-        {groupChats.length > 0 && <section className="contacts-group-list">
-          <button type="button" className="contacts-group-heading" aria-expanded={groupsExpanded} onClick={() => setGroupsExpanded((open) => !open)}>
-            <span>群聊 <small>{groupChats.length}</small></span>
-            <IconChevron size={17} className={groupsExpanded ? 'is-expanded' : ''} />
-          </button>
-          {groupsExpanded && groupChats.map((chat) => <button type="button" className="contacts-group-row" key={chat.id} onClick={() => nav.openChat({ id: chat.id })}>
-            <Avatar src={chat.src} name={chat.name} size={42} radius={14} />
-            <span><b>{chat.name}</b><small>{chat.memberCount || 0} 位成员</small></span>
-          </button>)}
-        </section>}
+        {/* 这里**不再列群列表**：群的主页在「社群」Tab。
+            之前通讯录底部还有一个可展开的「群聊」区，和社群、聊天页三处重复 —
+            同一批群在三个地方各滚动一次，用户会以为自己看错了。
+            通讯录只保留「发起群聊」这个动作，找群去社群、看消息去聊天。 */}
 
         <div className="contacts-list-head">
           <span>联系人</span>

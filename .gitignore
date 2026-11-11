@@ -27,6 +27,9 @@ ChatlyApp/.gradle/
 ChatlyApp/build/
 ChatlyApp/app/build/
 
+# 手工移出的旧目录（回收站式命名，不能进版本库）
+ChatlyApp_recycle_*/
+
 # 编辑器 / 系统
 .vscode/
 .idea/

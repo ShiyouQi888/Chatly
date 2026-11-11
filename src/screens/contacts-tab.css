@@ -17,16 +17,6 @@
 .contacts-shortcut-meta { color: var(--text-3); font-size: 11px; }
 .contacts-request-alert { position: absolute; top: 4px; right: 0; width: 18px; height: 18px; display: grid; place-items: center; border: 2px solid var(--surface); border-radius: 50%; background: var(--danger-action); color: var(--on-danger); font-size: 11px; font-weight: 700; line-height: 1; }
 .contacts-shortcut-icon { width: 36px; height: 36px; display: grid; place-items: center; border-radius: var(--r-sm); background: var(--brand-grad); color: var(--text-on-brand); }
-.contacts-group-list { margin: 0 0 var(--space-5); padding: 0 var(--space-4); border-radius: var(--r-md); background: var(--surface, #fff); }
-.contacts-group-heading { width: 100%; min-height: 46px; display: flex; align-items: center; justify-content: space-between; color: var(--text-2); text-align: left; }
-.contacts-group-heading > span { font-size: var(--fs-cap); font-weight: 600; }
-.contacts-group-heading small { margin-left: var(--space-2); color: var(--text-3); font-size: var(--fs-micro); font-weight: 500; }
-.contacts-group-heading svg { color: var(--text-3); transition: transform var(--dur) var(--ease); transform: rotate(0); }
-.contacts-group-heading svg.is-expanded { transform: rotate(90deg); }
-.contacts-group-row { width: 100%; min-height: 57px; display: flex; align-items: center; gap: var(--space-3); border-top: 1px solid var(--line); text-align: left; }
-.contacts-group-row > span { min-width: 0; display: flex; flex-direction: column; gap: var(--space-1); }
-.contacts-group-list b { overflow: hidden; color: var(--text-1); font-size: 13px; font-weight: 630; text-overflow: ellipsis; white-space: nowrap; }
-.contacts-group-list small { color: var(--text-3); font-size: var(--fs-micro); }
 .contacts-list-head { display: flex; align-items: center; justify-content: space-between; padding: var(--space-1) var(--space-1) var(--space-3); color: var(--text-3); font-size: 11px; font-weight: 650; }
 .contacts-list-head button { color: var(--brand-2); font-size: 12px; font-weight: 650; }
 .contact-letter-group h2 { margin: var(--space-3) 0 var(--space-1); padding: var(--space-2) var(--space-2); color: var(--text-3); font-size: 11px; font-weight: 700; }
