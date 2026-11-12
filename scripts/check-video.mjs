@@ -250,7 +250,7 @@ const tapAt = async (sel, fx = 0.5, fy = 0.5) => {
 }
 
 const HELP = `
-window.__tab = (i) => { const t=[...document.querySelectorAll('.tabbar .tab')][i]; if(!t) return false; t.click(); return true }
+window.__tab = (k) => { const ts=[...document.querySelectorAll('.tabbar .tab')]; const lab=(x)=>(x.querySelector('.tab-label')?.textContent||'').trim(); const t=typeof k==='number'?ts[k]:ts.find(x=>lab(x)===k||lab(x).startsWith(k)); if(!t) return false; t.click(); return true }
 window.__setValue = (sel, v) => {
   const el = document.querySelector(sel); if(!el) return false
   const proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
@@ -327,7 +327,7 @@ try {
   await ensureLoggedIn(js)
   await sleep(600)
   await js(HELP)
-  await js(`window.__tab(1)`)
+  await js(`window.__tab('动态')`)
   await waitFor(`!!document.querySelector('.moment-filters')`, 10000)
   await sleep(400)
 
@@ -519,14 +519,20 @@ try {
   console.log('\n─── 发布视频动态 ───')
   await js(`document.querySelector('.moment-head .icon-btn--brand').click()`)
   ok(await waitFor(`!!document.querySelector('.mc-root')`), '打开发布面板')
+  /* 发布面板的工具区改成了 `.mc-attach-action`（图片 / 视频两个按钮），
+     旧的 `.mc-vpick` 早已不存在。按文案找视频按钮，并真的检查它没有 disabled。 */
   ok(
-    (await js(`!!document.querySelector('.mc-vpick') && !document.querySelector('.mc-vpick').disabled`)),
+    (await js(`(() => {
+      const b=[...document.querySelectorAll('.mc-attach-action')].find(x=>/视频/.test(x.querySelector('span')?.textContent||''))
+      return !!b && !b.disabled })()`)),
     '「选一个视频」按钮可用（视频不再是未接入的假按钮）'
   )
+  /* ⚠️ 旧写法对空数组 `.every()` 恒为 true —— 面板里一个 `.mc-pending-item`
+     都没有时也会「通过」，是最典型的假绿。直接查面板全文更可靠。 */
   ok(
-    (await js(`[...document.querySelectorAll('.mc-pending-item')].map(b=>b.textContent.trim())`)).every((t) => !/视频/.test(t)),
-    '未接入清单里已经没有「视频动态」了',
-    JSON.stringify(await js(`[...document.querySelectorAll('.mc-pending-item')].map(b=>b.textContent.trim())`))
+    (await js(`!document.querySelector('.mc-root').textContent.includes('未接入')`)),
+    '发布面板里没有「视频动态未接入」的占位文案',
+    String(await js(`document.querySelector('.mc-root')?.textContent.slice(0,80)`))
   )
 
   /* 往隐藏的 video input 注入真实 mp4（DOM.setFileInputFiles 对 hidden input 也有效） */
@@ -569,11 +575,13 @@ try {
   await shoot(cdp, `${OUT}/05-published.png`)
 
   console.log('\n─── 「我的动态」子页 ───')
-  await js(`window.__tab(3)`)
-  await waitFor(`!!document.querySelector('.me-stats')`, 10000)
+  await js(`window.__tab('我')`)
+  /* ⚠️「我」页的统计条已换成四宫格 `.quick-item`；继续点
+     `.me-stats button[1]` 会拿到 undefined，然后 `.click()` 直接把整支脚本打断。 */
+  await waitFor(`!!document.querySelector('.quick-item')`, 10000)
   await sleep(1000)
   await js(HELP)
-  await js(`document.querySelectorAll('.me-stats button')[1].click()`)
+  await js(`[...document.querySelectorAll('.quick-item')].find(x=>x.textContent.includes('我的动态'))?.click()`)
   ok(await waitFor(`!!document.querySelector('.subpage .mini-post')`, 10000), '打开「我的动态」子页')
   await sleep(600)
   ok(

@@ -136,40 +136,56 @@ const report = await evalJs(`(() => {
     if (!b) return null
     const br = b.getBoundingClientRect()
     const text = (b.textContent || '').replace(/\\s+/g,' ').trim().slice(0, 14)
-    const av = r.querySelector('.av-wrap')
+    /* ⚠️ 必须只取**直接子元素**：引用块 / 转发卡片里也会嵌一个头像，
+       用 r.querySelector('.av-wrap') 会把它们算成「我方消息有头像」，误判成缺陷。 */
+    const av = r.querySelector(':scope > .av-wrap')
     const avRect = av ? av.getBoundingClientRect() : null
     return {
       side: mine ? '我(右)' : '对方(左)',
+      mine,
       leftGap: Math.round(br.left - box.left),
       rightGap: Math.round(box.right - br.right),
       text,
+      hasAvatar: !!av,
+      hasSlot: !!r.querySelector('.msg-av-slot'),
       avatarLeftGap: avRect ? Math.round(avRect.left - box.left) : null,
       avatarRightGap: avRect ? Math.round(box.right - avRect.right) : null,
+      avatarRightEdge: avRect ? Math.round(avRect.right - box.left) : null,
     }
   }).filter(Boolean)
 })()`)
 
 console.log('\n=== 消息对齐测量（内容区宽 ' + await evalJs('Math.round(document.querySelector(".room-scroll").getBoundingClientRect().width)') + 'px）===')
-/* 判据（双方都带头像）：
-   对方 → 头像贴左缘，且头像在气泡左侧
-   我方 → 头像贴右缘，且头像在气泡右侧 */
-let avOk = true
-let sideOk = true
+/* ⚠️ 判据随聊天界面重构更新（见 ChatRoom.jsx 的 msg 渲染）：
+   · **我方消息刻意不显示头像**（WhatsApp / 微信口径），靠右 + 品牌色气泡区分；
+   · 对方头像只在**一组消息的最后一条**出现，其余用 `.msg-av-slot` 等宽占位。
+   旧版断言要求「每条消息双方都有头像且头像在气泡外侧」，于是绝大多数行
+   头像坐标为 null → 判 ❌，但脚本末尾又写死 process.exit(0) ——
+   打了一屏 ❌ 却算通过，是最典型的假绿。现在两条判据都要真的影响退出码。 */
+let edgeOkAll = true
+let avatarOkAll = true
+let failures = 0
 for (const m of report) {
-  const isMine = m.side.startsWith('我')
-  const avatarAtEdge = isMine ? m.avatarRightGap <= 18 : m.avatarLeftGap <= 18
-  const avatarOutside = isMine ? m.avatarLeftGap > m.leftGap : m.avatarRightGap > m.rightGap
-  if (!avatarAtEdge) avOk = false
-  if (!avatarOutside) sideOk = false
-  const ok = avatarAtEdge && avatarOutside
+  /* 我方：气泡贴右缘（≤18）；对方：气泡从头像占位之后起（约 54px） */
+  const edgeOk = m.mine ? m.rightGap <= 18 : m.leftGap >= 40 && m.leftGap <= 70
+  /* 我方必须没有头像；对方有头像时须贴左缘且在气泡左侧，没头像时必须有占位 */
+  const avatarOk = m.mine
+    ? !m.hasAvatar
+    : (m.hasAvatar
+      ? (m.avatarLeftGap <= 18 && m.avatarRightEdge <= m.leftGap)
+      : m.hasSlot)
+  if (!edgeOk) edgeOkAll = false
+  if (!avatarOk) avatarOkAll = false
+  const ok = edgeOk && avatarOk
+  if (!ok) failures++
   console.log(
     `${ok ? '✅' : '❌'} ${m.side.padEnd(9)} 气泡[左${String(m.leftGap).padStart(3)}/右${String(m.rightGap).padStart(3)}]  ` +
-    `头像[左${String(m.avatarLeftGap).padStart(3)}/右${String(m.avatarRightGap).padStart(3)}]  "${m.text}"`
+    `头像[${m.hasAvatar ? '有' : m.hasSlot ? '占位' : '无'}]  "${m.text}"`
   )
 }
 
-console.log('\n头像贴外缘（对方左 / 我方右）:', avOk ? '✅' : '❌')
-console.log('头像在气泡外侧（未与气泡同侧）:', sideOk ? '✅' : '❌')
+console.log('\n气泡左右对齐（我方贴右 / 对方贴左）:', edgeOkAll ? '✅' : '❌')
+console.log('头像规则（我方不显示 / 对方组末显示且其余留占位）:', avatarOkAll ? '✅' : '❌')
 
 await shot('23-chat-align-390')
 // 滚到顶部看对方消息
@@ -178,5 +194,7 @@ await sleep(600)
 await shot('24-chat-align-top')
 
 cdp.close(); chrome.kill()
-console.log('\n✅ 对齐校验完成 →', OUT)
-process.exit(0)
+console.log(failures
+  ? `\n❌ 对齐校验有 ${failures}/${report.length} 行不符合当前设计 → ${OUT}`
+  : `\n✅ 对齐校验全部通过（${report.length} 行） → ${OUT}`)
+process.exit(failures ? 1 : 0)

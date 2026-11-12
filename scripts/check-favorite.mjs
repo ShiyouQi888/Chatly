@@ -394,7 +394,7 @@ const waitFor = async (expr, ms = 12000) => {
 }
 
 const HELP = `
-window.__tab = (i) => { const t=[...document.querySelectorAll('.tabbar .tab')][i]; if(!t) return false; t.click(); return true }
+window.__tab = (k) => { const ts=[...document.querySelectorAll('.tabbar .tab')]; const lab=(x)=>(x.querySelector('.tab-label')?.textContent||'').trim(); const t=typeof k==='number'?ts[k]:ts.find(x=>lab(x)===k||lab(x).startsWith(k)); if(!t) return false; t.click(); return true }
 window.__openPriv = () => {
   const row = [...document.querySelectorAll('.chat-row')].find(r => (r.querySelector('.cr-name')?.textContent||'').includes('林小夏'))
   if (!row) return false
@@ -436,18 +436,25 @@ window.__multiAct = (label) => {
   if (b.disabled) return 'disabled'
   b.click(); return 'ok' }
 /* 我页收藏子页 */
-window.__meTab = () => { const t=[...document.querySelectorAll('.tabbar .tab')][4]; if(!t) return false; t.click(); return true }
+window.__meTab = () => window.__tab('我')
+/* ⚠️ 本段在 HELP 模板字符串内部，注释里绝对不能出现反引号（会截断模板）。
+   「我」页归类后统计条换成了四宫格 quick-item，
+   而且按钮里多了 quick-count 数字角标 —— textContent 是「收藏8」不是「收藏」，
+   继续用 === 收藏 永远找不到按钮（后面整组收藏断言会连锁全红）。 */
 window.__openFav = () => {
-  const b = [...document.querySelectorAll('.quick-item')].find(x => x.textContent.trim() === '收藏')
+  const b = [...document.querySelectorAll('.quick-item')].find(x => x.textContent.includes('收藏'))
   if (!b) return false
   b.scrollIntoView({ block:'center' }); b.click(); return true }
 window.__favRows = () => [...document.querySelectorAll('[data-testid="fav-row"]')].map(r => ({
   id: r.dataset.favId, kind: r.dataset.kind,
   title: r.querySelector('.fav-body b')?.textContent || '',
   sub: r.querySelector('.fav-body em')?.textContent || '' }))
+/* 收藏数现在挂在四宫格的 quick-count 角标上（count 为 0 时角标不渲染 → 视作 0）。 */
 window.__favStat = () => {
-  const b = [...document.querySelectorAll('.me-stats button')].find(x => x.textContent.includes('收藏'))
-  return b ? b.querySelector('b')?.textContent : null }
+  const b = [...document.querySelectorAll('.quick-item')].find(x => x.textContent.includes('收藏'))
+  if (!b) return null
+  const badge = b.querySelector('.quick-count')
+  return badge ? badge.textContent.trim() : '0' }
 window.__favJump = (label) => {
   const b = [...document.querySelectorAll('button')].find(x => x.textContent.trim().includes(label))
   if (!b) return false
@@ -504,7 +511,7 @@ await sleep(800)
 await injectHelp()
 
 /* ---- 加号面板里不该再有「收藏」 ---- */
-await js(`window.__tab(0)`)
+await js(`window.__tab('聊天')`)
 await waitFor(`!!document.querySelector('.chat-row')`, 12000)
 ok(await js(`window.__openPriv()`), '进入与林小夏的私聊')
 await waitFor(`!!document.querySelector('.room')`, 12000)

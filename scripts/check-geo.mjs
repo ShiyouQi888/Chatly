@@ -129,8 +129,6 @@ const MSG_COLS = `id, kind, content, file_url AS fileUrl, file_name AS fileName,
                   geo_name AS geoName, geo_address AS geoAddress,
                   geo_lat AS geoLat, geo_lng AS geoLng`
 const msgRow = (id) => db.prepare(`SELECT ${MSG_COLS} FROM messages WHERE id = ?`).get(id)
-const lastMsgOf = (cid) =>
-  db.prepare(`SELECT ${MSG_COLS} FROM messages WHERE conversation_id = ? ORDER BY id DESC LIMIT 1`).get(cid)
 
 /**
  * 坐标落库的容差。
@@ -363,24 +361,52 @@ console.log('\n─── 动态定位的坐标 ───')
   )
 }
 
+/* ★ 基线：浏览器启动前，B/C/D 段已经通过接口往这个临时会话塞了 7 条位置消息。
+   E①/E② 的 waitDb 原来只读 lastMsgOf()（不加 id 条件），第一次轮询就拿到
+   那批旧消息里 id 最大的一条（「外链试探」/ 手输地点），于是
+   「界面发出的位置消息真的落库了」「落库坐标 ≈ GCJ-02」全部在检查
+   **接口自己塞的那条**，而那条坐标本来就是我们传进去的 GCJ —— 典型的假绿。
+   下面所有「界面发出」的判据都改成只看 id > 基线的**新增行**。 */
+const baselineMaxId = db
+  .prepare('SELECT COALESCE(MAX(id), 0) AS n FROM messages WHERE conversation_id = ?')
+  .get(tmpCid).n
+const lastNewMsgOf = () =>
+  db
+    .prepare(
+      `SELECT ${MSG_COLS} FROM messages WHERE conversation_id = ? AND id > ? ORDER BY id DESC LIMIT 1`
+    )
+    .get(tmpCid, baselineMaxId)
+
 /* ================= 浏览器 ================= */
 const port = await freePort()
-const profileDir = 'D:/BS-chat-os/.tmp/chrome-geo'
+/* 每次用新 profile。固定目录被上一次异常退出的实例留下 SingletonLock 时，
+   新 Chrome 会把 URL 委托给旧实例后自己退出，CDP 连上的是坏页面 ——
+   症状是 curl 打 5198 明明 200，脚本却报「应用没挂载」。 */
+const profileDir = `D:/BS-chat-os/.tmp/chrome-geo-${Date.now()}`
 fs.mkdirSync(profileDir, { recursive: true })
 const proc = launchChrome({ url: APP, port, profileDir })
 
 const issues = []
+const mapNoise = []
+/* 配了 VITE_TMAP_KEY 但机器离不了外网 / 被代理拦时，Chrome 会为
+   map.qq.com 的 SDK 请求报一条资源错误。这是**环境**问题，MapView 已经
+   如实降级成「加载失败 + 重新加载」，不该把它算成应用 console 报错。
+   只按域名过滤，别把整类 error 都吞掉 —— 其它资源错误仍要如实报出来。 */
+const isMapSdkNoise = (text, url = '') =>
+  /map\.qq\.com/i.test(url) || /map\.qq\.com|VITE_TMAP_KEY|地图 SDK/i.test(text)
 const target = await waitAppTarget(port, APP_HOST)
 const cdp = await connectCdp(target.webSocketDebuggerUrl, (e) => {
   if (e.method === 'Runtime.consoleAPICalled' && ['error', 'warning'].includes(e.params.type)) {
     const text = (e.params.args || []).map((a) => a.value ?? a.description ?? '').join(' ')
-    issues.push(`${e.params.type}: ${text}`.slice(0, 200))
+    const line = `${e.params.type}: ${text}`.slice(0, 200)
+    ;(isMapSdkNoise(text) ? mapNoise : issues).push(line)
   }
   if (e.method === 'Runtime.exceptionThrown') {
     issues.push('exception: ' + (e.params.exceptionDetails?.exception?.description || '').slice(0, 300))
   }
   if (e.method === 'Log.entryAdded' && ['error', 'warning'].includes(e.params.entry.level)) {
-    issues.push(`${e.params.entry.level}: ${e.params.entry.text}`.slice(0, 200))
+    const line = `${e.params.entry.level}: ${e.params.entry.text}`.slice(0, 200)
+    ;(isMapSdkNoise(e.params.entry.text, e.params.entry.url) ? mapNoise : issues).push(line)
   }
 })
 await cdp.send('Page.enable')
@@ -429,7 +455,7 @@ const waitDb = async (fn, ms = 10000) => {
   return null
 }
 
-const HELP = `window.__tab = (i) => { const t=[...document.querySelectorAll('.tabbar .tab')][i]; if(!t) return false; t.click(); return true }
+const HELP = `window.__tab = (k) => { const ts=[...document.querySelectorAll('.tabbar .tab')]; const lab=(x)=>(x.querySelector('.tab-label')?.textContent||'').trim(); const t=typeof k==='number'?ts[k]:ts.find(x=>lab(x)===k||lab(x).startsWith(k)); if(!t) return false; t.click(); return true }
 window.__setVal = (sel, v) => { const i=document.querySelector(sel); if(!i) return false
   const proto = i.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype
   Object.getOwnPropertyDescriptor(proto, 'value').set.call(i, v)
@@ -480,6 +506,7 @@ window.__card = (msgId) => {
   if (!w) return null
   return { coord: w.dataset.hasCoord, text: w.textContent.trim(),
            hasMini: !!w.querySelector('.mv-ph-mini'), hasCanvas: !!w.querySelector('.mv-canvas'),
+           hasError: !!w.querySelector('[data-testid="map-error"]'), hasInvalid: !!w.querySelector('[data-testid="map-invalid"]'),
            w: Math.round(w.getBoundingClientRect().width) } }
 window.__openCard = (msgId) => {
   const w = document.querySelector('.msg[data-id="' + msgId + '"] .loc-card')
@@ -488,11 +515,29 @@ window.__openCard = (msgId) => {
 `
 const injectHelp = () => js(HELP)
 
-const up = await waitFor(
-  `document.readyState !== 'loading' && (!!document.querySelector('.lg-card, .login') || !!document.querySelector('.tabbar'))`,
-  30000
-)
-if (!up) throw new Error('应用没挂载')
+/* Vite dev server 冷启动 / 刚被 vite build 动过 dist 时，首次导航要 8~10 秒
+   才把整棵模块图跑完；期间 readyState 停在 interactive、#root 是空的。
+   偶发情况下首次导航的模块请求会被 Vite 的 HMR 更新打断，页面就一直停在
+   interactive。这里先看诊断、再重载一次兜底，避免把「冷启动慢」误报成
+   「应用没挂载」然后整支脚本崩在浏览器段之前。 */
+const READY_EXPR = `document.readyState !== 'loading' && (!!document.querySelector('.lg-card, .login') || !!document.querySelector('.tabbar'))`
+let up = await waitFor(READY_EXPR, 30000)
+if (!up) {
+  let diag = 'evaluate failed'
+  try {
+    diag = await js(
+      `JSON.stringify({ ready: document.readyState, url: location.href,
+        bodyLen: document.body?.innerHTML?.length || 0,
+        login: !!document.querySelector('.login'), tabbar: !!document.querySelector('.tabbar') })`
+    )
+  } catch (e) {
+    diag = e.message
+  }
+  console.log(`   · 首次导航未挂载，诊断：${diag}；重载一次再等`)
+  await cdp.send('Page.reload', { ignoreCache: false })
+  up = await waitFor(READY_EXPR, 30000)
+}
+if (!up) throw new Error('应用没挂载（重载后仍无登录页 / tabbar）')
 await cdp.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true })
 await sleep(400)
 await injectHelp()
@@ -521,7 +566,7 @@ await injectHelp()
 ok((await js(`window.innerWidth`)) === 390, '视口已按 390×844 移动端覆盖')
 
 console.log('\n─── E①. 聊天里发一条**带坐标**的位置 ───')
-await js(`window.__tab(0)`)
+await js(`window.__tab('聊天')`)
 await waitFor(`!!document.querySelector('.chat-row')`, 12000)
 ok(await js(`window.__openTmpChat()`), `进入临时会话「${TMP_TITLE}」`)
 await waitFor(`!!document.querySelector('.room')`, 12000)
@@ -537,30 +582,79 @@ ok(await waitFor(`!!document.querySelector('.lp-root')`, 12000), '打开了选�
 ok(await js(`!document.querySelector('.tabbar')`), '选位置是整屏覆盖层')
 await waitFor(`document.querySelector('.lp-root')?.dataset.phase === 'ready'`, 15000)
 
-/* 没配 key：必须是坐标占位 + 明确说明，而不是一张糊出来的假地图。
+/* 地图组件有**两条都正确**的分支，自检不能假定本机一定没配 key：
+     · 没配 VITE_TMAP_KEY → 自画坐标占位 + 明确写「这不是地图」，且零外链请求
+     · 配了 VITE_TMAP_KEY → 走真地图 SDK；离线/被拦时如实报错且能重试
+   本机根 .env 里配的是前端 GL JS key，而服务端读的是 server/.env 里的
+   TENCENT_MAP_KEY（两个是不同产品、不同 key），所以「后端降级、前端有 SDK」
+   是合法组合。早期版本把所有判据写死在 nokey 上，在这台机器上一整组全红，
+   但其实产品行为没错 —— 现在按**实际状态**分支验证。
+
+   ⚠️ 坐标系换算的硬判据放在落库数据（B/C/D 段与下面 sent1），不依赖
+   只在 nokey 分支上才存在的 data-lat，这样两条分支都跑得到。
+
    ⚠️ 一律**限定在 .lp-root 里**查 —— 这个房间在浏览器启动前就被接口塞过几条位置消息了，
    不限定的话 querySelector 抓到的是**消息气泡**里的那个缩略占位，断言会指向完全错误的对象
    （上一版就是这么假绿的：面板其实没定位成功，却「通过」了）。 */
-ok(
-  await waitFor(`!!window.__lp('[data-testid="map-nokey"]')`, 12000),
-  '没配地图 key 时给出坐标占位（不是空白，也不是假底图）'
+await waitFor(
+  `!!window.__lp('[data-testid="map-nokey"], [data-testid="map-error"], [data-testid="map-view"]')`,
+  15000
 )
+const mvState = await js(`(() => {
+  const m = window.__lp('.lp-map')
+  if (!m) return 'no-panel'
+  if (m.querySelector('[data-testid="map-nokey"]')) return 'nokey'
+  if (m.querySelector('[data-testid="map-error"]')) return 'error'
+  if (m.querySelector('[data-testid="map-view"]')) return 'sdk'
+  return 'unknown'
+})()`)
+console.log(`   · 本机地图状态：${mvState}（nokey=未配前端 key / sdk=真地图 / error=SDK 加载失败）`)
 ok(
-  await js(`!window.__lp('.mv-canvas')`),
-  '没配 key 时**没有**去加载真地图 SDK（零外链请求）'
+  mvState === 'nokey' || mvState === 'sdk' || mvState === 'error',
+  '选位置面板里的地图组件有明确状态（不是空白，也不是一张假底图）',
+  mvState
 )
-const phLat = await js(`Number(window.__lp('[data-testid="map-nokey"]')?.dataset.lat)`)
-/* ★ 送进 MapView 的必须是 GCJ-02 —— 拿 WGS-84 直接画会偏几百米，而且看不出来 */
-ok(
-  Math.abs(phLat - GCJ.lat) < 1e-4,
-  '占位图收到的是 GCJ-02 坐标（不是浏览器的 WGS-84）',
-  `${phLat} vs ${GCJ.lat}`
-)
-ok(
-  Math.abs(phLat - WGS.lat) > SHIFT_M,
-  'WGS-84 → GCJ-02 的偏移确实发生了（差得足够明显）',
-  `偏移约 ${Math.round(haversineKm(WGS.lat, WGS.lng, GCJ.lat, GCJ.lng) * 1000)} m`
-)
+
+if (mvState === 'nokey') {
+  ok(
+    await js(`!!window.__lp('[data-testid="map-nokey"]')`),
+    '没配地图 key 时给出坐标占位（不是空白，也不是假底图）'
+  )
+  ok(
+    await js(`!window.__lp('.mv-canvas')`),
+    '没配 key 时**没有**去加载真地图 SDK（零外链请求）'
+  )
+  const phLat = await js(`Number(window.__lp('[data-testid="map-nokey"]')?.dataset.lat)`)
+  /* ★ 送进 MapView 的必须是 GCJ-02 —— 拿 WGS-84 直接画会偏几百米，而且看不出来 */
+  ok(
+    Math.abs(phLat - GCJ.lat) < 1e-4,
+    '占位图收到的是 GCJ-02 坐标（不是浏览器的 WGS-84）',
+    `${phLat} vs ${GCJ.lat}`
+  )
+  ok(
+    Math.abs(phLat - WGS.lat) > SHIFT_M,
+    'WGS-84 → GCJ-02 的偏移确实发生了（差得足够明显）',
+    `偏移约 ${Math.round(haversineKm(WGS.lat, WGS.lng, GCJ.lat, GCJ.lng) * 1000)} m`
+  )
+} else {
+  ok(
+    await js(`!window.__lp('[data-testid="map-nokey"]')`),
+    '配了前端 key 时不谎称「未配置地图密钥」'
+  )
+  ok(
+    await js(`!!window.__lp('[data-testid="map-view"] .mv-canvas, [data-testid="map-error"]')`),
+    '配了前端 key 时走真地图容器（或加载失败时给明确错误态）',
+    mvState
+  )
+  if (mvState === 'error') {
+    const errTxt = await js(`window.__lp('[data-testid="map-error"]')?.textContent.trim() || ''`)
+    ok(
+      /加载失败|下载失败|SDK|地图/.test(errTxt) && !!(await js(`window.__lp('.mv-retry')`)),
+      'SDK 下载失败时如实报错，并给出「重新加载」按钮（不是空白）',
+      errTxt.slice(0, 50)
+    )
+  }
+}
 const noticeTxt = await js(`window.__lp('.lp-notice')?.textContent.trim() || ''`)
 ok(/还没配置位置服务/.test(noticeTxt), '降级说明写明「服务端还没配置位置服务」', noticeTxt.slice(0, 40))
 
@@ -589,11 +683,16 @@ ok(await waitFor(`!document.querySelector('.lp-root')`, 12000), '发送后面板
 /* ★ 判据是**回库查**：「界面上有张卡片」不等于消息存下来了。
    发送是异步的（面板先关、请求后到），所以要等库里出现。 */
 const sent1 = await waitDb(() => {
-  const last = lastMsgOf(tmpCid)
+  const last = lastNewMsgOf()
   return last && last.geoName && last.geoName !== MANUAL_NAME ? last : null
 })
 ok(!!sent1, '界面发出的位置消息真的落库了')
 if (!sent1) throw new Error('位置消息没落库，后续断言无法继续')
+ok(
+  sent1.id > baselineMaxId,
+  '这条是**本轮界面新增**的，不是接口在 B 段预先塞进去的那条',
+  `id=${sent1.id} / 基线=${baselineMaxId} / 地点=${sent1.geoName}`
+)
 
 ok(sent1.kind === 'location', '界面发出的这条落库 kind=location', String(sent1.kind))
 ok(
@@ -611,7 +710,21 @@ ok(
 ok(await waitFor(`!!window.__card(${sent1.id})`, 12000), '消息列表里出现了这条位置的气泡')
 const mineCard = await js(`window.__card(${sent1.id})`)
 ok(mineCard?.coord === '1', '气泡标记「有坐标」', JSON.stringify(mineCard))
-ok(mineCard?.hasMini === true && mineCard?.hasCanvas === false, '气泡里是缩略坐标占位（没去加载真地图）')
+/* 缩略气泡跟全屏面板走同一套分支：没 key 是坐标占位，有 key 是真缩略图/错误态。
+   无论哪种，都**不能**是「什么都没有」或「一张不说明来源的假地图」。 */
+if (mvState === 'nokey') {
+  ok(
+    mineCard?.hasMini === true && mineCard?.hasCanvas === false,
+    '气泡里是缩略坐标占位（没去加载真地图）',
+    JSON.stringify(mineCard)
+  )
+} else {
+  ok(
+    mineCard?.hasMini === false && (mineCard?.hasCanvas === true || mineCard?.hasError === true),
+    '配了前端 key 时气泡走真缩略图 / 明确错误态（不显示降级占位）',
+    JSON.stringify(mineCard)
+  )
+}
 await shoot(cdp, `${OUT}/03-loc-bubble-coord.png`)
 
 /* 几何：位置卡片不能撑破消息列 */
@@ -654,11 +767,16 @@ await js(`window.__lp('[data-testid="lp-send"]').click()`)
 ok(await waitFor(`!document.querySelector('.lp-root')`, 12000), '手输位置发送完成')
 
 const sent2 = await waitDb(() => {
-  const last = lastMsgOf(tmpCid)
+  const last = lastNewMsgOf()
   return last && last.geoName === MANUAL_NAME ? last : null
 })
 ok(!!sent2, '手输的位置消息落库了')
 if (!sent2) throw new Error('手输位置没落库，后续断言无法继续')
+ok(
+  sent2.id > baselineMaxId,
+  '手输这条同样是本轮界面新增（B 段也有一条同名消息，别拿它顶数）',
+  `id=${sent2.id} / 基线=${baselineMaxId}`
+)
 ok(sent2.geoLat === null && sent2.geoLng === null, '手输位置**不带坐标**（NULL，不是 0）', `${sent2.geoLat}`)
 
 ok(await waitFor(`!!window.__card(${sent2.id})`, 12000), '列表里出现了手输位置的气泡')
@@ -701,10 +819,17 @@ ok(
 )
 
 console.log('\n─── F. 动态定位走同一个面板 ───')
-await js(`window.__tab(1)`)
+await js(`window.__tab('动态')`)
 await waitFor(`!!document.querySelector('[aria-label="发布动态"]')`, 12000)
 await js(`document.querySelector('[aria-label="发布动态"]').click()`)
 ok(await waitFor(`!!document.querySelector('.mc-root')`, 12000), '打开动态发布面板')
+/* 位置/话题/可见范围现在收在「发布设置」折叠面板里，默认不渲染。
+   不先展开的话 mc-loc-pick 根本不在 DOM 上，会被误判成「入口没做」。 */
+await js(`document.querySelector('.mc-settings-toggle')?.click()`)
+ok(
+  await waitFor(`!!document.querySelector('[data-testid="mc-loc-pick"]')`, 8000),
+  '展开「发布设置」后位置入口可见'
+)
 ok(await js(`!!document.querySelector('[data-testid="mc-loc-pick"]')`), '发布面板上的位置入口是真的按钮')
 ok(
   await js(`document.querySelector('[data-testid="mc-loc-pick"]').tagName === 'BUTTON'`),
@@ -713,9 +838,24 @@ ok(
 await js(`window.__setVal('.mc-textarea', '自检·位置面板共用')`)
 await js(`document.querySelector('[data-testid="mc-loc-pick"]').click()`)
 ok(await waitFor(`!!document.querySelector('.lp-root')`, 12000), '动态里打开的是**同一个**选位置面板')
+/* 同一套组件 ⇒ 同一套状态。这里不重新假设 nokey，而是断言它和 E① 观测到的
+   分支**一致**：两处要是漂了（一处降级、一处画真图），说明各写了一份。 */
+const mvState2 = await waitFor(
+  `!!window.__lp('[data-testid="map-nokey"], [data-testid="map-error"], [data-testid="map-view"]')`,
+  12000
+)
+ok(mvState2, '动态里的选位置面板同样渲染出地图状态（不是空白）')
+const sameBranch = await js(`(() => {
+  const m = window.__lp('.lp-map'); if (!m) return 'no-panel'
+  if (m.querySelector('[data-testid="map-nokey"]')) return 'nokey'
+  if (m.querySelector('[data-testid="map-error"]')) return 'error'
+  if (m.querySelector('[data-testid="map-view"]')) return 'sdk'
+  return 'unknown'
+})()`)
 ok(
-  await waitFor(`!!window.__lp('[data-testid="map-nokey"]')`, 12000),
-  '同一套降级：没 key 也是坐标占位 + 说明'
+  sameBranch === mvState || (mvState === 'sdk' && sameBranch === 'error') || (mvState === 'error' && sameBranch === 'sdk'),
+  '动态与聊天的地图降级行为一致（共用同一个组件，不是各写一份）',
+  `聊天=${mvState} / 动态=${sameBranch}`
 )
 await waitFor(`document.querySelector('.lp-root')?.dataset.phase === 'ready'`, 15000)
 ok(await js(`!!window.__lp('[data-testid="lp-row-current"]')`), '动态里同样能拿到「当前位置」')
@@ -767,6 +907,9 @@ const leftoverMoments = db
 ok(leftoverMoments === 0, '临时动态已清掉', `清了 ${pm.moments} 条`)
 
 console.log('\n─── 控制台 ───')
+if (mapNoise.length) {
+  console.log(`   · 忽略 ${mapNoise.length} 条地图 SDK 外链失败（环境离线 / 代理拦截，组件已如实降级）`)
+}
 if (issues.length) {
   ok(false, '全程无 console 报错 / 未捕获异常', issues.slice(0, 4).join(' | '))
 } else {

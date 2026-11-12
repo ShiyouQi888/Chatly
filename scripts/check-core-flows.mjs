@@ -122,10 +122,14 @@ try {
   audioForm.append('file', new Blob(['OggS core audio route probe'], { type: 'audio/ogg' }), 'voice-note-core.ogg')
   const audioUpload = await request(owner.token, '/messages/upload', { method: 'POST', body: audioForm })
   if (audioUpload.data.url) uploadedAudioPath = path.join(PRIVATE_UPLOAD_DIR, path.basename(audioUpload.data.url))
+  /* ⚠️ 语音消息**必须**带时长（服务端要 300–60000ms 之间的整数）——
+     文件名以 `voice-note-` 开头且是音频格式时会被认成语音消息，
+     缺时长直接 400「语音时长无效」。
+     前端录音时一定会带上（MediaRecorder 拿到真实时长），这里同理。 */
   const audioMessage = audioUpload.data.url ? await request(owner.token, '/messages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ conversationId, kind: 'file', fileUrl: audioUpload.data.url, fileName: audioUpload.data.fileName, fileSize: audioUpload.data.fileSize }),
+    body: JSON.stringify({ conversationId, kind: 'file', fileUrl: audioUpload.data.url, fileName: audioUpload.data.fileName, fileSize: audioUpload.data.fileSize, audioDurationMs: 1200 }),
   }) : null
   check(audioUpload.status === 201 && audioMessage?.status === 201, '语音消息支持的 OGG 附件可上传并进入消息流', audioMessage?.data.error || audioUpload.data.error)
   if (audioMessage?.status === 201) {

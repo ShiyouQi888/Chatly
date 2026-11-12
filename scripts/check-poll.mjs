@@ -561,7 +561,7 @@ const waitFor = async (expr, ms = 12000) => {
 }
 
 const HELP = `
-window.__tab = (i) => { const t=[...document.querySelectorAll('.tabbar .tab')][i]; if(!t) return false; t.click(); return true }
+window.__tab = (k) => { const ts=[...document.querySelectorAll('.tabbar .tab')]; const lab=(x)=>(x.querySelector('.tab-label')?.textContent||'').trim(); const t=typeof k==='number'?ts[k]:ts.find(x=>lab(x)===k||lab(x).startsWith(k)); if(!t) return false; t.click(); return true }
 window.__setVal = (sel, v) => { const i=document.querySelector(sel); if(!i) return false
   const proto = i.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype
   Object.getOwnPropertyDescriptor(proto, 'value').set.call(i, v)
@@ -674,7 +674,7 @@ await injectHelp()
    所以入口要被移除；摆一个永远点不动的灰按钮只会让人以为功能坏了。
    ⚠️ 顺带断言其它项还在（图片/视频/位置/文件）—— 否则「整个面板没渲染」
    也会让「找不到投票」这条通过，那是假绿。 */
-await js(`window.__tab(0)`)
+await js(`window.__tab('聊天')`)
 await waitFor(`!!document.querySelector('.chat-row')`, 12000)
 const privRow = await js(
   `(() => { const r=[...document.querySelectorAll('.chat-row')].find(x=>x.querySelector('.cr-name')?.textContent?.includes('林小夏'))
@@ -710,7 +710,7 @@ if (privRow) {
 }
 
 /* ---- 群聊：发起一条投票（走完整界面） ---- */
-await js(`window.__tab(0)`)
+await js(`window.__tab('聊天')`)
 await waitFor(`!!document.querySelector('.chat-row')`, 12000)
 ok(await js(`window.__openTmpChat()`), `进入临时群「${TMP_TITLE}」`)
 await waitFor(`!!document.querySelector('.room')`, 12000)

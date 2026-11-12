@@ -210,7 +210,7 @@ for (const [i, name] of ['聊天', '通讯录', '动态', '社群', '我'].entri
 /* 资料编辑 + 头像选择器：这一片 DOM 最容易踩雷 ——
    头像按钮里套相机角标、预设网格是 12 个 button、日期是原生 date input、
    隐藏 file input 参与受控流程。都点开确认一遍不冒 React 告警。 */
-await js(`(() => { const t=[...document.querySelectorAll('.tabbar .tab')][4]; if(t) t.click(); return true })()`)
+await js(`(() => { const t=[...document.querySelectorAll('.tabbar .tab')].find(x=>(x.querySelector('.tab-label')?.textContent||'').trim()==='我'); if(t) t.click(); return true })()`)
 await sleep(800)
 if (await js(`!!document.querySelector('.me-editbtn')`)) {
   await js(`document.querySelector('.me-editbtn').click()`)

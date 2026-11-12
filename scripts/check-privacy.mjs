@@ -363,17 +363,32 @@ try {
     await sleep(600)
     const gone = await js(`!document.querySelector('[data-uid="${BID}"]')`)
     ok(gone, '★ 关掉「通过搜索添加」后，界面上搜不到林小夏了')
-    await typeQ('阿杰')
-    ok(await waitFor(`!!document.querySelector('[data-uid="${CID}"]')`, 8000), '★ 正向对照：同一次会话里「阿杰」还在（排除整个找人组没渲染）')
+    /* ⚠️ 不能拿阿杰当正对照：种子里陈墨本来就关注了他，
+       找人组会把他排除掉（和扫码段的注释是同一个坑）。
+       改成「换一个没被关掉的人，找人组仍能渲染出条目」，不绑死某个 id。 */
+    let controlOk = false
+    for (const kw of ['沈叙', 'shenxu', '小鹿', 'xiaolu']) {
+      await typeQ(kw)
+      if (await waitFor(`document.querySelectorAll('.sp-row.sp-person[data-uid]').length > 0`, 5000)) {
+        controlOk = true
+        break
+      }
+    }
+    ok(controlOk, '★ 正向对照：换一个可搜到的人，找人组仍然渲染（排除整组没渲染）')
     await shoot(cdp, `${OUT}/02-search-blocked.png`)
 
     /* 扫一扫 → 手输 ID：被拦时按钮换成写明原因的禁用态 */
     await js(`document.querySelector('.sp-head .sub-back')?.click()`)
-    await waitFor(`!document.querySelector('.search-panel')`, 6000)
-    await js(`document.querySelector('[aria-label="扫一扫"]')?.click() || document.querySelector('.chat-scan')?.click()`)
-    ok(await waitFor(`!!document.querySelector('.scan')`, 8000), '打开发扫一扫')
+    /* 以前这里 waitFor 超时是静默的：面板没关掉也继续往下点，
+       结果 `.scan` 永远不出现，后面「手动输 ID」连锁全红并中断。 */
+    ok(await waitFor(`!document.querySelector('.search-panel')`, 8000), '搜索面板已关闭')
+    /* 用稳定的 testid（和 check-qr 一致）。⚠️ 别写 `?.click() || 别的?.click()`：
+       click() 返回 undefined，后半段总会被再执行一遍。 */
+    await js(`document.querySelector('[data-testid="open-scan"]')?.click()`)
+    ok(await waitFor(`!!document.querySelector('.scan')`, 10000), '打开「扫一扫」')
+    ok(await waitFor(`!!document.querySelector('.scan-act')`, 8000), '扫码页操作区已渲染')
     await js(`[...document.querySelectorAll('.scan-act')].find(b=>b.textContent.includes('手动输 ID'))?.click()`)
-    ok(await waitFor(`!!document.querySelector('.scan-manual input')`, 6000), '切到手动输 ID')
+    ok(await waitFor(`!!document.querySelector('.scan-manual input')`, 8000), '切到手动输 ID')
 
     /* ⚠️ 查过一次之后 `.scan-manual input` 就**不在 DOM 里**了 ——
        识别到结果时整块表单被结果卡替换掉了。所以第二次查之前必须先点

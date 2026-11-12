@@ -73,6 +73,19 @@ const j = async (m, p, body, auth) => {
 const owner = await login('chenmo')
 const users = (await (await fetch(`${API}/users`, { headers: owner.auth })).json()).users
 const byName = (n) => users.find((u) => u.nickname === n)
+/* ⚠️ 双账号自检必须**真的登录成两个人**。
+   boot(nick) 以前完全忽略参数、ensureLoggedIn 用默认的 chenmo，
+   于是「普通成员 B」其实也是群主 —— 一整组权限断言全红，
+   看起来像权限功能坏了，其实是脚本根本没换人。 */
+const LOGIN_BY_NICK = { [OWNER]: 'chenmo', [MEMBER]: 'ajie' }
+const usernameOf = (nick) => {
+  /* ⚠️ 不能用 /users 接口反查：`GET /users` 会**排除自己**，
+     所以群主「陈墨」在列表里根本不存在，反查必然抛错。
+     显式映射优先，接口只作为兜底。 */
+  const name = LOGIN_BY_NICK[nick] || users.find((x) => x.nickname === nick)?.username
+  if (!name) throw new Error(`找不到「${nick}」对应的登录名`)
+  return name
+}
 const memberId = byName(MEMBER).id
 const inviteeId = byName(INVITEE).id
 
@@ -84,7 +97,9 @@ console.log(`临时群 #${CID}「${GNAME}」：群主 ${OWNER} + 成员 ${MEMBER
 /* ================= 浏览器 ================= */
 async function openBrowser(tag, who) {
   const port = await freePort()
-  const profileDir = `D:/BS-chat-os/.tmp/chrome-group-${tag}`
+  /* 每次换 profile：固定目录会被上次异常退出的实例留下 SingletonLock，
+     新 Chrome 把 URL 委托给旧实例后自己退出，CDP 连上的是坏页面。 */
+  const profileDir = `D:/BS-chat-os/.tmp/chrome-group-${tag}-${Date.now()}`
   fs.mkdirSync(profileDir, { recursive: true })
   const proc = launchChrome({ url: APP, port, profileDir })
   const target = await waitAppTarget(port, APP_HOST)
@@ -123,7 +138,13 @@ async function openBrowser(tag, who) {
   const waitFor = async (expr, ms = 12000) => {
     const t0 = Date.now()
     while (Date.now() - t0 < ms) {
-      if (await js(expr)) return true
+      /* 页面 reload / 换 execution context 的瞬间 evaluate 会抛，
+         这里要等到下一轮，不能让整支脚本崩在重载过程中。 */
+      try {
+        if (await js(expr)) return true
+      } catch {
+        /* context 还没就绪 */
+      }
       await sleep(250)
     }
     return false
@@ -199,11 +220,35 @@ window.__toast = () => document.querySelector('.toast')?.textContent.trim() || n
 `
   const boot = async (nick) => {
     await js(HELP)
-    const up = await waitFor(
-      `!!document.querySelector('.lg-card, .login') || !!document.querySelector('.chat-list .chat-row')`
-    )
-    if (!up) throw new Error('应用没挂载')
-    await ensureLoggedIn(js)
+    /* Vite 冷启动（或刚被 vite build 动过 dist）时首次导航要 8~10 秒，
+       偶发还会被 HMR 更新打断、一直停在 interactive。重载一次兜底，
+       别把「冷启动慢」误报成「应用没挂载」然后整支脚本崩掉。
+       重载会清掉注入的 window.__* 助手，所以下面要重新注入 HELP。 */
+    /* ⚠️ 必须包含 .tabbar：profile 里可能残留上次的 token，重载后直接进
+       已登录主界面（既不显示登录页、会话列表也可能还没渲染完），
+       只认 .lg-card/.chat-row 的话会一直判成「没挂载」。 */
+    const READY = `!!document.querySelector('.lg-card, .login, .tabbar') || !!document.querySelector('.chat-list .chat-row')`
+    /* 双浏览器同时拉模块图时，Vite 首次导航偶尔会停在 interactive 十几秒，
+       甚至被 HMR 更新打断。最多重载两次，每次都给足 30 秒；
+       重载会清掉注入的 window.__* 助手，所以循环结束后无条件重注入。 */
+    let up = false
+    for (let attempt = 1; attempt <= 3 && !up; attempt++) {
+      up = await waitFor(READY, 30000)
+      if (up) break
+      const diag = await js(
+        `JSON.stringify({ ready: document.readyState, bodyLen: document.body?.innerHTML?.length || 0,
+          rootKids: document.getElementById('root')?.children.length || 0,
+          tabbar: !!document.querySelector('.tabbar'), login: !!document.querySelector('.login') })`
+      ).catch((e) => `evaluate failed: ${e.message}`)
+      console.log(`   · [${who}] 第 ${attempt} 次仍未挂载，诊断 ${diag}`)
+      if (attempt < 3) {
+        await cdp.send('Page.reload', { ignoreCache: false })
+        await sleep(1200)
+      }
+    }
+    if (!up) throw new Error('应用没挂载（重载两次后仍无登录页 / tabbar）')
+    await js(HELP)
+    await ensureLoggedIn(js, { identifier: usernameOf(who) })
     /* ⚠️ 进列表不等于列表加载完：`.tabbar` 出现的那一刻会话可能还是空的，
        立刻去找那一行必然找不到（空集选择器静默返回 false，症状看起来像「群没建成」）。 */
     await waitFor(`document.querySelectorAll('.chat-row').length > 0`, 15000)

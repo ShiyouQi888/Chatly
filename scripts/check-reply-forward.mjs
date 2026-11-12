@@ -232,7 +232,7 @@ const waitFor = async (expr, ms = 12000) => {
 }
 
 const HELP = `
-window.__tab = (i) => { const t=[...document.querySelectorAll('.tabbar .tab')][i]; if(!t) return false; t.click(); return true }
+window.__tab = (k) => { const ts=[...document.querySelectorAll('.tabbar .tab')]; const lab=(x)=>(x.querySelector('.tab-label')?.textContent||'').trim(); const t=typeof k==='number'?ts[k]:ts.find(x=>lab(x)===k||lab(x).startsWith(k)); if(!t) return false; t.click(); return true }
 window.__openPriv = () => {
   const row = [...document.querySelectorAll('.chat-row')].find(r => (r.querySelector('.cr-name')?.textContent||'').includes('林小夏'))
   if (!row) return false
@@ -285,7 +285,7 @@ await ensureLoggedIn(js)
 await sleep(800)
 await injectHelp()
 
-await js(`window.__tab(0)`)
+await js(`window.__tab('聊天')`)
 await waitFor(`!!document.querySelector('.chat-row')`, 12000)
 ok(await js(`window.__openPriv()`), '进入与林小夏的私聊')
 await waitFor(`!!document.querySelector('.room')`, 12000)

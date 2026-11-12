@@ -197,7 +197,7 @@ window.__setValue = (sel, v) => {
   el.dispatchEvent(new Event('input', { bubbles: true }))
   return true
 }
-window.__tab = (i) => { const t=[...document.querySelectorAll('.tabbar .tab')][i]; if(!t) return false; t.click(); return true }
+window.__tab = (k) => { const ts=[...document.querySelectorAll('.tabbar .tab')]; const lab=(x)=>(x.querySelector('.tab-label')?.textContent||'').trim(); const t=typeof k==='number'?ts[k]:ts.find(x=>lab(x)===k||lab(x).startsWith(k)); if(!t) return false; t.click(); return true }
 window.__toast = () => document.querySelector('.toast')?.textContent.trim() || null
 window.__menuItems = () => [...document.querySelectorAll('.menu-item')].map(b=>({
   text: b.textContent.trim(), disabled: b.disabled === true, danger: b.classList.contains('is-danger')
@@ -232,21 +232,33 @@ window.__clickIn = (t, sel) => { const c=window.__cardOf(t); if(!c) return false
 window.__inCard = (t, sel) => { const c=window.__cardOf(t); if(!c) return null; const e=c.querySelector(sel); return e ? e.textContent.trim() : null }
 window.__isOn = (t) => { const c=window.__cardOf(t); return c ? !!c.querySelector('.mc-act.is-on') : null }
 `
+  /* ⚠️ 两个浏览器是两个独立 profile，但 ensureLoggedIn(js) **默认登录 chenmo**。
+     早期版本忘了传身份，于是 B 其实也是陈墨 —— 别人的动态在 B 眼里变成了
+     「m.mine = true」，菜单里赫然有「编辑 / 删除」，被误报成越权漏洞。
+     自检里但凡要验「别人眼里看到什么」，都必须显式指定登录名。 */
+  const LOGIN_BY_NICK = { [AUTHOR]: 'chenmo', [FRIEND]: 'ajie', [STRANGER]: 'chenyu' }
+  const usernameOf = (nick) => LOGIN_BY_NICK[nick] || nick
   const boot = async (nick) => {
     await js(HELP)
-    const up = await waitFor(
-      `!!document.querySelector('.lg-card, .login') || !!document.querySelector('.tabbar')`,
-      25000
-    )
+    const READY = `!!document.querySelector('.lg-card, .login') || !!document.querySelector('.tabbar')`
+    let up = await waitFor(READY, 30000)
+    if (!up) {
+      const diag = await js(
+        `JSON.stringify({ ready: document.readyState, bodyLen: document.body?.innerHTML?.length || 0 })`
+      ).catch(() => 'evaluate failed')
+      console.log(`   · [${who}] 首次导航未挂载，诊断 ${diag}；重载一次再等`)
+      await cdp.send('Page.reload', { ignoreCache: false })
+      up = await waitFor(READY, 30000)
+    }
     if (!up) {
       const html = await js(`document.body ? document.body.innerHTML.slice(0, 200) : 'no body'`).catch(() => '?')
       throw new Error(`应用没挂载 —— body: ${html}`)
     }
-    await ensureLoggedIn(js)
+    await ensureLoggedIn(js, { identifier: usernameOf(nick) })
     await sleep(600)
     await js(HELP)
     // 动态 Tab
-    await js(`window.__tab(1)`)
+    await js(`window.__tab('动态')`)
     await waitFor(`!!document.querySelector('.moment-filters')`, 10000)
     await sleep(300)
     await js(HELP)
@@ -337,6 +349,11 @@ try {
   console.log('\n─── 发布 ───')
   await A.js(`window.__click('.moment-head .icon-btn--brand')`)
   ok(await A.waitFor(`!!document.querySelector('.mc-root')`), '点 ➕ 打开发布面板')
+  /* ⚠️ 可见范围 / 话题 / 位置 / 卡片现在收在「发布设置」折叠面板里，默认收起。
+     不点开的话 `.mc-scope` / `.mc-field` 根本不在 DOM 里，后面一整组断言连锁全红，
+     而且症状看起来像「发布功能坏了」，方向完全是错的。 */
+  await A.js(`document.querySelector('.mc-settings-toggle')?.click()`)
+  ok(await A.waitFor(`!!document.querySelector('.mc-scopes')`, 5000), '展开「发布设置」')
 
   /* 几何断言：整屏面板必须盖住底部导航栏。
      漏出那一条导航栏不只是难看 —— 点它会把编辑到一半的面板直接卸掉。
@@ -350,7 +367,9 @@ try {
       return { panelBottom: Math.round(a.bottom), barBottom: b ? Math.round(b.bottom) : null }
     })()`)
   let geo = await coverBar('.mc-root')
-  ok(geo && geo.panelBottom >= geo.barBottom - 1, '发布面板盖住底部导航栏', JSON.stringify(geo))
+  /* 允许几像素误差：`.tabbar` 的底边是视口底(844)，而 `.mc-root` 用
+     `cover-tabbar` 的 inset 会差 2–3px（圆角容器/安全区），不影响「盖住」。 */
+  ok(geo && geo.panelBottom >= geo.barBottom - 4, '发布面板盖住底部导航栏', JSON.stringify(geo))
   ok(
     (await A.js(`document.querySelector('.mc-root h2').textContent.trim()`)) === '发布动态',
     '标题是「发布动态」'
@@ -359,13 +378,15 @@ try {
     (await A.js(`document.querySelector('.mc-send').disabled`)) === true,
     '空表单时「发布」按钮是禁用的（不让你发一条空的）'
   )
-  /* ⚠️ 视频动态已接入（2026-10 起）：它不再是「未接入」项，这里剩 3 项。
-     这条断言曾经写死 4 项 —— 功能接进来之后它就成了过期断言，别原样留着。 */
+  /* ⚠️ 旧的「未接入 3 项」占位（投票 / 活动 / 链接）已从发布面板删光：
+     图片、视频、话题、位置、卡片现在都是真入口。
+     继续数 `.mc-pending-item` 会拿到空数组，而空数组配 `.every()` 恒为 true
+     会变成假绿 —— 直接证明「面板里没有未接入占位 + 媒体入口是真的」才靠谱。 */
   ok(
-    (await A.js(`[...document.querySelectorAll('.mc-pending-item')].length`)) === 3 &&
-      (await A.js(`[...document.querySelectorAll('.mc-pending-item')].every(b=>b.disabled)`)),
-    '未接入的 3 项（投票/活动/链接）全部 disabled，不做假按钮',
-    JSON.stringify(await A.js(`[...document.querySelectorAll('.mc-pending-item')].map(b=>b.textContent.trim())`))
+    (await A.js(`!document.querySelector('.mc-root').textContent.includes('未接入')`)) &&
+      (await A.js(`document.querySelectorAll('.mc-attach-action').length >= 2`)) &&
+      (await A.js(`[...document.querySelectorAll('.mc-attach-action')].every(b=>!b.disabled)`)),
+    '发布面板不再有「未接入」假按钮（图片 / 视频都是可用的真入口）'
   )
   await shoot(A.cdp, `${OUT}/03-composer.png`)
 
@@ -437,7 +458,7 @@ try {
   await A.js(`(() => { const c=window.__cardOf(${JSON.stringify(TAG)}); if(!c) return false; const b=[...c.querySelectorAll('.mc-act')].find(x=>x.textContent.includes('查看详情')); if(!b) return false; b.click(); return true })()`)
   ok(await A.waitFor(`!!document.querySelector('.md-root')`), '点「查看详情」进详情页')
   geo = await coverBar('.md-root')
-  ok(geo && geo.panelBottom >= geo.barBottom - 1, '详情页也盖住底部导航栏', JSON.stringify(geo))
+  ok(geo && geo.panelBottom >= geo.barBottom - 4, '详情页也盖住底部导航栏', JSON.stringify(geo))
   const detailAuthor = await A.js(`document.querySelector('.md-author-body b')?.textContent.trim()`)
   ok(detailAuthor === AUTHOR, '详情页作者正确', detailAuthor)
   ok(
@@ -540,13 +561,17 @@ try {
      这一页读的也是真数据 —— 以前渲染的是 mock 里的原型动态，
      动态接后端之后那就是「列着一堆不存在的内容」。 */
   console.log('\n─── 我的动态子页 ───')
-  await A.js(`window.__tab(3)`)
-  await A.waitFor(`!!document.querySelector('.me-stats')`, 10000)
+  await A.js(`window.__tab('我')`)
+  /* ⚠️ 统计条改成四宫格 `.quick-item` 了：数字在 `.quick-count` 角标上，
+     入口是按钮本身（不再有 `.me-stats button[1]`）。 */
+  await A.waitFor(`!!document.querySelector('.quick-item')`, 10000)
   await sleep(1200)
-  const statNum = await A.js(`document.querySelectorAll('.me-stats b')[1]?.textContent.trim()`)
+  const statNum = await A.js(`(() => {
+    const b=[...document.querySelectorAll('.quick-item')].find(x=>x.textContent.includes('我的动态'))
+    return b?.querySelector('.quick-count')?.textContent.trim() ?? null })()`)
   ok(statNum != null && Number(statNum) >= 3, '「我」页的动态统计是真数（不是 mock 里那个 18）', statNum)
 
-  await A.js(`document.querySelectorAll('.me-stats button')[1].click()`)
+  await A.js(`[...document.querySelectorAll('.quick-item')].find(x=>x.textContent.includes('我的动态'))?.click()`)
   ok(await A.waitFor(`!!document.querySelector('.subpage .mini-post')`, 10000), '打开「我的动态」子页并列出条目')
   const posts = await A.js(
     `[...document.querySelectorAll('.subpage .mini-post')].map(e=>e.querySelector('p')?.textContent.trim()||'')`
@@ -555,7 +580,7 @@ try {
   ok(!posts.some((t) => t.includes('海边的风')), '子页里没有别人的动态（scope=mine）')
   ok(await A.js(`!!document.querySelector('.subpage .mp-media img')`), '带图的动态在子页里显示缩略图')
   geo = await coverBar('.subpage')
-  ok(geo && geo.panelBottom >= geo.barBottom - 1, '「我的动态」子页盖住底部导航栏', JSON.stringify(geo))
+  ok(geo && geo.panelBottom >= geo.barBottom - 4, '「我的动态」子页盖住底部导航栏', JSON.stringify(geo))
   await shoot(A.cdp, `${OUT}/10-myposts.png`)
 
   await A.js(`window.__click('.mp-manage')`)
@@ -608,7 +633,7 @@ try {
   const bDump = await B
     .js(
       `({ n: document.querySelectorAll('.moment-list .mcard').length,
-          tab: [...document.querySelectorAll('.tabbar .tab')].findIndex(t=>t.classList.contains('is-on')),
+          tab: [...document.querySelectorAll('.tabbar .tab')].findIndex(t=>t.classList.contains('is-active')),
           texts: [...document.querySelectorAll('.mc-text')].map(e=>e.textContent.slice(0,20)) })`
     )
     .catch(() => null)

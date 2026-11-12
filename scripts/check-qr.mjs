@@ -90,6 +90,26 @@ if (!targetRes.d?.user) throw new Error(`演示库里没有 ${TARGET}，先跑 n
 const targetId = targetRes.d.userId
 const targetName = targetRes.d.user.nickname
 
+/* ⚠️ 前提归一（二）：**上一次异常退出残留的 pending 申请**。
+   只要 chenmo → target 还有一条 pending，ScanPage 的 friendStatus 就是
+   outgoing，界面显示「等待对方同意」而不是可点的「加好友」—— 本节整组
+   断言的前提直接不成立；更糟的是下面 pendingReq 那条 .get() 会查到这条
+   旧申请，于是「点加好友生成了申请」变成假绿（按钮根本没被点到）。
+   这类残留只可能由本自检产生（目标固定、脚本会取关），直接清掉且不还原：
+   演示库本来就不该留着它。 */
+const staleReqs = db
+  .prepare("SELECT id FROM friend_requests WHERE requester_id = ? AND recipient_id = ? AND status = 'pending'")
+  .all(me.user.id, targetId)
+  .map((r) => r.id)
+if (staleReqs.length) {
+  const holes = staleReqs.map(() => '?').join(',')
+  db.prepare(`DELETE FROM friend_requests WHERE id IN (${holes})`).run(...staleReqs)
+  console.log(`   · 清掉上一轮残留的 ${staleReqs.length} 条待处理好友申请（id=${staleReqs.join(',')}）`)
+}
+
+/* 基线必须在清理**之后**取：收尾只删本轮新增，别碰演示库原有申请 */
+const baselineReqIds = db.prepare('SELECT id FROM friend_requests').all().map((r) => r.id)
+
 /* 前提归一：加好友的断言要求「一开始没关注」。用户会在预览里随手关注，
    所以这里先取关并记下原状，收尾再还原。 */
 const targetHadEdge = dbFollows(me.user.id, targetId)
@@ -234,7 +254,7 @@ const waitFor = async (expr, ms = 12000) => {
    表现是十几秒后突然报 `window.__tab is not a function`，完全看不出是时序问题。
    所以：**先等应用挂载，再注入**。 */
 const HELP = `
-window.__tab = (i) => { const t=[...document.querySelectorAll('.tabbar .tab')][i]; if(!t) return false; t.click(); return true }
+window.__tab = (k) => { const ts=[...document.querySelectorAll('.tabbar .tab')]; const lab=(x)=>(x.querySelector('.tab-label')?.textContent||'').trim(); const t=typeof k==='number'?ts[k]:ts.find(x=>lab(x)===k||lab(x).startsWith(k)); if(!t) return false; t.click(); return true }
 window.__setInput = (sel, v) => { const i=document.querySelector(sel); if(!i) return false
   const set=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set
   set.call(i, v); i.dispatchEvent(new Event('input',{bubbles:true})); return true }
@@ -333,7 +353,7 @@ ok((await js(`window.innerWidth`)) === 390, '视口已按 390×844 移动端覆�
 
 /* ================= A. 我的二维码 ================= */
 console.log('\n─── A. 我的二维码 ───')
-await js(`window.__tab(3)`) // 我
+await js(`window.__tab('我')`) // 我
 await waitFor(`!!document.querySelector('.me-idcard')`, 12000)
 
 ok(
@@ -454,7 +474,7 @@ console.log(`   · 说明：本机无头 Chrome 落盘失败（环境限制）�
 console.log('\n─── B. 扫一扫入口与摄像头 ───')
 await js(`document.querySelector('.sub-back').click()`)
 await sleep(500)
-await js(`window.__tab(0)`) // 聊天
+await js(`window.__tab('聊天')`) // 聊天
 await waitFor(`!!document.querySelector('.chat-head-act')`, 12000)
 
 ok(await js(`!!document.querySelector('[data-testid="open-scan"]')`), '聊天页顶栏有「扫一扫」入口')
@@ -489,17 +509,31 @@ ok((await js(`window.__scan.resultType`)) === 'user', '识别成「人」而不�
 const shownName = await js(`document.querySelector('.scan-person-txt b')?.textContent.trim()`)
 ok(shownName === targetName, '资料卡显示的是码里那个人的昵称', `${shownName} / 期望 ${targetName}`)
 ok(
-  await js(`!!document.querySelector('[data-testid="scan-follow"]')`),
+  await waitFor(`!!document.querySelector('[data-testid="scan-follow"]')`, 8000),
   '未关注时给出「加好友」按钮'
 )
 await shoot(cdp, `${OUT}/03-scan-result-user.png`)
 
+/* ⚠️ 产品语义已变：POST /users/:id/follow 现在是「发送好友申请」，
+   不再直接写 follows；扫到的人要等对方同意才成为好友（见 ScanPage 文案）。
+   旧的「点一下就写进 follows / 按钮变已加为好友」是过期断言。
+   这里不改动演示库的好友关系 —— 补成互关会破坏 check-moment 依赖的
+   「陈宇单向关注陈墨」那张关系图。 */
 await tapAt('[data-testid="scan-follow"]')
 await waitFor(`!document.querySelector('[data-testid="scan-follow"]')`, 12000)
-ok(dbFollows(me.user.id, targetId), `点「加好友」写进了 follows 表（${me.user.username} → ${TARGET}）`)
+const pendingReq = db
+  .prepare("SELECT id FROM friend_requests WHERE requester_id = ? AND recipient_id = ? AND status = 'pending'")
+  .get(me.user.id, targetId)
+/* ★ 必须是**本轮新增**：库里可能还有上一轮残留的申请，只查「有没有 pending」
+   会让「点按钮 → 生成申请」这条最关键的证伪断言变成假绿。 */
 ok(
-  (await js(`document.querySelector('.scan-chip')?.textContent.trim()`)) === '已加为好友',
-  '按钮变成「已加为好友」，状态与库一致'
+  !!pendingReq && !baselineReqIds.includes(pendingReq.id),
+  `点「加好友」生成了一条待处理的好友申请（${me.user.username} → ${TARGET}）`,
+  pendingReq ? `id=${pendingReq.id} / 基线=${baselineReqIds.join(',') || '空'}` : '没查到'
+)
+ok(
+  (await js(`[...document.querySelectorAll('.scan-btn')].some(b=>b.textContent.includes('等待对方同意'))`)),
+  '按钮变成「等待对方同意」，状态与好友申请一致'
 )
 await shoot(cdp, `${OUT}/04-scan-followed.png`)
 
@@ -572,20 +606,21 @@ ok(
   '查到的是同一个人'
 )
 ok(
-  await js(`[...document.querySelectorAll('.scan-chip')].some(e=>e.textContent.includes('已加为好友'))`),
-  '已加过的人显示「已加为好友」而不是又给一个「加好友」'
+  (await js(`[...document.querySelectorAll('.scan-btn')].some(b=>b.textContent.includes('等待对方同意'))`)) &&
+    (await js(`!document.querySelector('[data-testid="scan-follow"]')`)),
+  '申请已发出的人显示「等待对方同意」，不会再给一个「加好友」按钮'
 )
 await shoot(cdp, `${OUT}/06-scan-manual.png`)
 
-/* 结果卡上的「发消息」也要真的能进房间 —— 不然它就是个点了没反应的假按钮 */
+/* 「发消息」这条路径要结合好友门控来看：
+   好友申请还没被同意，双方不是互关好友，服务端 privateMessageGate 会回
+   friend_required。所以这里断言的是「被明确拦住、没有硬闯进房间」，
+   而不是旧版写的「点了一定进房间」—— 那条在新语义下是错的。
+   （互关好友能正常进私聊由 check-core-flows / e2e-realtime 覆盖。） */
 await js(`window.__btn('发消息')`)
-ok(await waitFor(`!!document.querySelector('.room')`, 15000), '点「发消息」真的进了聊天房间')
-ok(
-  (await js(`document.querySelector('.room-head .rh-name b')?.textContent.trim()`)) === targetName,
-  '进的是和这个人的私聊',
-  String(await js(`document.querySelector('.room-head .rh-name b')?.textContent.trim()`))
-)
-ok(await js(`!document.querySelector('.scan')`), '扫一扫覆盖层已让位（两个整屏层不会叠在一起）')
+await sleep(1200)
+ok(await js(`!document.querySelector('.room')`), '还不是好友时不会硬闯进私聊（friend_required 生效）')
+ok(await js(`!!document.querySelector('.scan')`), '被拦后仍停在扫码结果页，没有闪一下房间')
 
 /* ================= 收尾：还原演示库 ================= */
 console.log('\n─── 收尾 ───')
@@ -597,6 +632,16 @@ console.log('\n─── 收尾 ───')
    「创建好友申请」，不会直接建立关注关系，用它还原等于没还原。 */
 restoreFollowRow(targetHadEdge)
 ok(dbFollows(me.user.id, targetId) === targetHadEdge, '关注关系还原到跑之前的状态', `原状 ${targetHadEdge}`)
+/* 「加好友」现在会生成一条待处理申请 —— 只清本轮新增的，别删演示库原有申请 */
+const freshReqs = db.prepare('SELECT id FROM friend_requests').all().map((r) => r.id).filter((id) => !baselineReqIds.includes(id))
+if (freshReqs.length) {
+  const holes = freshReqs.map(() => '?').join(',')
+  db.prepare(`DELETE FROM friend_requests WHERE id IN (${holes})`).run(...freshReqs)
+  const left = db.prepare(`SELECT COUNT(*) n FROM friend_requests WHERE id IN (${holes})`).get(...freshReqs).n
+  ok(left === 0, '本轮生成的好友申请已清理干净', `清了 ${freshReqs.length} 条`)
+} else {
+  ok(true, '本轮没有残留的好友申请')
+}
 /* 正常路径已还原 —— 标记一下，退出钩子就不会再动一次。 */
 followRestored = true
 fs.rmSync(IMG_TARGET, { force: true })
@@ -606,8 +651,11 @@ fs.rmSync(IMG_TEXT, { force: true })
 
 /* ================= 控制台 ================= */
 console.log('\n─── 控制台 ───')
-if (issues.length) {
-  ok(false, '全程无 console 报错 / 未捕获异常', issues.slice(0, 4).join(' | '))
+/* 403 是上一节 friend_required 的预期结果：浏览器会把被拦的 REST 请求
+   记成一条资源加载错误。它不是缺陷，但也不能把整个控制台检查关掉。 */
+const realIssues = issues.filter((s) => !/403|friend_required/.test(s))
+if (realIssues.length) {
+  ok(false, '全程无 console 报错 / 未捕获异常', realIssues.slice(0, 4).join(' | '))
 } else {
   ok(true, '全程无 console 报错 / 未捕获异常')
 }

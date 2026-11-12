@@ -117,7 +117,11 @@ async function openBrowser() {
 
   const HELP = `
 window.__click = (s) => { const e=document.querySelector(s); if(!e) return false; e.click(); return true }
-window.__tab = (i) => { const t=[...document.querySelectorAll('.tabbar .tab')][i]; if(!t) return false; t.click(); return true }
+/* 按**文案**切 Tab，别再用数字下标：底栏从 4 个（聊天/动态/社群/我）
+   变成 5 个（中间插了「通讯录」）之后，所有旧下标整体错位，
+   __tab(3) 从「我」变成了「社群」，一堆自检静默失败。
+   传数字仍按原始下标兼容，但新代码一律传文案。 */
+window.__tab = (k) => { const ts=[...document.querySelectorAll('.tabbar .tab')]; const lab=(x)=>(x.querySelector('.tab-label')?.textContent||'').trim(); const t=typeof k==='number'?ts[k]:ts.find(x=>lab(x)===k||lab(x).startsWith(k)); if(!t) return false; t.click(); return true }
 window.__toast = () => document.querySelector('.toast')?.textContent.trim() || null
 /* 按文案点一行设置。⚠️ 必须限定 .row：
    页面里别处也有同名文字（比如侧栏、提示语），不限定会点到别的元素上。 */
@@ -188,7 +192,7 @@ window.__allFaqText = async () => {
     await ensureLoggedIn(js)
     await sleep(600)
     await js(HELP)
-    await js(`window.__tab(3)`) // 「我」
+    await js(`window.__tab('我')`) // 「我」
     await waitFor(`!!document.querySelector('.me-hero')`, 10000)
     await sleep(300)
     await js(HELP)
@@ -247,8 +251,10 @@ try {
        `⚠️ 本项目**没有实现端到端加密**` 这种，星号会**原样**显示给用户 ——
        这类问题不报错、不崩，只有肉眼看截图才发现得了，所以在这里拦一道。
        ⚠️ 表达式里的 `\\*` 会被 Node 的模板字符串先解一层，要写两个反斜杠。 */
+    /* ⚠️ 先把 `****` 剔掉再数：手机号脱敏值 `135****0001` 里的四个星号是**正常展示**，
+       不是 markdown 泄漏。不剔的话「账号与安全」页固定误报 2 处。 */
     const mdLeak = await A.js(
-      `(document.querySelector('.sub-page, .subpage')?.innerText || '').match(/\\*\\*/g)?.length || 0`
+      `(document.querySelector('.sub-page, .subpage')?.innerText || '').replace(/\\*{4}/g,'').match(/\\*\\*/g)?.length || 0`
     )
     ok(mdLeak === 0, `${e.label} 页面上没有漏出 markdown 的星号标记`, `发现 ${mdLeak} 处`)
 
@@ -290,14 +296,17 @@ try {
   ok(await A.waitFor(`!!window.__row('手机号')`, 8000), '账号与安全加载完成（出现了数据行）')
   await A.js(A.help)
 
-  const secText = await A.js(`document.querySelector('.sub-page, .subpage').textContent`)
+  const secText = await A.js(`(document.querySelector('.sub-page, .subpage')?.textContent || '')`)
   ok(!/138\*{0,4}6721/.test(secText), '不再出现硬编码的手机号 138****6721')
   /* 手机号现在**库里真有** phone 字段（users.phone，编辑资料页真保存），
      安全页如实显示脱敏值或「未填写」—— 反过来，绝不能再出现
      「数据库中没有手机号字段」这句**谎话**（它曾经是对的，字段加进来后就过时了）。 */
   ok(/数据库中没有手机号字段/.test(secText) === false, '手机号不再谎称「库里没有字段」（字段已存在）')
   ok(/未填写|\*{4}/.test(secText), '手机号行如实显示（未填写 / 脱敏形态）', secText.match(/手机号[\s\S]{0,24}/)?.[0])
-  ok(/数据库中没有邮箱字段/.test(secText), '邮箱如实标注「库里没有字段」')
+  /* 邮箱后来也接通了：selfUser 返回真实绑定地址，验证码注册 / 密码登录都走它。
+     所以安全页显示的是「已绑定 / 未绑定」+ 真实地址，不再可能写「库里没有字段」。 */
+  ok(/数据库中没有邮箱字段/.test(secText) === false, '邮箱不再谎称「库里没有字段」（已接入真实绑定状态）')
+  ok(/已绑定|未绑定/.test(secText), '邮箱如实显示当前账号的绑定状态', secText.match(/邮箱[\s\S]{0,24}/)?.[0])
 
   /* 密码：从「未接入」升级成真功能 —— 这一行必须**可点**（打开改密码弹层），
      不能再带「未接入」字样。 */
@@ -376,7 +385,7 @@ try {
   await A.js(`window.__back()`)
   await A.waitFor(`window.__onMainMe()`, 5000)
   await A.js(A.help)
-  await A.js(`window.__tab(1)`) // 动态
+  await A.js(`window.__tab('动态')`) // 动态
   await A.waitFor(`!!document.querySelector('.moment-filters')`, 10000)
   await sleep(500)
   await A.js(A.help)
@@ -384,6 +393,11 @@ try {
   await sleep(1200)
   await A.js(`document.querySelector('[aria-label="发布动态"]')?.click()`)
   ok(await A.waitFor(`!!document.querySelector('.mc-root')`, 8000), '打开发布面板')
+  /* ⚠️「可见范围」现在收在「发布设置」折叠面板里（默认收起），
+     不展开的话 `.mc-scope` 根本不在 DOM 里，读出来是 undefined ——
+     看着像「设置没生效」，其实只是没展开。 */
+  await A.js(`document.querySelector('.mc-settings-toggle')?.click()`)
+  ok(await A.waitFor(`!!document.querySelector('.mc-scope.is-on')`, 5000), '展开「发布设置」后可见范围可见')
   const scopeOn = await A.js(`document.querySelector('.mc-scope.is-on b')?.textContent.trim()`)
   ok(scopeOn === afterVis, '★ 发布面板的默认可见范围跟着设置变了（这个设置是真生效的）', `面板=${scopeOn} 设置=${afterVis}`)
   await shoot(A.cdp, `${OUT}/privacy-default-scope.png`)
@@ -391,24 +405,31 @@ try {
   await A.waitFor(`!document.querySelector('.mc-root')`, 5000)
 
   /* 未接通的项必须禁用 */
-  await A.js(`window.__tab(3)`)
-  await A.waitFor(`window.__onMainMe()`, 5000)
+  await A.js(`window.__tab('我')`)
+  ok(await A.waitFor(`window.__onMainMe()`, 5000), '从动态页切回「我」页')
   await A.js(A.help)
-  await A.js(`window.__rowTap('隐私设置')`)
-  await A.waitFor(`window.__pageTitle() === '隐私设置'`, 5000)
-  await A.waitFor(`!!window.__row('消息加密')`, 8000)
+  ok(await A.js(`window.__rowTap('隐私设置')`), '再次点开「隐私设置」')
+  ok(await A.waitFor(`window.__pageTitle() === '隐私设置'`, 5000), '隐私设置页已打开', String(await A.js(`window.__pageTitle()`)))
+  /* ⚠️ 这一行改名成「文字消息加密存储」了。旧名「消息加密」永远等不到，
+     而 waitFor 超时是**静默**的 —— 单跑时靠时序侥幸能过，串行回归里就会在
+     错误的页面上取到 null，然后 `.textContent` 直接把整支脚本打断。 */
+  ok(await A.waitFor(`!!window.__row('文字消息加密存储')`, 8000), '隐私设置加载完成（出现了数据行）')
   await A.js(A.help)
-  const enc = await A.js(`window.__rowState('消息加密')`)
-  ok(enc?.off === true, '★「消息加密」标为未接入（不能显示成「已开启」的假开关）', JSON.stringify(enc))
-  const encText = await A.js(`document.querySelector('.sub-page, .subpage').textContent`)
+  /* 后来服务端真的接通了 AES-256-GCM 文字消息存储加密，这一行改名成
+     「文字消息加密存储」并且是**能拨的真开关**。继续断言它是「未接入」徽标，
+     等于把一个已经实现的功能判成缺陷。
+     ⚠️ 但它是**服务端存储加密**，不是端到端加密 —— 下半段仍要证明页面上如实写明了这一点。 */
+  const enc = await A.js(`window.__rowState('文字消息加密存储')`)
+  ok(enc?.hasSwitch && enc.switchDisabled === false, '★「文字消息加密存储」是接通的真开关', JSON.stringify(enc))
+  const encText = await A.js(`(document.querySelector('.sub-page, .subpage')?.textContent || '')`)
   ok(!/已开启/.test(encText) || /没有实现/.test(encText), '页面上没有「消息加密 · 已开启」这种虚假安全声明')
-  /* 仍未接通的项必须禁用。
-     ⚠️「在线状态可见」**不在**这个列表里 —— 它已经接通了（见下面那一段），
-     继续断言它 disabled 会把一个真功能判成缺陷。 */
-  for (const label of ['已读回执', '阅后即焚', '截屏提醒']) {
+  /* 已读回执 / 阅后即焚后来也接通了（后端真按设置处理），只有截屏提醒仍未接入。 */
+  for (const label of ['已读回执', '阅后即焚']) {
     const st = await A.js(`window.__rowState(${JSON.stringify(label)})`)
-    ok(st?.hasSwitch && st.switchDisabled === true, `${label} 开关是 disabled`, JSON.stringify(st))
+    ok(st?.hasSwitch && st.switchDisabled === false, `${label} 开关可以拨动（已接通）`, JSON.stringify(st))
   }
+  const shotSt = await A.js(`window.__rowState('截屏提醒')`)
+  ok(shotSt?.hasSwitch && shotSt.switchDisabled === true, '截屏提醒仍是 disabled（网页端拿不到系统截屏事件）', JSON.stringify(shotSt))
 
   /* 接通了的四项必须**可以拨**。
      「可以拨」和「拨了真的生效」是两件事 —— 生效的端到端验证在 check-privacy.mjs
@@ -435,7 +456,11 @@ try {
   const visBack = await A.js(`window.__rowState('在线状态可见').switchOn`)
   ok(visBack === visBefore, '再拨一次能回到原值（不是只往一个方向生效）', `${visBack} vs ${visBefore}`)
   const shotMsg = await A.js(`document.querySelector('.mc-root, .sub-page, .subpage').textContent`)
-  ok(/端到端加密/.test(shotMsg) && /没有实现|没有实现端到端加密/.test(shotMsg), '明确写出「没有实现端到端加密」')
+  ok(
+    /端到端加密/.test(shotMsg) && /(不是端到端加密|服务端仍(能|可)(解密|读取))/.test(shotMsg),
+    '如实写明这是服务端存储加密、不是端到端加密（服务端仍可解密）',
+    (shotMsg || '').match(/.{0,24}端到端加密.{0,24}/)?.[0]
+  )
   await A.js(`window.__back()`)
   await A.waitFor(`window.__onMainMe()`, 5000)
 
@@ -458,7 +483,7 @@ try {
 
   const enterLabel = await A.js(`window.__settingLabel('回车键发送')`)
   ok(enterLabel === '回车键发送', '开关标签写的是它真的做的事（回车键发送）', String(enterLabel))
-  const oldLabelGone = await A.js(`!document.querySelector('.sub-page, .subpage').textContent.includes('发送键回车换行')`)
+  const oldLabelGone = await A.js(`!(document.querySelector('.sub-page, .subpage')?.textContent || '').includes('发送键回车换行')`)
   ok(oldLabelGone, '不再出现语义相反的旧标签「发送键回车换行」')
   await shoot(A.cdp, `${OUT}/general.png`)
   await A.js(`window.__back()`)
@@ -483,12 +508,17 @@ try {
   ok(upRes.status === 201 && !!probe.uploadUrl, '上传了一张真实图片用于本项验证', String(probe.uploadUrl))
 
   probe.baselineMsgId = db.prepare('SELECT COALESCE(MAX(id),0) AS n FROM messages').get().n
+  /* ⚠️ 必须用**互关好友**的私聊会话 #1（陈墨 ⇄ 林小夏）。
+     会话 #2 是陈墨 ⇄ 陈宇，种子里刻意让陈宇单向关注陈墨（用来验证
+     「仅好友」动态的可见范围），后端 privateMessageGate 会因 friend_required
+     拒绝发消息 —— 这是产品预期行为，不是 bug。硬编码 #2 会让整条图片链路
+     从「消息根本没发出去」开始全红，而且症状看起来像「图片组件坏了」。 */
   const imgMsg = await (
     await fetch(`${API}/messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${me.token}` },
       body: JSON.stringify({
-        conversationId: 2,
+        conversationId: 1,
         kind: 'image',
         fileUrl: probe.uploadUrl,
         fileName: 'check-me-chat.png',
@@ -497,15 +527,15 @@ try {
     })
   ).json()
   probe.msgIds.push(imgMsg?.message?.id ?? imgMsg?.id)
-  ok(!!probe.msgIds[0], '图片消息已发送到私聊会话 #2', String(probe.msgIds[0]))
+  ok(!!probe.msgIds[0], '图片消息已发送到互关好友的私聊会话 #1', String(imgMsg?.error || probe.msgIds[0]))
 
-  const openConv2 = async () => {
-    await A.js(`window.__tab(0)`)
+  const openPrivConv = async () => {
+    await A.js(`window.__tab('聊天')`)
     await A.waitFor(`!!document.querySelector('.chat-list')`, 8000)
     await sleep(600)
     await A.js(A.help)
     const clicked = await A.js(`(() => {
-      const r = [...document.querySelectorAll('.chat-row')].find(x => x.textContent.includes('陈宇'))
+      const r = [...document.querySelectorAll('.chat-row')].find(x => x.textContent.includes('林小夏'))
       if (!r) return false
       r.click(); return true
     })()`)
@@ -517,7 +547,7 @@ try {
 
   /* 正对照：开关开着时，图片必须真的显示出来（naturalWidth > 0） */
   await A.js(A.help)
-  ok(await openConv2(), '能进入会话 #2')
+  ok(await openPrivConv(), '能进入与林小夏的私聊会话 #1')
   const posOk = await A.waitFor(
     `(() => { const im = [...document.querySelectorAll('.img-bubble img')]; return im.length > 0 && im.every(i => i.complete && i.naturalWidth > 0) })()`,
     10000
@@ -530,7 +560,7 @@ try {
 
   /* 关掉开关 */
   await A.js(A.help)
-  await A.js(`window.__tab(3)`)
+  await A.js(`window.__tab('我')`)
   await A.waitFor(`window.__onMainMe()`, 6000)
   await A.js(A.help)
   await A.js(`window.__rowTap('通用设置')`)
@@ -550,7 +580,7 @@ try {
 
   /* 再进同一个会话：这一次必须出现「点击加载」占位，且**没有发起图片请求** */
   await A.js(A.help)
-  ok(await openConv2(), '再次进入会话 #2')
+  ok(await openPrivConv(), '再次进入与林小夏的私聊会话 #1')
   const lockedShown = await A.waitFor(`!!document.querySelector('[data-testid="img-locked"]')`, 8000)
   ok(lockedShown, '★ 关掉自动下载后，图片显示为「点击加载」占位（开关真的生效了）')
   const noImg = await A.js(`document.querySelectorAll('.img-bubble img').length`)
@@ -572,7 +602,7 @@ try {
 
   /* 把开关还原成开 */
   await A.js(A.help)
-  await A.js(`window.__tab(3)`)
+  await A.js(`window.__tab('我')`)
   await A.waitFor(`window.__onMainMe()`, 6000)
   await A.js(A.help)
   await A.js(`window.__rowTap('通用设置')`)
@@ -588,7 +618,7 @@ try {
   /* ================= 5. 主题外观：动效开关真的挂上 .no-motion ================= */
   console.log('\n─── 主题外观 ───')
   await A.js(A.help)
-  await A.js(`window.__tab(3)`)
+  await A.js(`window.__tab('我')`)
   await A.waitFor(`window.__onMainMe()`, 6000)
   await A.js(A.help)
   await A.js(`window.__rowTap('主题外观')`)
@@ -601,18 +631,30 @@ try {
 
   ok((await A.js(`document.querySelector('.sec-action')`)) === null, '「使用中」不再是假按钮（改成纯文字说明）')
   ok((await A.js(`!!document.querySelector('.sec-hint')`)) === true, '「使用中」以纯文字 hint 呈现')
-  for (const label of ['聊天背景', '气泡颜色', '强调色']) {
-    const st = await A.js(`window.__rowState(${JSON.stringify(label)})`)
-    ok(st?.off === true, `${label} 标为未接入（不再点了只弹 toast）`, JSON.stringify(st))
-  }
-  /* 判据要写成「有『未接入』的徽标 **且** 页面上写着未接入」。
-     原来的 `!querySelector('.tag-off') || …` 前半段会让「一个徽标都没渲染」也通过
-     —— 那正是最该失败的情形。 */
+  /* ⚠️ 主题外观页后来重构成「主题配色网格 + 外观模式 + 字体/动效入口」，
+     聊天背景 / 气泡颜色 / 强调色 那三个「未接入」占位行已经删掉了，
+     继续断言它们存在等于拿旧版 UI 判新版。现在要证明的是真的能选、能切。 */
+  const themeUi = await A.js(`(() => {
+    const p = document.querySelector('.sub-page, .subpage')
+    if (!p) return null
+    return {
+      cards: p.querySelectorAll('.theme-card').length,
+      pressed: p.querySelectorAll('.theme-card[aria-pressed="true"]').length,
+      modes: [...p.querySelectorAll('.mode-picker button')].map(b => b.textContent.trim()),
+      offTags: p.querySelectorAll('.tag-off').length,
+      hasMotion: !!window.__row('动效开关'),
+      hasFont: !!window.__row('字体大小'),
+    }
+  })()`)
+  ok(themeUi?.cards >= 3, '★ 主题配色是可点选的卡片网格', `cards=${themeUi?.cards}`)
+  ok(themeUi?.pressed === 1, '当前主题恰好有一个被选中（aria-pressed）', `pressed=${themeUi?.pressed}`)
   ok(
-    (await A.js(`document.querySelectorAll('.tag-off').length >= 3`)) === true &&
-      (await A.js(`document.querySelector('.sub-page, .subpage').textContent.includes('未接入')`)) === true,
-    '主题外观页把未接入的三项都标了出来',
+    JSON.stringify(themeUi?.modes) === JSON.stringify(['跟随系统', '浅色', '深色']),
+    '外观模式提供跟随系统 / 浅色 / 深色三选一',
+    JSON.stringify(themeUi?.modes)
   )
+  ok(themeUi?.hasMotion && themeUi?.hasFont, '字体大小与动效开关都在这一页（不再是死入口）', JSON.stringify(themeUi))
+  ok(themeUi?.offTags === 0, '主题页不再留「未接入」的假功能徽标', `offTags=${themeUi?.offTags}`)
 
   const motionOn = await A.js(`!document.documentElement.classList.contains('no-motion')`)
   ok(motionOn, '动效开关初始为开（未挂 .no-motion）')
@@ -654,7 +696,7 @@ try {
 
   /* 逐条展开读全文（单开手风琴，不能全点一遍） */
   const faqText = await A.js(`window.__allFaqText()`)
-  const helpText = (await A.js(`document.querySelector('.sub-page, .subpage').textContent`)) + '\n' + faqText
+  const helpText = (await A.js(`(document.querySelector('.sub-page, .subpage')?.textContent || '')`)) + '\n' + faqText
   ok((faqText || '').length > 200, 'FAQ 答案逐条展开成功（答案文本进入了 DOM）', `${(faqText || '').length} 字符`)
   /* FAQ 必须和实现对得上 —— 这几条以前都是错的 */
   ok(!/仅支持 ?2 ?分钟内/.test(helpText), 'FAQ 不再谎称「撤回仅支持 2 分钟内」（服务端没有时间窗）')
@@ -663,7 +705,9 @@ try {
   ok(!/点击右下角「?\+」?/.test(helpText), 'FAQ 不再说发布按钮在右下角（实际在右上角）')
   ok(!/更换手机号？[\s\S]{0,60}验证原手机号/.test(helpText), 'FAQ 不再教人换手机号（没有该字段）')
   ok(/未接入/.test(helpText), 'FAQ 对未实现的能力明确写「未接入」')
-  ok(/不是。消息以明文存储/.test(helpText), 'FAQ 如实说明没有端到端加密')
+  /* 文案随实现更新：文字消息现在真的做了服务端 AES-256-GCM 存储加密，
+     FAQ 不能再写「消息以明文存储」这种过时结论，但必须继续说清它不是端到端加密。 */
+  ok(/不是端到端加密|服务端仍能解密/.test(helpText), 'FAQ 如实说明这是服务端加密、不是端到端加密（服务端仍可解密）')
 
   /* 提交一条反馈（带截图），并回库核对 */
   const desc = `${TAG} 反馈表单可用性`

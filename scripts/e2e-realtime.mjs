@@ -379,7 +379,14 @@ window.__imgCount = () => document.querySelectorAll('.room-scroll .img-bubble im
       `(() => { const v = window.__receiptOf(${JSON.stringify(textA)}); return v && v.all ? v : null })()`
     )
     ok(!!aReceipt, 'A 实时收到「已读」回执（1 对端 → 全部已读）', `label=${aReceipt?.label} 置灰=${aReceipt?.dim}`)
-    ok(aReceipt?.avatars === 1 && aReceipt?.dim === 0, '收据里对端头像为「已读」态（不置灰）', `头像${aReceipt?.avatars} 置灰${aReceipt?.dim}`)
+    /* 单聊回执已收敛：只有一个对端时「谁读了」只有一个答案，
+       界面改成「双勾 + 已读」文字，不再画一排 15px 小头像（见 ChatRoom.jsx ReadReceipt）。
+       群聊仍保留头像簇，那部分由 check-readreceipt.mjs 覆盖。 */
+    ok(
+      aReceipt?.label === '已读' && aReceipt?.dim === 0 && aReceipt?.avatars === 0,
+      '私聊回执收敛为「已读」双勾（不再画一排无意义的小头像）',
+      `label=${aReceipt?.label} 头像${aReceipt?.avatars} 置灰=${aReceipt?.dim}`
+    )
 
     /* ---------- 5. B 回复 → A 实时收到 ---------- */
     const textB = `收到啦-${Date.now()}`
