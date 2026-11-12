@@ -22,10 +22,18 @@ shots/
 output/
 .playwright-cli/
 
-# Android 构建缓存与产物（Gradle 缓存、APK 中间文件）
-ChatlyApp/.gradle/
-ChatlyApp/build/
-ChatlyApp/app/build/
+# Capacitor Android 工程：源码/Gradle 配置入库，构建产物与本机配置不入库
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/captures/
+# cap sync 生成的 Web 资产（等于 dist 的副本，用 npm run android:build 重建）
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
+*.apk
+*.aab
 
 # 手工移出的旧目录（回收站式命名，不能进版本库）
 ChatlyApp_recycle_*/

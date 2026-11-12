@@ -35,6 +35,7 @@ import { q, ready, info } from './db.js'
 import { authRequired } from './auth.js'
 import { ready as redisReady, status as redisStatus, close as redisClose } from './redis.js'
 import { purgeOrphanUploads } from './upload-cleanup.js'
+import { nativeCors } from './native-cors.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.env.PORT) || 3002
@@ -43,6 +44,10 @@ const TRUST_PROXY_HOPS = Number(process.env.TRUST_PROXY_HOPS) || 0
 
 const app = express()
 if (Number.isInteger(TRUST_PROXY_HOPS) && TRUST_PROXY_HOPS > 0) app.set('trust proxy', TRUST_PROXY_HOPS)
+/* 原生壳（Capacitor WebView 的 origin 是 http://localhost）跨域访问 REST 时
+   要能过预检。同源的 Web 端请求不带这个 Origin，中间件直接放行、行为零变化。
+   必须放在路由（以及 OPTIONS 预检）之前。见 native-cors.js。 */
+app.use(nativeCors)
 app.use(express.json({ limit: '2mb' }))
 app.use(express.urlencoded({ extended: true }))
 

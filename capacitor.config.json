@@ -1,0 +1,11 @@
+{
+  "appId": "com.chatly.app",
+  "appName": "Chatly",
+  "webDir": "dist",
+  "android": {
+    "allowMixedContent": true
+  },
+  "server": {
+    "androidScheme": "http"
+  }
+}
